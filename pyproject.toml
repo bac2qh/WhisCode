@@ -1,0 +1,18 @@
+[project]
+name = "whiscode"
+version = "0.1.0"
+description = "Voice-to-keyboard for code dictation using Whisper"
+requires-python = ">=3.10"
+dependencies = [
+    "mlx-audio[stt]",
+    "sounddevice",
+    "pynput",
+    "numpy",
+]
+
+[project.scripts]
+whiscode = "whiscode.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
