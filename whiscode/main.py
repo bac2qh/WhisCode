@@ -3,6 +3,7 @@ import subprocess
 import sys
 import threading
 from enum import Enum
+from pathlib import Path
 
 from pynput import keyboard
 
@@ -28,8 +29,8 @@ def beep():
 
 def parse_args():
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
-    parser.add_argument("--hotkey", default="<shift_r>", help="Toggle hotkey for recording (default: <shift_r>)")
-    parser.add_argument("--model", default="mlx-community/whisper-large-v3", help="Whisper model to use")
+    parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
+    parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
     parser.add_argument("--language", default="en", help="Language code (default: en)")
     return parser.parse_args()
 
@@ -37,23 +38,29 @@ def parse_args():
 def main():
     args = parse_args()
 
-    try:
-        keyboard.HotKey.parse(args.hotkey)
-    except ValueError:
-        print(f"Error: Invalid hotkey '{args.hotkey}'. Use pynput format e.g. '<shift_r>', '<ctrl>+<shift>+r'.")
+    hotkey = getattr(keyboard.Key, args.hotkey, None)
+    if hotkey is None:
+        print(f"Error: Unknown hotkey '{args.hotkey}'. Use keys like shift_r, f10, ctrl, alt, etc.")
         sys.exit(1)
 
-    print(f"Loading model: {args.model} ...")
+    model_path = args.model
+    cache_dir = Path.home() / ".cache/huggingface/hub" / f"models--{args.model.replace('/', '--')}" / "snapshots/main"
+    if cache_dir.exists():
+        model_path = str(cache_dir)
+
+    print(f"Loading model: {model_path} ...")
     from mlx_audio.stt.utils import load_model
-    model = load_model(args.model)
+    model = load_model(model_path)
     print(f"Model loaded. Press {args.hotkey} to start/stop recording.")
 
     state = State.IDLE
     state_lock = threading.Lock()
     recorder = Recorder()
 
-    def on_activate():
+    def on_press(key):
         nonlocal state
+        if key != hotkey:
+            return
 
         with state_lock:
             if state == State.TRANSCRIBING:
@@ -89,7 +96,7 @@ def main():
 
                 threading.Thread(target=process, daemon=True).start()
 
-    with keyboard.GlobalHotKeys({args.hotkey: on_activate}) as listener:
+    with keyboard.Listener(on_press=on_press) as listener:
         try:
             listener.join()
         except KeyboardInterrupt:
