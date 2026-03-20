@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
     parser.add_argument("--language", default="en", help="Language code (default: en)")
+    parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
     return parser.parse_args()
 
 
@@ -81,7 +82,7 @@ def main():
                 def process():
                     nonlocal state
                     try:
-                        text = transcribe(model, audio, language=args.language)
+                        text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt)
                         if text:
                             processed = postprocess(text)
                             print(f"  > {processed}")
