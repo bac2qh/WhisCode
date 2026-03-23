@@ -1,8 +1,10 @@
 import argparse
+import queue
 import signal
 import subprocess
 import sys
 import threading
+import time
 from enum import Enum
 from pathlib import Path
 
@@ -80,66 +82,86 @@ def main():
     state_lock = threading.Lock()
     recorder = Recorder()
 
-    def on_press(key):
-        nonlocal state
-        if key != hotkey:
-            return
+    hotkey_queue = queue.Queue()
+    last_press_time = 0.0
+    DEBOUNCE_SECONDS = 0.3
 
-        with state_lock:
-            if state == State.TRANSCRIBING:
-                return
-
-            if state == State.IDLE:
-                state = State.RECORDING
-                recorder.start()
-                beep_start()
-                print("Recording...")
-
-            elif state == State.RECORDING:
-                state = State.TRANSCRIBING
-                audio = recorder.stop()
-                beep_stop()
-                print("Transcribing...")
-
-                audio_seconds = len(audio) / SAMPLE_RATE
-
-                def process():
-                    nonlocal state
-                    try:
-                        text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
-                        if text:
-                            processed = postprocess(text, replacements=replacements)
-                            word_count = len(processed.split())
-                            stats.record(word_count, audio_seconds)
-                            print(f"  > {processed}")
-                            type_text(processed)
-                        else:
-                            print("  (no speech detected)")
-                    except Exception as e:
-                        print(f"  Error: {e}", file=sys.stderr)
-                    finally:
-                        with state_lock:
-                            state = State.IDLE
-
-                threading.Thread(target=process, daemon=True).start()
-
-    listener_ref = [None]
+    shutdown_event = threading.Event()
 
     def handle_signal(signum, frame):
-        print(f"\nSession stats: {stats.summary()}")
-        print("Exiting.")
-        with state_lock:
-            if state == State.RECORDING:
-                recorder.stop()
-        if listener_ref[0]:
-            listener_ref[0].stop()
+        shutdown_event.set()
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
+    def worker():
+        nonlocal state
+        while not shutdown_event.is_set():
+            try:
+                hotkey_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+
+            with state_lock:
+                if state == State.TRANSCRIBING:
+                    continue
+
+                if state == State.IDLE:
+                    state = State.RECORDING
+                    recorder.start()
+                    beep_start()
+                    print("Recording...")
+
+                elif state == State.RECORDING:
+                    state = State.TRANSCRIBING
+                    audio = recorder.stop()
+                    beep_stop()
+                    print("Transcribing...")
+
+                    audio_seconds = len(audio) / SAMPLE_RATE
+
+                    def process():
+                        nonlocal state
+                        try:
+                            text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
+                            if text:
+                                processed = postprocess(text, replacements=replacements)
+                                word_count = len(processed.split())
+                                stats.record(word_count, audio_seconds)
+                                print(f"  > {processed}")
+                                type_text(processed)
+                            else:
+                                print("  (no speech detected)")
+                        except Exception as e:
+                            print(f"  Error: {e}", file=sys.stderr)
+                        finally:
+                            with state_lock:
+                                state = State.IDLE
+
+                    threading.Thread(target=process, daemon=True).start()
+
+    worker_thread = threading.Thread(target=worker, daemon=True)
+    worker_thread.start()
+
+    def on_press(key):
+        nonlocal last_press_time
+        if key != hotkey:
+            return
+        now = time.monotonic()
+        if now - last_press_time < DEBOUNCE_SECONDS:
+            return
+        last_press_time = now
+        hotkey_queue.put("toggle")
+
     with keyboard.Listener(on_press=on_press) as listener:
-        listener_ref[0] = listener
-        listener.join()
+        while not shutdown_event.is_set():
+            listener.join(timeout=0.5)
+        with state_lock:
+            if state == State.RECORDING:
+                recorder.stop()
+        listener.stop()
+        print(f"\nSession stats: {stats.summary()}")
+        print("Exiting.")
 
 
 if __name__ == "__main__":
