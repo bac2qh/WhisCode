@@ -1,9 +1,11 @@
 import argparse
 import os
+import queue
 import signal
 import subprocess
 import sys
 import threading
+import time
 from enum import Enum
 from pathlib import Path
 
@@ -81,48 +83,65 @@ def main():
     state_lock = threading.Lock()
     recorder = Recorder()
 
+    hotkey_queue = queue.Queue()
+    last_hotkey_time = 0.0
+    DEBOUNCE_SECONDS = 0.3
+
     def on_press(key):
-        nonlocal state
+        nonlocal last_hotkey_time
         if key != hotkey:
             return
+        now = time.monotonic()
+        if now - last_hotkey_time < DEBOUNCE_SECONDS:
+            return
+        last_hotkey_time = now
+        hotkey_queue.put_nowait("toggle")
 
-        with state_lock:
-            if state == State.TRANSCRIBING:
-                return
+    def worker():
+        nonlocal state
+        while not shutdown_event.is_set():
+            try:
+                hotkey_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
 
-            if state == State.IDLE:
-                state = State.RECORDING
-                recorder.start()
-                beep_start()
-                print("Recording...")
+            with state_lock:
+                if state == State.TRANSCRIBING:
+                    continue
 
-            elif state == State.RECORDING:
-                state = State.TRANSCRIBING
-                audio = recorder.stop()
-                beep_stop()
-                print("Transcribing...")
+                if state == State.IDLE:
+                    state = State.RECORDING
+                    recorder.start()
+                    beep_start()
+                    print("Recording...")
 
-                audio_seconds = len(audio) / SAMPLE_RATE
+                elif state == State.RECORDING:
+                    state = State.TRANSCRIBING
+                    audio = recorder.stop()
+                    beep_stop()
+                    print("Transcribing...")
 
-                def process():
-                    nonlocal state
-                    try:
-                        text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
-                        if text:
-                            processed = postprocess(text, replacements=replacements)
-                            word_count = len(processed.split())
-                            stats.record(word_count, audio_seconds)
-                            print(f"  > {processed}")
-                            type_text(processed)
-                        else:
-                            print("  (no speech detected)")
-                    except Exception as e:
-                        print(f"  Error: {e}", file=sys.stderr)
-                    finally:
-                        with state_lock:
-                            state = State.IDLE
+                    audio_seconds = len(audio) / SAMPLE_RATE
 
-                threading.Thread(target=process, daemon=True).start()
+                    def process(audio=audio, audio_seconds=audio_seconds):
+                        nonlocal state
+                        try:
+                            text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
+                            if text:
+                                processed = postprocess(text, replacements=replacements)
+                                word_count = len(processed.split())
+                                stats.record(word_count, audio_seconds)
+                                print(f"  > {processed}")
+                                type_text(processed)
+                            else:
+                                print("  (no speech detected)")
+                        except Exception as e:
+                            print(f"  Error: {e}", file=sys.stderr)
+                        finally:
+                            with state_lock:
+                                state = State.IDLE
+
+                    threading.Thread(target=process, daemon=True).start()
 
     shutdown_event = threading.Event()
     ctrl_c_count = 0
@@ -136,6 +155,8 @@ def main():
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
+
+    threading.Thread(target=worker, daemon=True).start()
 
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
