@@ -1,0 +1,21 @@
+# WhisCode Hot Words Config
+# Copy this file to ~/.config/whiscode/hotwords.txt
+# Or specify a custom path with: whiscode --hotwords-file /path/to/file.txt
+#
+# Two types of entries:
+#
+# 1. Hot words — plain lines that bias Whisper toward recognizing these words.
+#    Useful for names, jargon, or technical terms Whisper often gets wrong.
+#
+# 2. Replacements — "wrong -> right" lines that fix consistent misrecognitions.
+#    Applied case-insensitively before other post-processing.
+
+# --- Hot words ---
+# Kubernetes
+# PostgreSQL
+# FastAPI
+# NumPy
+
+# --- Replacements ---
+# kube cuddle -> kubectl
+# pie torch -> PyTorch
