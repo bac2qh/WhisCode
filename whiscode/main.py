@@ -1,5 +1,4 @@
 import argparse
-import os
 import signal
 import subprocess
 import sys
@@ -124,15 +123,22 @@ def main():
 
                 threading.Thread(target=process, daemon=True).start()
 
+    listener_ref = [None]
+
     def handle_signal(signum, frame):
         print(f"\nSession stats: {stats.summary()}")
         print("Exiting.")
-        os._exit(0)
+        with state_lock:
+            if state == State.RECORDING:
+                recorder.stop()
+        if listener_ref[0]:
+            listener_ref[0].stop()
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
     with keyboard.Listener(on_press=on_press) as listener:
+        listener_ref[0] = listener
         listener.join()
 
 
