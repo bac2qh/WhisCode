@@ -1,4 +1,5 @@
 import argparse
+import os
 import signal
 import subprocess
 import sys
@@ -123,23 +124,33 @@ def main():
 
                 threading.Thread(target=process, daemon=True).start()
 
-    listener_ref = [None]
+    shutdown_event = threading.Event()
+    ctrl_c_count = 0
 
     def handle_signal(signum, frame):
-        print(f"\nSession stats: {stats.summary()}")
-        print("Exiting.")
-        with state_lock:
-            if state == State.RECORDING:
-                recorder.stop()
-        if listener_ref[0]:
-            listener_ref[0].stop()
+        nonlocal ctrl_c_count
+        ctrl_c_count += 1
+        shutdown_event.set()
+        if ctrl_c_count >= 2:
+            os._exit(0)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    with keyboard.Listener(on_press=on_press) as listener:
-        listener_ref[0] = listener
-        listener.join()
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+
+    while listener.is_alive() and not shutdown_event.is_set():
+        listener.join(timeout=0.5)
+
+    listener.stop()
+
+    with state_lock:
+        if state == State.RECORDING:
+            recorder.stop()
+
+    print(f"\nSession stats: {stats.summary()}")
+    print("Exiting.")
 
 
 if __name__ == "__main__":
