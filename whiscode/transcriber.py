@@ -19,9 +19,10 @@ def transcribe(model, audio: np.ndarray, language: str = "en", extra_prompt: str
         prompt = f"{prompt} {extra_prompt}"
     if hotwords:
         prompt = f"{prompt} {', '.join(hotwords)}"
+    lang = None if language == "auto" else language
     result = model.generate(
         audio,
-        language=language,
+        language=lang,
         initial_prompt=prompt,
         verbose=False,
     )

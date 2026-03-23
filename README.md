@@ -33,7 +33,7 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 
 ```
 --hotkey HOTKEY    Toggle key for recording (default: shift_r)
---language LANG    Language code (default: en)
+--language LANG    Language code, e.g. en, zh, ja, de (default: en). Use 'auto' to detect from audio.
 --prompt TEXT      Additional context to improve transcription accuracy
 ```
 
@@ -45,16 +45,15 @@ uv run whiscode --hotkey f10
 
 # Add project-specific terms for better accuracy
 uv run whiscode --prompt "NextJS, Prisma, tRPC, Zustand"
-```
 
-## Troubleshooting
+# Transcribe in Chinese
+uv run whiscode --language zh
 
-**Ctrl+C doesn't work:** `pynput`'s keyboard listener can intercept key events, preventing Ctrl+C from reaching the process. Use another terminal to kill it:
-
-```bash
-pkill -f whiscode
+# Auto-detect language (detects from audio)
+uv run whiscode --language auto
 ```
 
 ## Known Issues
 
-- **Audio thread safety:** The audio recorder's internal buffer is accessed from both the audio callback thread and the main thread without a lock. In practice this is protected by CPython's GIL and the narrow timing window, but it could theoretically cause issues if a late audio callback fires during transcription. Not currently planned to fix.
+- **Single-language per recording:** Whisper v3 applies one language to the entire audio clip. Mixed-language speech (e.g., Chinese with English terms) will be forced into whichever language is set, which may cause misrecognition of the other language.
+- **Auto-detect picks dominant language:** With `--language auto`, Whisper analyzes the first ~2 seconds of audio to detect the language. If your speech starts in a different language than the main content, detection may be wrong.
