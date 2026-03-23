@@ -23,9 +23,17 @@ class State(Enum):
     TRANSCRIBING = "transcribing"
 
 
-def beep():
+def beep_start():
     subprocess.Popen(
-        ["afplay", "/System/Library/Sounds/Tink.aiff"],
+        ["afplay", "-v", "0.5", "/System/Library/Sounds/Morse.aiff"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def beep_stop():
+    subprocess.Popen(
+        ["afplay", "-v", "0.5", "/System/Library/Sounds/Frog.aiff"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -84,13 +92,13 @@ def main():
             if state == State.IDLE:
                 state = State.RECORDING
                 recorder.start()
-                beep()
+                beep_start()
                 print("Recording...")
 
             elif state == State.RECORDING:
                 state = State.TRANSCRIBING
                 audio = recorder.stop()
-                beep()
+                beep_stop()
                 print("Transcribing...")
 
                 audio_seconds = len(audio) / SAMPLE_RATE
