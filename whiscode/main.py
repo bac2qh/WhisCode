@@ -10,7 +10,9 @@ from pynput import keyboard
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import type_text
 from whiscode.postprocess import postprocess
-from whiscode.recorder import Recorder
+from whiscode.recorder import Recorder, SAMPLE_RATE
+from whiscode.reminders import start_reminders
+from whiscode.stats import Stats
 from whiscode.transcriber import transcribe
 
 
@@ -62,6 +64,9 @@ def main():
     model = load_model(model_path)
     print(f"Model loaded. Press {args.hotkey} to start/stop recording.")
 
+    stats = Stats()
+    start_reminders(stats)
+
     state = State.IDLE
     state_lock = threading.Lock()
     recorder = Recorder()
@@ -87,12 +92,16 @@ def main():
                 beep()
                 print("Transcribing...")
 
+                audio_seconds = len(audio) / SAMPLE_RATE
+
                 def process():
                     nonlocal state
                     try:
                         text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
                         if text:
                             processed = postprocess(text, replacements=replacements)
+                            word_count = len(processed.split())
+                            stats.record(word_count, audio_seconds)
                             print(f"  > {processed}")
                             type_text(processed)
                         else:
@@ -109,7 +118,8 @@ def main():
         try:
             listener.join()
         except KeyboardInterrupt:
-            print("\nExiting.")
+            print(f"\nSession stats: {stats.summary()}")
+            print("Exiting.")
 
 
 if __name__ == "__main__":
