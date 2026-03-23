@@ -140,7 +140,10 @@ def _collapse_spaces(text: str) -> str:
     return "".join(result)
 
 
-def postprocess(text: str) -> str:
+def postprocess(text: str, replacements: dict[str, str] | None = None) -> str:
+    if replacements:
+        from whiscode.hotwords import apply_replacements
+        text = apply_replacements(text, replacements)
     text = _apply_symbols(text)
     text = _apply_literals(text)
     text = _apply_casing(text)

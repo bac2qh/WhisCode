@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pynput import keyboard
 
+from whiscode.hotwords import load_hotwords
 from whiscode.injector import type_text
 from whiscode.postprocess import postprocess
 from whiscode.recorder import Recorder
@@ -33,6 +34,7 @@ def parse_args():
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
     parser.add_argument("--language", default="en", help="Language code (default: en)")
     parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
+    parser.add_argument("--hotwords-file", default=None, help="Path to hotwords config file (default: ~/.config/whiscode/hotwords.txt)")
     return parser.parse_args()
 
 
@@ -48,6 +50,12 @@ def main():
     cache_dir = Path.home() / ".cache/huggingface/hub" / f"models--{args.model.replace('/', '--')}" / "snapshots/main"
     if cache_dir.exists():
         model_path = str(cache_dir)
+
+    from pathlib import Path as P
+    hotwords_path = P(args.hotwords_file) if args.hotwords_file else None
+    hot_words, replacements = load_hotwords(hotwords_path) if hotwords_path else load_hotwords()
+    if hot_words or replacements:
+        print(f"Loaded {len(hot_words)} hot word(s) and {len(replacements)} replacement(s).")
 
     print(f"Loading model: {model_path} ...")
     from mlx_audio.stt.utils import load_model
@@ -82,9 +90,9 @@ def main():
                 def process():
                     nonlocal state
                     try:
-                        text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt)
+                        text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
                         if text:
-                            processed = postprocess(text)
+                            processed = postprocess(text, replacements=replacements)
                             print(f"  > {processed}")
                             type_text(processed)
                         else:

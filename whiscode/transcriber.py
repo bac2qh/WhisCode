@@ -11,10 +11,14 @@ CODE_PROMPT = (
 )
 
 
-def transcribe(model, audio: np.ndarray, language: str = "en", extra_prompt: str | None = None) -> str:
+def transcribe(model, audio: np.ndarray, language: str = "en", extra_prompt: str | None = None, hotwords: list[str] | None = None) -> str:
     if len(audio) == 0:
         return ""
-    prompt = f"{CODE_PROMPT} {extra_prompt}" if extra_prompt else CODE_PROMPT
+    prompt = CODE_PROMPT
+    if extra_prompt:
+        prompt = f"{prompt} {extra_prompt}"
+    if hotwords:
+        prompt = f"{prompt} {', '.join(hotwords)}"
     result = model.generate(
         audio,
         language=language,
