@@ -1,4 +1,5 @@
 import argparse
+import signal
 import subprocess
 import sys
 import threading
@@ -114,12 +115,19 @@ def main():
 
                 threading.Thread(target=process, daemon=True).start()
 
+    stop_event = threading.Event()
+
+    def handle_signal(signum, frame):
+        print(f"\nSession stats: {stats.summary()}")
+        print("Exiting.")
+        stop_event.set()
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
     with keyboard.Listener(on_press=on_press) as listener:
-        try:
-            listener.join()
-        except KeyboardInterrupt:
-            print(f"\nSession stats: {stats.summary()}")
-            print("Exiting.")
+        stop_event.wait()
+        listener.stop()
 
 
 if __name__ == "__main__":

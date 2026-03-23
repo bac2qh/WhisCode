@@ -47,6 +47,14 @@ uv run whiscode --hotkey f10
 uv run whiscode --prompt "NextJS, Prisma, tRPC, Zustand"
 ```
 
+## Troubleshooting
+
+**Ctrl+C doesn't work:** `pynput`'s keyboard listener can intercept key events, preventing Ctrl+C from reaching the process. Use another terminal to kill it:
+
+```bash
+pkill -f whiscode
+```
+
 ## Known Issues
 
 - **Audio thread safety:** The audio recorder's internal buffer is accessed from both the audio callback thread and the main thread without a lock. In practice this is protected by CPython's GIL and the narrow timing window, but it could theoretically cause issues if a late audio callback fires during transcription. Not currently planned to fix.
