@@ -33,7 +33,7 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 
 ```
 --hotkey HOTKEY    Toggle key for recording (default: shift_r)
---language LANG    Language code, e.g. en, zh, ja, de (default: en). Use 'auto' to detect from audio.
+--language LANG    Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.
 --prompt TEXT      Additional context to improve transcription accuracy
 ```
 

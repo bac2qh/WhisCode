@@ -46,7 +46,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
-    parser.add_argument("--language", default="en", help="Language code, e.g. en, zh, ja, de (default: en). Use 'auto' to detect from audio.")
+    parser.add_argument("--language", default="auto", help="Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.")
     parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
     parser.add_argument("--hotwords-file", default=None, help="Path to hotwords config file (default: ~/.config/whiscode/hotwords.txt)")
     return parser.parse_args()
