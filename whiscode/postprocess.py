@@ -140,7 +140,44 @@ def _collapse_spaces(text: str) -> str:
     return "".join(result)
 
 
+def strip_repetitions(text: str, min_repeats: int = 5, max_phrase_len: int = 10) -> str:
+    """Collapse runs of min_repeats+ consecutive identical phrases to a single occurrence.
+
+    Checks phrase lengths from 1 up to max_phrase_len words. Comparison is
+    case-insensitive; the first occurrence's casing is preserved.
+    """
+    tokens = text.split()
+    if not tokens:
+        return text
+    for n in range(1, max_phrase_len + 1):
+        if len(tokens) < n * min_repeats:
+            continue
+        tokens_lower = [t.lower() for t in tokens]
+        i = 0
+        result = []
+        while i < len(tokens):
+            if i + n > len(tokens):
+                result.extend(tokens[i:])
+                break
+            phrase_lower = tokens_lower[i:i+n]
+            count = 1
+            while i + (count + 1) * n <= len(tokens):
+                if tokens_lower[i + count * n : i + (count + 1) * n] == phrase_lower:
+                    count += 1
+                else:
+                    break
+            if count >= min_repeats:
+                result.extend(tokens[i:i+n])
+                i += count * n
+            else:
+                result.append(tokens[i])
+                i += 1
+        tokens = result
+    return " ".join(tokens)
+
+
 def postprocess(text: str, replacements: dict[str, str] | None = None) -> str:
+    text = strip_repetitions(text)
     if replacements:
         from whiscode.hotwords import apply_replacements
         text = apply_replacements(text, replacements)
