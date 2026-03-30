@@ -176,6 +176,19 @@ def strip_repetitions(text: str, min_repeats: int = 5, max_phrase_len: int = 10)
     return " ".join(tokens)
 
 
+def postprocess_for_refine(text: str, replacements: dict[str, str] | None = None) -> str:
+    """Minimal postprocessing for use before LLM refinement.
+
+    Only strips Whisper hallucination repetitions and applies user replacements.
+    Skips code-oriented transforms (symbols, casing, spelling, space collapse).
+    """
+    text = strip_repetitions(text)
+    if replacements:
+        from whiscode.hotwords import apply_replacements
+        text = apply_replacements(text, replacements)
+    return text
+
+
 def postprocess(text: str, replacements: dict[str, str] | None = None) -> str:
     text = strip_repetitions(text)
     if replacements:

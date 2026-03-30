@@ -1,4 +1,4 @@
-from whiscode.postprocess import strip_repetitions, postprocess
+from whiscode.postprocess import strip_repetitions, postprocess, postprocess_for_refine
 
 
 class TestStripRepetitions:
@@ -63,3 +63,30 @@ class TestStripRepetitions:
     def test_postprocess_applies_strip(self):
         text = "thinking thinking thinking thinking thinking thinking"
         assert postprocess(text) == "thinking"
+
+
+class TestPostprocessForRefine:
+    def test_strips_repetitions(self):
+        text = "thinking thinking thinking thinking thinking thinking"
+        assert postprocess_for_refine(text) == "thinking"
+
+    def test_applies_replacements(self):
+        result = postprocess_for_refine("whiscode is great", replacements={"whiscode": "WhisCode"})
+        assert result == "WhisCode is great"
+
+    def test_does_not_apply_symbols(self):
+        # "slash" should remain as-is, not converted to "/"
+        result = postprocess_for_refine("use slash to separate")
+        assert result == "use slash to separate"
+
+    def test_does_not_apply_casing(self):
+        # "camel case foo bar" should remain as-is, not converted
+        result = postprocess_for_refine("camel case foo bar")
+        assert result == "camel case foo bar"
+
+    def test_empty_string(self):
+        assert postprocess_for_refine("") == ""
+
+    def test_normal_prose_unchanged(self):
+        text = "Hey, just wanted to follow up on our earlier discussion."
+        assert postprocess_for_refine(text) == text

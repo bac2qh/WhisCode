@@ -97,6 +97,8 @@ main() {
     echo "  uv run whiscode --hotkey shift_r"
     echo "  uv run whiscode --language en"
     echo "  uv run whiscode --prompt 'my project terms'"
+    echo "  uv run whiscode --refine                        # prose mode via local LLM (requires Ollama)"
+    echo "  uv run whiscode --refine --refine-model qwen3.5:4b"
 }
 
 main

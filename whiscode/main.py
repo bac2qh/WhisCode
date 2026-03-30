@@ -13,7 +13,8 @@ from pynput import keyboard
 
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import type_text
-from whiscode.postprocess import postprocess
+from whiscode.postprocess import postprocess, postprocess_for_refine
+from whiscode.refiner import refine
 from whiscode.recorder import Recorder, SAMPLE_RATE
 from whiscode.reminders import start_reminders
 from whiscode.stats import Stats
@@ -49,6 +50,8 @@ def parse_args():
     parser.add_argument("--language", default="auto", help="Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.")
     parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
     parser.add_argument("--hotwords-file", default=None, help="Path to hotwords config file (default: ~/.config/whiscode/hotwords.txt)")
+    parser.add_argument("--refine", action="store_true", help="Polish transcription with a local Ollama LLM (prose mode)")
+    parser.add_argument("--refine-model", default="qwen3.5:4b", help="Ollama model for refinement (default: qwen3.5:4b)")
     return parser.parse_args()
 
 
@@ -75,6 +78,8 @@ def main():
     from mlx_audio.stt.utils import load_model
     model = load_model(model_path)
     print(f"Model loaded. Press {args.hotkey} to start/stop recording.")
+    if args.refine:
+        print(f"Refine mode: ON (model: {args.refine_model})")
 
     stats = Stats()
     start_reminders(stats)
@@ -128,7 +133,12 @@ def main():
                         try:
                             text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
                             if text:
-                                processed = postprocess(text, replacements=replacements)
+                                if args.refine:
+                                    processed = postprocess_for_refine(text, replacements=replacements)
+                                    print("  Refining...")
+                                    processed = refine(processed, model=args.refine_model)
+                                else:
+                                    processed = postprocess(text, replacements=replacements)
                                 word_count = len(processed.split())
                                 stats.record(word_count, audio_seconds)
                                 print(f"  > {processed}")
