@@ -13,13 +13,12 @@ Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your w
 ```bash
 git clone https://github.com/bac2qh/WhisCode.git
 cd WhisCode
-./install.sh
 ```
 
-The install script will:
-- Install [uv](https://docs.astral.sh/uv/) if not present
-- Install Python dependencies
-- Download the Whisper large-v3 model (~3GB)
+Two install options:
+
+- **`./install.sh`** — base install (uv + dependencies + Whisper large-v3 model, ~3GB)
+- **`./install_full.sh`** — base + Ollama + Qwen3.5 4B model (~3.4GB extra), required for `--refine` mode
 
 ## Usage
 
@@ -29,28 +28,47 @@ uv run whiscode
 
 Press **Right Shift** to start recording, press again to stop. The transcribed text is typed at your cursor position.
 
-### Options
+## Options
 
-```
---hotkey HOTKEY    Toggle key for recording (default: shift_r)
---language LANG    Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.
---prompt TEXT      Additional context to improve transcription accuracy
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--hotkey HOTKEY` | `shift_r` | Toggle key for recording |
+| `--language LANG` | `auto` | Language code (e.g. `en`, `zh`, `ja`) or `auto` to detect from audio |
+| `--prompt TEXT` | — | Additional context to improve transcription accuracy |
+| `--hotwords-file PATH` | `~/.config/whiscode/hotwords.txt` | Path to hotwords/replacements config file |
+| `--refine` | off | Polish transcription with a local Ollama LLM (prose mode) |
+| `--refine-model MODEL` | `qwen3.5:4b` | Ollama model to use for refinement |
+
+## Refine Mode
+
+`--refine` sends the raw transcription through a local Ollama LLM to produce cleaner, more polished prose. Useful for dictating notes, emails, or documentation.
+
+Requires Ollama to be running locally. Install via `./install_full.sh` or manually install Ollama and pull the model:
+
+```bash
+ollama pull qwen3.5:4b
 ```
 
-### Examples
+Override the model with `--refine-model`:
+
+```bash
+uv run whiscode --refine --refine-model llama3.2:3b
+```
+
+## Examples
 
 ```bash
 # Use a different hotkey
 uv run whiscode --hotkey f10
 
-# Add project-specific terms for better accuracy
-uv run whiscode --prompt "NextJS, Prisma, tRPC, Zustand"
-
 # Transcribe in Chinese
 uv run whiscode --language zh
 
-# Auto-detect language (detects from audio)
-uv run whiscode --language auto
+# Add project-specific terms for better accuracy
+uv run whiscode --prompt "NextJS, Prisma, tRPC, Zustand"
+
+# Polish output with LLM refinement
+uv run whiscode --refine
 ```
 
 ## Known Issues
