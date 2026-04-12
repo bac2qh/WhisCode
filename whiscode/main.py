@@ -11,6 +11,8 @@ from pathlib import Path
 
 from pynput import keyboard
 
+from whiscode.file_loader import load_audio_file
+from whiscode.file_watcher import FileWatcher
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import type_text
 from whiscode.postprocess import postprocess, postprocess_for_refine
@@ -43,6 +45,14 @@ def beep_stop():
     )
 
 
+def beep_busy():
+    subprocess.Popen(
+        ["afplay", "-v", "0.5", "/System/Library/Sounds/Basso.aiff"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
@@ -52,6 +62,9 @@ def parse_args():
     parser.add_argument("--hotwords-file", default=None, help="Path to hotwords config file (default: ~/.config/whiscode/hotwords.txt)")
     parser.add_argument("--refine", action="store_true", help="Polish transcription with a local Ollama LLM (prose mode)")
     parser.add_argument("--refine-model", default="qwen3.5:4b", help="Ollama model for refinement (default: qwen3.5:4b)")
+    parser.add_argument("--input-dir", type=str, default=None, help="Directory to watch for audio files (e.g., /tmp/whiscode/in)")
+    parser.add_argument("--output-dir", type=str, default=None, help="Directory to write transcription outputs (e.g., /tmp/whiscode/out)")
+    parser.add_argument("--no-type", action="store_true", help="Don't type output via keyboard (useful for file-only mode)")
     return parser.parse_args()
 
 
@@ -89,6 +102,20 @@ def main():
     recorder = Recorder()
 
     hotkey_queue = queue.Queue()
+
+    # Initialize file watcher if input directory specified
+    file_watcher: FileWatcher | None = None
+    if args.input_dir:
+        input_dir = Path(args.input_dir)
+        output_dir = Path(args.output_dir) if args.output_dir else None
+        if output_dir:
+            output_dir.mkdir(parents=True, exist_ok=True)
+        file_watcher = FileWatcher(input_dir)
+        file_watcher.start()
+        file_watcher.scan_existing()  # Pick up any files that arrived while we were loading
+        print(f"Watching for audio files in: {input_dir}")
+        if output_dir:
+            print(f"Writing transcriptions to: {output_dir}")
     last_hotkey_time = 0.0
     DEBOUNCE_SECONDS = 0.3
 
@@ -100,58 +127,111 @@ def main():
         if now - last_hotkey_time < DEBOUNCE_SECONDS:
             return
         last_hotkey_time = now
+
+        with state_lock:
+            if state == State.TRANSCRIBING:
+                beep_busy()
+                print("  (busy - transcription in progress)")
+                return
+
         hotkey_queue.put_nowait("toggle")
+
+    def process_audio(audio: np.ndarray, audio_seconds: float, source: str, output_path: Path | None = None):
+        """Process audio and output transcription."""
+        nonlocal state
+        try:
+            text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
+            if text:
+                if args.refine:
+                    processed = postprocess_for_refine(text, replacements=replacements)
+                    print("  Refining...")
+                    processed = refine(processed, model=args.refine_model)
+                else:
+                    processed = postprocess(text, replacements=replacements)
+                word_count = len(processed.split())
+                stats.record(word_count, audio_seconds)
+                print(f"  > {processed}")
+
+                # Write to output file if specified
+                if output_path:
+                    output_path.write_text(processed)
+                    print(f"  Written to: {output_path}")
+
+                # Type via keyboard unless disabled
+                if not args.no_type:
+                    type_text(processed)
+            else:
+                print("  (no speech detected)")
+                if output_path:
+                    output_path.write_text("")
+        except Exception as e:
+            print(f"  Error: {e}", file=sys.stderr)
+            if output_path:
+                output_path.write_text(f"ERROR: {e}")
+        finally:
+            with state_lock:
+                state = State.IDLE
 
     def worker():
         nonlocal state
         while not shutdown_event.is_set():
+            # Check for hotkey events first (priority)
+            hotkey_pressed = False
             try:
-                hotkey_queue.get(timeout=0.5)
+                hotkey_queue.get(timeout=0.05)
+                hotkey_pressed = True
             except queue.Empty:
-                continue
+                pass
 
             with state_lock:
-                if state == State.TRANSCRIBING:
-                    continue
+                if hotkey_pressed:
+                    if state == State.IDLE:
+                        state = State.RECORDING
+                        recorder.start()
+                        beep_start()
+                        print("Recording...")
+                        continue
+                    elif state == State.RECORDING:
+                        state = State.TRANSCRIBING
+                        audio = recorder.stop()
+                        beep_stop()
+                        print("Transcribing...")
+                        audio_seconds = len(audio) / SAMPLE_RATE
+                        threading.Thread(
+                            target=process_audio,
+                            args=(audio, audio_seconds, "hotkey"),
+                            daemon=True
+                        ).start()
+                        continue
 
-                if state == State.IDLE:
-                    state = State.RECORDING
-                    recorder.start()
-                    beep_start()
-                    print("Recording...")
+                # Check for files to process (only when idle)
+                if state == State.IDLE and file_watcher:
+                    file_path = file_watcher.get_next_file()
+                    if file_path:
+                        state = State.TRANSCRIBING
+                        print(f"Processing file: {file_path}")
+                        audio = load_audio_file(file_path)
+                        if len(audio) == 0:
+                            print("  (no audio loaded)")
+                            state = State.IDLE
+                            continue
+                        audio_seconds = len(audio) / SAMPLE_RATE
 
-                elif state == State.RECORDING:
-                    state = State.TRANSCRIBING
-                    audio = recorder.stop()
-                    beep_stop()
-                    print("Transcribing...")
+                        # Determine output path
+                        output_path = None
+                        if args.output_dir:
+                            base_name = Path(file_path).stem
+                            output_path = Path(args.output_dir) / f"{base_name}.txt"
 
-                    audio_seconds = len(audio) / SAMPLE_RATE
+                        threading.Thread(
+                            target=process_audio,
+                            args=(audio, audio_seconds, "file", output_path),
+                            daemon=True
+                        ).start()
+                        continue
 
-                    def process(audio=audio, audio_seconds=audio_seconds):
-                        nonlocal state
-                        try:
-                            text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
-                            if text:
-                                if args.refine:
-                                    processed = postprocess_for_refine(text, replacements=replacements)
-                                    print("  Refining...")
-                                    processed = refine(processed, model=args.refine_model)
-                                else:
-                                    processed = postprocess(text, replacements=replacements)
-                                word_count = len(processed.split())
-                                stats.record(word_count, audio_seconds)
-                                print(f"  > {processed}")
-                                type_text(processed)
-                            else:
-                                print("  (no speech detected)")
-                        except Exception as e:
-                            print(f"  Error: {e}", file=sys.stderr)
-                        finally:
-                            with state_lock:
-                                state = State.IDLE
-
-                    threading.Thread(target=process, daemon=True).start()
+            # Small sleep to prevent busy-waiting
+            time.sleep(0.05)
 
     shutdown_event = threading.Event()
     ctrl_c_count = 0
@@ -181,6 +261,10 @@ def main():
             recorder.stop()
 
     print(f"\nSession stats: {stats.summary()}")
+
+    if file_watcher:
+        file_watcher.stop()
+
     print("Exiting.")
 
 
