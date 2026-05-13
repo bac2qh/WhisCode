@@ -22,4 +22,12 @@
 - Closeout attempt:
   - `git merge --ff-only recording-status-notifications` from local `main` was blocked by the pre-existing unstaged `whiscode/main.py` change in the main checkout.
   - The task worktree and branch were left intact; no forced stash, reset, or checkout was performed.
-- Immediate next step: resolve the dirty `main` checkout intentionally, then fast-forward merge `recording-status-notifications` and complete plan archival/cleanup.
+- User approved overriding the dirty main checkout change because the branch already included the Turbo default.
+- Closeout completion:
+  - Discarded the pre-existing unstaged `whiscode/main.py` change on local `main`.
+  - Fast-forwarded local `main` to `8297a16`.
+  - Added closeout note to the plan before archival.
+  - Archived the plan under `.agents/plans/archive/`.
+  - Removed `.agents/worktrees/recording-status-notifications`.
+  - Deleted local branch `recording-status-notifications`.
+- Immediate next step: commit closeout bookkeeping on local `main`.

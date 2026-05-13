@@ -1,5 +1,14 @@
 # Replace Recording Sounds With Silent macOS Status Notifications
 
+## Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-13-recording-status-notifications-checkpoints.md`.
+- Implementation commits: `108fcee`, `88fd586`, `8297a16`.
+- Merge commit: none; local `main` was fast-forwarded to `8297a16`.
+- Verification performed: `uv run --with pytest python -m pytest` passed with 52 tests; `uv run whiscode --help` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/recording-status-notifications`; deleted local branch `recording-status-notifications`.
+- Shipped: Right Shift recording start/stop feedback now uses silent macOS Notification Center banners instead of Morse/Frog `afplay` sounds, while preserving the Turbo default model.
+
 ## Summary
 - Create a task worktree from local `main` at `.agents/worktrees/recording-status-notifications` on branch `recording-status-notifications`.
 - Preserve the current intended Turbo default if it is still only present as the existing unstaged one-line `whiscode/main.py` change.
