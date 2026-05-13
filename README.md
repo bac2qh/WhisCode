@@ -38,6 +38,29 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 | `--hotwords-file PATH` | `~/.config/whiscode/hotwords.txt` | Path to hotwords/replacements config file |
 | `--refine` | off | Polish transcription with a local Ollama LLM (prose mode) |
 | `--refine-model MODEL` | `qwen3.5:4b` | Ollama model to use for refinement |
+| `--hands-free` | off | Use local start/end phrase detection instead of Right Shift as the primary trigger |
+| `--hands-free-threshold FLOAT` | `0.1` | Detection threshold for start/end phrase matching |
+| `--hands-free-tail-seconds FLOAT` | `1.0` | Audio tail to discard when the end phrase is detected |
+| `--hands-free-debug` | off | Print detector distances for threshold tuning |
+
+## Hands-Free Mode
+
+Hands-free mode keeps the microphone open and uses local keyword matching for your recorded start and end phrases. Whisper only receives the captured audio between those phrases.
+
+Record at least three Voice Memo samples for each phrase, then import them:
+
+```bash
+uv run whiscode-enroll wake wake1.m4a wake2.m4a wake3.m4a
+uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
+```
+
+Start hands-free mode:
+
+```bash
+uv run whiscode --hands-free
+```
+
+Right Shift remains available as a fallback start/stop control while hands-free mode is running.
 
 ## Refine Mode
 
@@ -69,6 +92,9 @@ uv run whiscode --prompt "NextJS, Prisma, tRPC, Zustand"
 
 # Polish output with LLM refinement
 uv run whiscode --refine
+
+# Start hands-free mode after importing wake/end samples
+uv run whiscode --hands-free
 ```
 
 ## Known Issues

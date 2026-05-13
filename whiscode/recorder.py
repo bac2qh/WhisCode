@@ -11,18 +11,21 @@ def _get_native_samplerate() -> int:
     return int(info["default_samplerate"])
 
 
-def _open_stream(callback) -> tuple[sd.InputStream, int]:
+def _open_stream(callback=None) -> tuple[sd.InputStream, int]:
     """Open an input stream, trying native rate then fallbacks."""
     native_rate = _get_native_samplerate()
     rates_to_try = [native_rate] + [r for r in _FALLBACK_RATES if r != native_rate]
 
     for rate in rates_to_try:
         try:
+            kwargs = {}
+            if callback is not None:
+                kwargs["callback"] = callback
             stream = sd.InputStream(
                 samplerate=rate,
                 channels=1,
                 dtype="float32",
-                callback=callback,
+                **kwargs,
             )
             return stream, rate
         except sd.PortAudioError:
@@ -32,6 +35,10 @@ def _open_stream(callback) -> tuple[sd.InputStream, int]:
         f"Could not open audio input at any sample rate. "
         f"Tried: {rates_to_try}. Check your audio device settings."
     )
+
+
+def open_input_stream(callback=None) -> tuple[sd.InputStream, int]:
+    return _open_stream(callback)
 
 
 def _resample(audio: np.ndarray, orig_rate: int, target_rate: int) -> np.ndarray:

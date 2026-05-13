@@ -10,6 +10,18 @@ from pathlib import Path
 
 from pynput import keyboard
 
+from whiscode.handsfree import (
+    DEFAULT_END_DIR,
+    DEFAULT_MAX_SECONDS,
+    DEFAULT_SLIDE_SECONDS,
+    DEFAULT_TAIL_SECONDS,
+    DEFAULT_THRESHOLD,
+    DEFAULT_WAKE_DIR,
+    DEFAULT_WINDOW_SECONDS,
+    HandsFreeAudioLoop,
+    HandsFreeSession,
+    LocalWakeDetector,
+)
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import type_text
 from whiscode.postprocess import postprocess, postprocess_for_refine
@@ -26,7 +38,8 @@ class State(Enum):
     RECORDING = "recording"
     TRANSCRIBING = "transcribing"
 
-def parse_args():
+
+def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-turbo", help="Whisper model to use")
@@ -35,7 +48,21 @@ def parse_args():
     parser.add_argument("--hotwords-file", default=None, help="Path to hotwords config file (default: ~/.config/whiscode/hotwords.txt)")
     parser.add_argument("--refine", action="store_true", help="Polish transcription with a local Ollama LLM (prose mode)")
     parser.add_argument("--refine-model", default="qwen3.5:4b", help="Ollama model for refinement (default: qwen3.5:4b)")
-    return parser.parse_args()
+    parser.add_argument("--hands-free", action="store_true", help="Use local keyword detection instead of Right Shift as the primary trigger")
+    parser.add_argument("--hands-free-wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake phrase reference WAV folder (default: {DEFAULT_WAKE_DIR})")
+    parser.add_argument("--hands-free-end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End phrase reference WAV folder (default: {DEFAULT_END_DIR})")
+    parser.add_argument("--hands-free-threshold", type=float, default=DEFAULT_THRESHOLD, help=f"Keyword detection threshold (default: {DEFAULT_THRESHOLD})")
+    parser.add_argument("--hands-free-window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, help=f"Detector window size in seconds (default: {DEFAULT_WINDOW_SECONDS})")
+    parser.add_argument("--hands-free-slide-seconds", type=float, default=DEFAULT_SLIDE_SECONDS, help=f"Detector slide size in seconds (default: {DEFAULT_SLIDE_SECONDS})")
+    parser.add_argument("--hands-free-tail-seconds", type=float, default=DEFAULT_TAIL_SECONDS, help=f"Audio tail to discard when the end phrase is detected (default: {DEFAULT_TAIL_SECONDS})")
+    parser.add_argument("--hands-free-max-seconds", type=float, default=DEFAULT_MAX_SECONDS, help=f"Maximum recording length before timeout; 0 disables (default: {DEFAULT_MAX_SECONDS})")
+    parser.add_argument("--hands-free-debug", action="store_true", help="Print keyword detector distances for threshold tuning")
+    return parser.parse_args(argv)
+
+
+def _resolve_model_path(model_name: str) -> str:
+    cache_dir = Path.home() / ".cache/huggingface/hub" / f"models--{model_name.replace('/', '--')}" / "snapshots/main"
+    return str(cache_dir) if cache_dir.exists() else model_name
 
 
 def main():
@@ -46,17 +73,12 @@ def main():
         print(f"Error: Unknown hotkey '{args.hotkey}'. Use keys like shift_r, f10, ctrl, alt, etc.")
         sys.exit(1)
 
-    model_path = args.model
-    cache_dir = Path.home() / ".cache/huggingface/hub" / f"models--{args.model.replace('/', '--')}" / "snapshots/main"
-    if cache_dir.exists():
-        model_path = str(cache_dir)
-
-    from pathlib import Path as P
-    hotwords_path = P(args.hotwords_file) if args.hotwords_file else None
+    hotwords_path = Path(args.hotwords_file) if args.hotwords_file else None
     hot_words, replacements = load_hotwords(hotwords_path) if hotwords_path else load_hotwords()
     if hot_words or replacements:
         print(f"Loaded {len(hot_words)} hot word(s) and {len(replacements)} replacement(s).")
 
+    model_path = _resolve_model_path(args.model)
     print(f"Loading model: {model_path} ...")
     from mlx_audio.stt.utils import load_model
     model = load_model(model_path)
@@ -70,8 +92,11 @@ def main():
     state = State.IDLE
     state_lock = threading.Lock()
     recorder = Recorder()
-
+    shutdown_event = threading.Event()
     hotkey_queue = queue.Queue()
+    handsfree_queue = queue.Queue()
+    handsfree_session = None
+    handsfree_loop = None
     last_hotkey_time = 0.0
     DEBOUNCE_SECONDS = 0.3
 
@@ -85,7 +110,35 @@ def main():
         last_hotkey_time = now
         hotkey_queue.put_nowait("toggle")
 
-    def worker():
+    def start_transcription(audio, audio_seconds, resume_handsfree=None):
+        def process(audio=audio, audio_seconds=audio_seconds):
+            nonlocal state
+            try:
+                text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
+                if text:
+                    if args.refine:
+                        processed = postprocess_for_refine(text, replacements=replacements)
+                        print("  Refining...")
+                        processed = refine(processed, model=args.refine_model)
+                    else:
+                        processed = postprocess(text, replacements=replacements)
+                    word_count = len(processed.split())
+                    stats.record(word_count, audio_seconds)
+                    print(f"  > {processed}")
+                    type_text(processed)
+                else:
+                    print("  (no speech detected)")
+            except Exception as e:
+                print(f"  Error: {e}", file=sys.stderr)
+            finally:
+                with state_lock:
+                    state = State.IDLE
+                    if resume_handsfree:
+                        resume_handsfree()
+
+        threading.Thread(target=process, daemon=True).start()
+
+    def hotkey_worker():
         nonlocal state
         while not shutdown_event.is_set():
             try:
@@ -108,35 +161,75 @@ def main():
                     audio = recorder.stop()
                     notify_recording_completed()
                     print("Transcribing...")
+                    start_transcription(audio, len(audio) / SAMPLE_RATE)
 
-                    audio_seconds = len(audio) / SAMPLE_RATE
+    def handsfree_worker():
+        while not shutdown_event.is_set():
+            handled = False
+            try:
+                hotkey_queue.get(timeout=0.05)
+                handled = True
+                handle_handsfree_hotkey()
+            except queue.Empty:
+                pass
 
-                    def process(audio=audio, audio_seconds=audio_seconds):
-                        nonlocal state
-                        try:
-                            text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
-                            if text:
-                                if args.refine:
-                                    processed = postprocess_for_refine(text, replacements=replacements)
-                                    print("  Refining...")
-                                    processed = refine(processed, model=args.refine_model)
-                                else:
-                                    processed = postprocess(text, replacements=replacements)
-                                word_count = len(processed.split())
-                                stats.record(word_count, audio_seconds)
-                                print(f"  > {processed}")
-                                type_text(processed)
-                            else:
-                                print("  (no speech detected)")
-                        except Exception as e:
-                            print(f"  Error: {e}", file=sys.stderr)
-                        finally:
-                            with state_lock:
-                                state = State.IDLE
+            try:
+                event = handsfree_queue.get(timeout=0.05)
+                handled = True
+                handle_handsfree_event(event)
+            except queue.Empty:
+                pass
 
-                    threading.Thread(target=process, daemon=True).start()
+            if not handled:
+                time.sleep(0.01)
 
-    shutdown_event = threading.Event()
+    def handle_handsfree_hotkey():
+        nonlocal state
+        with state_lock:
+            if state == State.TRANSCRIBING:
+                return
+
+            if state == State.IDLE:
+                state = State.RECORDING
+                handsfree_session.manual_start()
+                notify_recording_now()
+                print("Recording... (manual)")
+
+            elif state == State.RECORDING:
+                event = handsfree_session.manual_stop()
+                state = State.TRANSCRIBING
+                handsfree_session.suspend()
+                notify_recording_completed()
+                print("Transcribing... (manual)")
+                start_transcription(event.audio, event.duration_seconds, handsfree_session.resume)
+
+    def handle_handsfree_event(event):
+        nonlocal state
+        with state_lock:
+            if event.kind == "wake.detected":
+                if state == State.IDLE:
+                    state = State.RECORDING
+                    notify_recording_now()
+                    print(f"handsfree.wake.detected distance={event.detection.distance:.4f}")
+                    print("Recording...")
+                return
+
+            if event.kind in {"end.detected", "timeout"}:
+                if state == State.RECORDING:
+                    state = State.TRANSCRIBING
+                    handsfree_session.suspend()
+                    notify_recording_completed()
+                    if event.kind == "timeout":
+                        print(f"handsfree.timeout seconds={event.duration_seconds:.2f}")
+                    else:
+                        print(f"handsfree.end.detected distance={event.detection.distance:.4f}")
+                    print("Transcribing...")
+                    start_transcription(event.audio, event.duration_seconds, handsfree_session.resume)
+                return
+
+            if event.kind == "detector.error":
+                print("handsfree.detector.error", file=sys.stderr)
+
     ctrl_c_count = 0
 
     def handle_signal(signum, frame):
@@ -149,7 +242,29 @@ def main():
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    threading.Thread(target=worker, daemon=True).start()
+    if args.hands_free:
+        try:
+            wake_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)
+            end_detector = LocalWakeDetector(args.hands_free_end_dir, args.hands_free_threshold)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        handsfree_session = HandsFreeSession(
+            wake_detector,
+            end_detector,
+            window_seconds=args.hands_free_window_seconds,
+            slide_seconds=args.hands_free_slide_seconds,
+            tail_seconds=args.hands_free_tail_seconds,
+            max_seconds=args.hands_free_max_seconds,
+            debug=args.hands_free_debug,
+        )
+        handsfree_loop = HandsFreeAudioLoop(handsfree_session, handsfree_queue, stop_event=shutdown_event)
+        handsfree_loop.start()
+        print("Hands-free mode enabled. Right Shift remains available as a fallback.")
+        threading.Thread(target=handsfree_worker, daemon=True).start()
+    else:
+        threading.Thread(target=hotkey_worker, daemon=True).start()
 
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
@@ -159,8 +274,11 @@ def main():
 
     listener.stop()
 
+    if handsfree_loop:
+        handsfree_loop.join(timeout=1.0)
+
     with state_lock:
-        if state == State.RECORDING:
+        if not args.hands_free and state == State.RECORDING:
             recorder.stop()
 
     print(f"\nSession stats: {stats.summary()}")

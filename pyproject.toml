@@ -8,10 +8,12 @@ dependencies = [
     "sounddevice",
     "pynput",
     "numpy",
+    "local-wake==0.1.2",
 ]
 
 [project.scripts]
 whiscode = "whiscode.main:main"
+whiscode-enroll = "whiscode.enroll:main"
 
 [build-system]
 requires = ["hatchling"]
