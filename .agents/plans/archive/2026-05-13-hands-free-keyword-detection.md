@@ -1,5 +1,14 @@
 # Hands-Free Keyword Trigger V1
 
+## Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-13-hands-free-keyword-detection-checkpoints.md`.
+- Implementation commits: `bfd9aa8`, `3c006d2`.
+- Merge commit: none; local `main` was fast-forwarded to `3c006d2`.
+- Verification performed: `uv run --with pytest python -m pytest` passed with 64 tests; `uv run whiscode --help` passed; `uv run whiscode-enroll --help` passed; `uv run --with local-wake python -c "import lwake; print('local-wake ok')"` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/hands-free-keyword-detection`; deleted local branch `hands-free-keyword-detection`.
+- Shipped: optional local hands-free wake/end phrase mode, Voice Memo sample import, Right Shift fallback, tests, README/wiki docs, diagnostics, and project memory.
+
 ## Summary
 - Add optional hands-free mode that replaces Right Shift as the primary trigger while keeping Right Shift as a fallback.
 - Use `local-wake` for local, speaker-dependent start/end phrase detection from reference samples.

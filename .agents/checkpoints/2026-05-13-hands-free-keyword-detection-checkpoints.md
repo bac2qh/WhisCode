@@ -26,4 +26,11 @@
   - `uv run whiscode-enroll --help` passed.
   - `uv run --with local-wake python -c "import lwake; print('local-wake ok')"` passed.
 - Implementation commit: `bfd9aa8` (`Add hands-free keyword detection mode`).
-- Immediate next step: commit this checkpoint update, then close out by merging the branch back to local `main`.
+- Bookkeeping commit: `3c006d2` (`Record hands-free keyword implementation checkpoint`).
+- Closeout:
+  - Fast-forwarded local `main` to `3c006d2`.
+  - Added closeout note to the plan before archival.
+  - Archived the plan under `.agents/plans/archive/`.
+  - Removed `.agents/worktrees/hands-free-keyword-detection`.
+  - Deleted local branch `hands-free-keyword-detection`.
+- Immediate next step: commit closeout bookkeeping on local `main`.
