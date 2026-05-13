@@ -2,7 +2,6 @@ import argparse
 import os
 import queue
 import signal
-import subprocess
 import sys
 import threading
 import time
@@ -18,6 +17,7 @@ from whiscode.refiner import refine
 from whiscode.recorder import Recorder, SAMPLE_RATE
 from whiscode.reminders import start_reminders
 from whiscode.stats import Stats
+from whiscode.status_notifier import notify_recording_completed, notify_recording_now
 from whiscode.transcriber import transcribe
 
 
@@ -26,27 +26,10 @@ class State(Enum):
     RECORDING = "recording"
     TRANSCRIBING = "transcribing"
 
-
-def beep_start():
-    subprocess.Popen(
-        ["afplay", "-v", "0.5", "/System/Library/Sounds/Morse.aiff"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-
-def beep_stop():
-    subprocess.Popen(
-        ["afplay", "-v", "0.5", "/System/Library/Sounds/Frog.aiff"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
-    parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
+    parser.add_argument("--model", default="mlx-community/whisper-large-v3-turbo", help="Whisper model to use")
     parser.add_argument("--language", default="auto", help="Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.")
     parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
     parser.add_argument("--hotwords-file", default=None, help="Path to hotwords config file (default: ~/.config/whiscode/hotwords.txt)")
@@ -117,13 +100,13 @@ def main():
                 if state == State.IDLE:
                     state = State.RECORDING
                     recorder.start()
-                    beep_start()
+                    notify_recording_now()
                     print("Recording...")
 
                 elif state == State.RECORDING:
                     state = State.TRANSCRIBING
                     audio = recorder.stop()
-                    beep_stop()
+                    notify_recording_completed()
                     print("Transcribing...")
 
                     audio_seconds = len(audio) / SAMPLE_RATE
