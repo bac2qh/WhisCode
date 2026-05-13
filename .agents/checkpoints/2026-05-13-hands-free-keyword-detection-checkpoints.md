@@ -25,4 +25,5 @@
   - `uv run whiscode --help` passed.
   - `uv run whiscode-enroll --help` passed.
   - `uv run --with local-wake python -c "import lwake; print('local-wake ok')"` passed.
-- Immediate next step: commit the implementation and documentation, then record the commit hash.
+- Implementation commit: `bfd9aa8` (`Add hands-free keyword detection mode`).
+- Immediate next step: commit this checkpoint update, then close out by merging the branch back to local `main`.
