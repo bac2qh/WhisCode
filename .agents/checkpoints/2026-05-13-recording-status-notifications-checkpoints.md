@@ -18,4 +18,8 @@
   - `uv run --with pytest python -m pytest` passed: 52 tests.
   - `uv run whiscode --help` passed.
 - Implementation commit: `108fcee` (`Replace recording beeps with status notifications`).
-- Immediate next step: commit this checkpoint update, then close out by merging the branch back to local `main` if the dirty main checkout allows a clean fast-forward.
+- Bookkeeping commit: `88fd586` (`Record recording notification implementation checkpoint`).
+- Closeout attempt:
+  - `git merge --ff-only recording-status-notifications` from local `main` was blocked by the pre-existing unstaged `whiscode/main.py` change in the main checkout.
+  - The task worktree and branch were left intact; no forced stash, reset, or checkout was performed.
+- Immediate next step: resolve the dirty `main` checkout intentionally, then fast-forward merge `recording-status-notifications` and complete plan archival/cleanup.
