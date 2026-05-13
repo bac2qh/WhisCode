@@ -17,4 +17,5 @@
   - `uv run pytest` failed because it picked up a system pytest running outside the uv venv and could not import `whiscode`.
   - `uv run --with pytest python -m pytest` passed: 52 tests.
   - `uv run whiscode --help` passed.
-- Immediate next step: commit the implementation, then record the implementation commit hash in this checkpoint.
+- Implementation commit: `108fcee` (`Replace recording beeps with status notifications`).
+- Immediate next step: commit this checkpoint update, then close out by merging the branch back to local `main` if the dirty main checkout allows a clean fast-forward.
