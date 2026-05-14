@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Checkpoint: `.agents/checkpoints/2026-05-14-tighten-hands-free-end-threshold-checkpoints.md`.
+- Implementation commit: `5f82c7c`.
+- Merge: fast-forward to `5f82c7c`; no merge commit created.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 84 tests; `uv run whiscode --help` and `uv run whiscode-enroll --help` succeeded.
+- Cleanup: removed task worktree `.agents/worktrees/tighten-handsfree-end-threshold` and deleted local branch `tighten-handsfree-end-threshold`.
+- Summary: split wake/end thresholds so end detection defaults stricter and rejects wake/non-end cross matches.
+
 # Tighten Hands-Free End Detection Threshold
 
 ## Summary

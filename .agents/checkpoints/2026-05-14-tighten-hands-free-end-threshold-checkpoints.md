@@ -13,4 +13,8 @@
   - `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 84 tests.
   - `uv run whiscode --help` succeeded and showed `--hands-free-end-threshold`.
   - `uv run whiscode-enroll --help` succeeded.
-- Immediate next step: commit and merge the task branch back into local `main`.
+- Implemented in commit `5f82c7c`.
+- Fast-forward merged into local `main` at `5f82c7c`; no merge commit was created.
+- Archived the plan to `.agents/plans/archive/2026-05-14-tighten-hands-free-end-threshold.md`.
+- Removed task worktree `.agents/worktrees/tighten-handsfree-end-threshold` and deleted local branch `tighten-handsfree-end-threshold`.
+- Immediate next step: none for this plan.
