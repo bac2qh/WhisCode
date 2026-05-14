@@ -13,4 +13,7 @@
   - `uv run whiscode --help` succeeded and showed telemetry flags.
   - `uv run whiscode-enroll --help` succeeded and showed telemetry flags.
 - Verification note: bare `uv run pytest` resolved to Homebrew's global `pytest` and failed to import the package/dependencies; the passing command uses uv's Python environment with pytest installed into that run.
-- Immediate next step: commit checkpoint closeout and merge the task branch back into local `main`.
+- Fast-forward merged into local `main` at `9e7db58`; no merge commit was created.
+- Archived the plan to `.agents/plans/archive/2026-05-14-hands-free-telemetry.md`.
+- Removed task worktree `.agents/worktrees/add-handsfree-telemetry` and deleted local branch `add-handsfree-telemetry`.
+- Immediate next step: none for this plan.

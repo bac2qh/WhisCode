@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Checkpoint: `.agents/checkpoints/2026-05-14-hands-free-telemetry-checkpoints.md`.
+- Implementation commits: `914cdbd`, `9e7db58`.
+- Merge: fast-forward to `9e7db58`; no merge commit created.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 78 tests; `uv run whiscode --help` and `uv run whiscode-enroll --help` succeeded.
+- Cleanup: removed task worktree `.agents/worktrees/add-handsfree-telemetry` and deleted local branch `add-handsfree-telemetry`.
+- Summary: shipped local JSONL telemetry for hands-free loop diagnosis without changing detector behavior.
+
 # Add Local Telemetry For Hands-Free Loop Diagnosis
 
 ## Summary
