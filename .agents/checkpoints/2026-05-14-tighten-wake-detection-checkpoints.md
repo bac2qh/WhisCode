@@ -13,5 +13,9 @@
 - Verification passed:
   - `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 90 tests.
   - `uv run whiscode --help` succeeded and showed `--hands-free-wake-confirmations` plus threshold default `0.055`.
+  - `PYTHONPATH=. uv run python -m py_compile whiscode/handsfree.py whiscode/main.py` succeeded.
   - `git diff --check` passed.
-- Immediate next step: merge the task branch back into local `main`.
+- Merged into local `main` by fast-forward; no merge commit.
+- Archived plan at `.agents/plans/archive/2026-05-14-tighten-wake-detection.md`.
+- Removed task worktree `.agents/worktrees/tighten-wake-detection` and deleted local branch `tighten-wake-detection`.
+- Immediate next step: run `uv run whiscode --hands-free --hands-free-debug` against live room audio to confirm incidental sounds no longer produce confirmed wake detections.

@@ -1,5 +1,14 @@
 # Tighten Hands-Free Wake Detection
 
+## Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-14-tighten-wake-detection-checkpoints.md`.
+- Implementation commits: `dbf5e37`, `9c7e9ee`.
+- Merge: fast-forward to local `main`; no merge commit.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest`, `uv run whiscode --help`, `PYTHONPATH=. uv run python -m py_compile whiscode/handsfree.py whiscode/main.py`, and `git diff --check`.
+- Cleanup: task worktree `.agents/worktrees/tighten-wake-detection` removed; local branch `tighten-wake-detection` deleted.
+- Shipped stricter wake defaults: threshold `0.055` and two consecutive wake confirmations before recording starts.
+
 ## Summary
 Reduce hands-free wake false positives by making the default wake matcher less permissive and requiring a short confirmation streak before starting recording.
 
