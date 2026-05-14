@@ -114,3 +114,34 @@ def test_suspended_session_ignores_audio():
 
     assert session.feed(chunk(1)) == []
     assert session.state == "idle"
+
+
+class FakeTelemetry:
+    def __init__(self):
+        self.events = []
+
+    def emit(self, event, **properties):
+        self.events.append((event, properties))
+
+
+def test_session_emits_telemetry_for_detection_and_finish():
+    telemetry = FakeTelemetry()
+    session = HandsFreeSession(
+        FakeDetector([Detection("wake-01.wav", 0.05)]),
+        FakeDetector([Detection("end-01.wav", 0.04)]),
+        sample_rate=10,
+        window_seconds=0.2,
+        slide_seconds=0.1,
+        tail_seconds=0.1,
+        telemetry=telemetry,
+        distance_summary_seconds=0,
+    )
+
+    session.feed(chunk(0))
+    events = session.feed(chunk(1))
+
+    assert [event.kind for event in events] == ["end.detected"]
+    event_names = [event for event, properties in telemetry.events]
+    assert "handsfree.detector_distance_summary" in event_names
+    assert "handsfree.session_started_recording" in event_names
+    assert "handsfree.session_finished_recording" in event_names

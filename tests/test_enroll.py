@@ -31,11 +31,22 @@ def test_parse_args_accepts_voice_memo_samples():
 
 
 def test_parse_args_accepts_record_mode():
-    args = parse_args(["--record", "--sample-count", "4", "--seconds", "1.5"])
+    args = parse_args([
+        "--record",
+        "--sample-count",
+        "4",
+        "--seconds",
+        "1.5",
+        "--telemetry-path",
+        "/tmp/events.jsonl",
+        "--no-telemetry",
+    ])
 
     assert args.record is True
     assert args.sample_count == 4
     assert args.seconds == 1.5
+    assert args.telemetry_path == Path("/tmp/events.jsonl")
+    assert args.no_telemetry is True
 
 
 def test_import_samples_converts_to_16khz_mono_wav(tmp_path):
@@ -116,6 +127,32 @@ def test_record_guided_samples_honors_count_and_seconds(tmp_path):
 
     assert len(written) == 8
     assert seconds_seen == [1.25] * 8
+
+
+class FakeTelemetry:
+    def __init__(self):
+        self.events = []
+
+    def emit(self, event, **properties):
+        self.events.append((event, properties))
+
+
+def test_record_guided_samples_emits_telemetry(tmp_path):
+    telemetry = FakeTelemetry()
+
+    record_guided_samples(
+        wake_dir=tmp_path / "wake",
+        end_dir=tmp_path / "end",
+        input_fn=lambda prompt: None,
+        capture_fn=lambda seconds: np.array([0.0], dtype=np.float32),
+        telemetry=telemetry,
+    )
+
+    event_names = [event for event, properties in telemetry.events]
+    assert event_names[0] == "enrollment.guided_started"
+    assert event_names.count("enrollment.sample_started") == 6
+    assert event_names.count("enrollment.sample_completed") == 6
+    assert event_names[-1] == "enrollment.guided_completed"
 
 
 def test_record_guided_samples_rejects_invalid_options():

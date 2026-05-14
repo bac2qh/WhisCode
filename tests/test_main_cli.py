@@ -33,6 +33,9 @@ def test_parse_args_hands_free_options():
         "4",
         "--enroll-seconds",
         "1.25",
+        "--telemetry-path",
+        "/tmp/whiscode-events.jsonl",
+        "--no-telemetry",
     ])
 
     assert args.hands_free is True
@@ -47,6 +50,8 @@ def test_parse_args_hands_free_options():
     assert args.no_enroll_prompt is True
     assert args.enroll_samples == 4
     assert args.enroll_seconds == 1.25
+    assert args.telemetry_path == Path("/tmp/whiscode-events.jsonl")
+    assert args.no_telemetry is True
 
 
 def test_ensure_hands_free_references_returns_true_when_samples_exist(tmp_path):
@@ -96,7 +101,7 @@ def test_ensure_hands_free_references_accept_prompt_runs_enrollment(tmp_path):
         "1.5",
     ])
 
-    def enroll_fn(*, wake_dir, end_dir, sample_count, seconds):
+    def enroll_fn(*, wake_dir, end_dir, sample_count, seconds, telemetry=None):
         assert sample_count == 3
         assert seconds == 1.5
         wake_dir.mkdir(parents=True)
@@ -106,3 +111,30 @@ def test_ensure_hands_free_references_accept_prompt_runs_enrollment(tmp_path):
             (end_dir / f"end-{i}.wav").write_text("x")
 
     assert ensure_hands_free_references(args, input_fn=lambda prompt: "", enroll_fn=enroll_fn) is True
+
+
+class FakeTelemetry:
+    def __init__(self):
+        self.events = []
+
+    def emit(self, event, **properties):
+        self.events.append((event, properties))
+
+
+def test_ensure_hands_free_references_emits_missing_telemetry(tmp_path):
+    telemetry = FakeTelemetry()
+    args = parse_args([
+        "--hands-free",
+        "--no-enroll-prompt",
+        "--hands-free-wake-dir",
+        str(tmp_path / "wake"),
+        "--hands-free-end-dir",
+        str(tmp_path / "end"),
+    ])
+
+    assert ensure_hands_free_references(args, telemetry=telemetry) is False
+
+    event_names = [event for event, properties in telemetry.events]
+    assert "handsfree.reference_check_started" in event_names
+    assert ("handsfree.reference_check_completed", {"outcome": "missing", "missing_count": 2}) in telemetry.events
+    assert ("handsfree.enrollment_prompt_skipped", {"reason": "no_enroll_prompt"}) in telemetry.events

@@ -43,6 +43,8 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 | `--hands-free-tail-seconds FLOAT` | `1.0` | Audio tail to discard when the end phrase is detected |
 | `--hands-free-debug` | off | Print detector distances for threshold tuning |
 | `--no-enroll-prompt` | off | Exit instead of offering guided enrollment when samples are missing |
+| `--telemetry-path PATH` | `~/.config/whiscode/telemetry/events.jsonl` | Local JSONL telemetry path |
+| `--no-telemetry` | off | Disable local telemetry |
 
 ## Hands-Free Mode
 
@@ -70,6 +72,14 @@ uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
 ```
 
 Right Shift remains available as a fallback start/stop control while hands-free mode is running.
+
+Hands-free mode and guided enrollment write local JSONL telemetry to:
+
+```bash
+~/.config/whiscode/telemetry/events.jsonl
+```
+
+Use it to inspect wake/end detections, detector distances, recording durations, transcription outcomes, and suspected rapid trigger loops. Telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, or typed text. Disable it with `--no-telemetry` or write to another file with `--telemetry-path`.
 
 ## Refine Mode
 

@@ -6,7 +6,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -118,6 +118,8 @@ class HandsFreeSession:
         max_seconds: float = DEFAULT_MAX_SECONDS,
         tail_seconds: float | None = None,
         debug: bool = False,
+        telemetry: Any | None = None,
+        distance_summary_seconds: float = 5.0,
     ):
         self.wake_detector = wake_detector
         self.end_detector = end_detector
@@ -127,6 +129,8 @@ class HandsFreeSession:
         self.max_samples = int(max_seconds * sample_rate) if max_seconds > 0 else 0
         self.tail_samples = max(1, int((tail_seconds or DEFAULT_TAIL_SECONDS) * sample_rate))
         self.debug = debug
+        self.telemetry = telemetry
+        self.distance_summary_seconds = distance_summary_seconds
 
         self.state = "idle"
         self.suspended = False
@@ -135,14 +139,18 @@ class HandsFreeSession:
         self._pending_tail = np.array([], dtype=np.float32)
         self._captured: list[np.ndarray] = []
         self._recorded_samples = 0
+        self._distance_stats: dict[str, dict[str, float]] = {}
+        self._last_distance_summary = time.monotonic()
 
     def suspend(self) -> None:
         self.suspended = True
         self.reset_idle()
+        self._emit("handsfree.session_suspended")
 
     def resume(self) -> None:
         self.suspended = False
         self.reset_idle()
+        self._emit("handsfree.session_resumed")
 
     def reset_idle(self) -> None:
         self.state = "idle"
@@ -153,7 +161,7 @@ class HandsFreeSession:
         self._recorded_samples = 0
 
     def manual_start(self) -> HandsFreeEvent:
-        self._start_recording()
+        self._start_recording(source="manual")
         return HandsFreeEvent("manual.started")
 
     def manual_stop(self) -> HandsFreeEvent:
@@ -170,7 +178,7 @@ class HandsFreeSession:
             self._wake_buffer = _shift_append(self._wake_buffer, chunk)
             detection = self._detect(self.wake_detector, self._wake_buffer, "wake")
             if detection:
-                self._start_recording()
+                self._start_recording(source="wake")
                 return [HandsFreeEvent("wake.detected", detection=detection)]
             return []
 
@@ -192,17 +200,21 @@ class HandsFreeSession:
             detection = detector.detect(audio)
             if self.debug and detector.last_distance is not None:
                 print(f"handsfree.{label}.distance={detector.last_distance:.4f}")
+            if detector.last_distance is not None:
+                self._record_distance(label, detector.last_distance, detected=detection is not None)
             return detection
         except Exception as e:
             print(f"handsfree.detector.error detector={label} error={e}", file=sys.stderr)
+            self._emit("handsfree.detector_error", detector=label, error_type=type(e).__name__)
             return None
 
-    def _start_recording(self) -> None:
+    def _start_recording(self, *, source: str) -> None:
         self.state = "recording"
         self._end_buffer = np.zeros(self.window_samples, dtype=np.float32)
         self._pending_tail = np.array([], dtype=np.float32)
         self._captured = []
         self._recorded_samples = 0
+        self._emit("handsfree.session_started_recording", source=source)
 
     def _append_recording_chunk(self, chunk: np.ndarray) -> None:
         pending = np.concatenate([self._pending_tail, chunk])
@@ -220,7 +232,53 @@ class HandsFreeSession:
         audio = np.concatenate(parts).astype(np.float32) if parts else np.array([], dtype=np.float32)
         duration = len(audio) / self.sample_rate
         self.reset_idle()
+        self._emit(
+            "handsfree.session_finished_recording",
+            reason=kind,
+            duration_seconds=round(duration, 3),
+            audio_samples=len(audio),
+            included_tail=include_pending,
+        )
         return HandsFreeEvent(kind, audio=audio, duration_seconds=duration)
+
+    def _record_distance(self, label: str, distance: float, *, detected: bool) -> None:
+        stats = self._distance_stats.setdefault(
+            label,
+            {"count": 0.0, "min": distance, "max": distance, "total": 0.0, "last": distance, "detections": 0.0},
+        )
+        stats["count"] += 1
+        stats["min"] = min(stats["min"], distance)
+        stats["max"] = max(stats["max"], distance)
+        stats["total"] += distance
+        stats["last"] = distance
+        if detected:
+            stats["detections"] += 1
+
+        now = time.monotonic()
+        if now - self._last_distance_summary >= self.distance_summary_seconds:
+            self._emit_distance_summary()
+            self._last_distance_summary = now
+
+    def _emit_distance_summary(self) -> None:
+        for label, stats in self._distance_stats.items():
+            count = int(stats["count"])
+            if count == 0:
+                continue
+            self._emit(
+                "handsfree.detector_distance_summary",
+                detector=label,
+                count=count,
+                min_distance=round(stats["min"], 6),
+                max_distance=round(stats["max"], 6),
+                avg_distance=round(stats["total"] / count, 6),
+                last_distance=round(stats["last"], 6),
+                detections=int(stats["detections"]),
+            )
+        self._distance_stats = {}
+
+    def _emit(self, event: str, **properties) -> None:
+        if self.telemetry:
+            self.telemetry.emit(event, **properties)
 
 
 class HandsFreeAudioLoop:
@@ -230,11 +288,13 @@ class HandsFreeAudioLoop:
         event_queue: queue.Queue,
         *,
         stop_event: threading.Event,
+        telemetry: Any | None = None,
     ):
         self.session = session
         self.event_queue = event_queue
         self.stop_event = stop_event
         self._thread: threading.Thread | None = None
+        self.telemetry = telemetry
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -248,20 +308,31 @@ class HandsFreeAudioLoop:
         try:
             stream, actual_rate = open_input_stream()
             slide_samples = max(1, int(self.session.slide_samples * actual_rate / SAMPLE_RATE))
+            overflow_count = 0
             with stream:
                 print(f"handsfree.started sample_rate={actual_rate}")
+                self._emit("handsfree.audio_loop_started", sample_rate=actual_rate, slide_samples=slide_samples)
                 while not self.stop_event.is_set():
                     data, overflowed = stream.read(slide_samples)
                     if overflowed:
+                        overflow_count += 1
                         print("handsfree.audio.overflow", file=sys.stderr)
+                        if overflow_count == 1 or overflow_count % 10 == 0:
+                            self._emit("handsfree.audio_overflow", count=overflow_count)
                     chunk = np.asarray(data[:, 0], dtype=np.float32)
                     if actual_rate != SAMPLE_RATE:
                         chunk = _resample(chunk, actual_rate, SAMPLE_RATE)
                     for event in self.session.feed(chunk):
                         self.event_queue.put(event)
+                self._emit("handsfree.audio_loop_stopped", overflow_count=overflow_count)
         except Exception as e:
             self.event_queue.put(HandsFreeEvent("detector.error"))
             print(f"handsfree.detector.error error={e}", file=sys.stderr)
+            self._emit("handsfree.audio_loop_error", error_type=type(e).__name__)
+
+    def _emit(self, event: str, **properties) -> None:
+        if self.telemetry:
+            self.telemetry.emit(event, **properties)
 
 
 def _shift_append(buffer: np.ndarray, chunk: np.ndarray) -> np.ndarray:

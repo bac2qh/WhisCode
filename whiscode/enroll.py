@@ -5,12 +5,14 @@ import subprocess
 import sys
 import wave
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 from whiscode.handsfree import DEFAULT_END_DIR, DEFAULT_WAKE_DIR, MIN_REFERENCE_FILES
 from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 from whiscode.status_notifier import notify_recording_completed, notify_recording_now
+from whiscode.telemetry import telemetry_from_args
 
 DEFAULT_ENROLL_SECONDS = 2.0
 
@@ -24,6 +26,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds to record per sample (default: {DEFAULT_ENROLL_SECONDS})")
     parser.add_argument("--wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake reference folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End reference folder (default: {DEFAULT_END_DIR})")
+    parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
+    parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry for guided recording")
     args = parser.parse_args(argv)
     if not args.record and args.kind is None:
         parser.error("kind is required unless --record is used")
@@ -109,17 +113,36 @@ def write_wav(path: Path, audio: np.ndarray, sample_rate: int = SAMPLE_RATE) -> 
         f.writeframes(pcm.tobytes())
 
 
-def record_one_sample(kind: str, index: int, seconds: float, target_dir: Path, *, input_fn=input, capture_fn=capture_audio) -> Path:
+def record_one_sample(
+    kind: str,
+    index: int,
+    seconds: float,
+    target_dir: Path,
+    *,
+    input_fn=input,
+    capture_fn=capture_audio,
+    telemetry: Any | None = None,
+) -> Path:
     output_path = target_dir / f"{kind}-{index:02d}.wav"
     input_fn(f"Press Enter, say your {kind} phrase, recording for {seconds:.1f} seconds...")
+    _emit(telemetry, "enrollment.sample_started", kind=kind, index=index, seconds=seconds)
     try:
         notify_recording_now()
         audio = capture_fn(seconds)
         notify_recording_completed()
     except Exception:
         output_path.unlink(missing_ok=True)
+        _emit(telemetry, "enrollment.sample_failed", kind=kind, index=index)
         raise
     write_wav(output_path, audio)
+    _emit(
+        telemetry,
+        "enrollment.sample_completed",
+        kind=kind,
+        index=index,
+        audio_seconds=round(len(audio) / SAMPLE_RATE, 3),
+        audio_samples=len(audio),
+    )
     print(f"  Wrote {output_path}")
     return output_path
 
@@ -132,8 +155,10 @@ def record_guided_samples(
     seconds: float = DEFAULT_ENROLL_SECONDS,
     input_fn=input,
     capture_fn=capture_audio,
+    telemetry: Any | None = None,
 ) -> list[Path]:
     validate_recording_options(sample_count, seconds)
+    _emit(telemetry, "enrollment.guided_started", sample_count=sample_count, seconds=seconds)
     written = []
     for kind, target_dir in (("wake", wake_dir), ("end", end_dir)):
         print(f"Recording {sample_count} {kind} sample(s).")
@@ -146,13 +171,17 @@ def record_guided_samples(
                     target_dir,
                     input_fn=input_fn,
                     capture_fn=capture_fn,
+                    telemetry=telemetry,
                 )
             )
+    _emit(telemetry, "enrollment.guided_completed", samples_written=len(written))
     return written
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    telemetry = telemetry_from_args(args, default_enabled=args.record or args.telemetry_path is not None)
+    telemetry.emit("enrollment.cli_started", mode="record" if args.record else "import")
     try:
         if args.record:
             written = record_guided_samples(
@@ -160,10 +189,12 @@ def main(argv: list[str] | None = None) -> int:
                 end_dir=args.end_dir,
                 sample_count=args.sample_count,
                 seconds=args.seconds,
+                telemetry=telemetry,
             )
         else:
             written = import_samples(args.kind, [Path(p) for p in args.samples], args.wake_dir, args.end_dir)
     except (FileNotFoundError, ValueError, subprocess.CalledProcessError, RuntimeError) as e:
+        telemetry.emit("enrollment.cli_failed", error_type=type(e).__name__)
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
@@ -171,7 +202,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{action} {len(written)} sample(s):")
     for path in written:
         print(f"  {path}")
+    telemetry.emit("enrollment.cli_completed", samples_written=len(written))
     return 0
+
+
+def _emit(telemetry: Any | None, event: str, **properties) -> None:
+    if telemetry:
+        telemetry.emit(event, **properties)
 
 
 if __name__ == "__main__":

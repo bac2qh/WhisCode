@@ -4,3 +4,6 @@
 - Added recording status notification memory after replacing recording start/stop sounds with silent macOS banners.
 - Added hands-free keyword detection memory after implementing local wake/end phrase triggering and Voice Memo sample import.
 - Added guided hands-free enrollment memory after implementing Python microphone recording for wake/end reference samples.
+
+## 2026-05-14
+- Added hands-free telemetry memory after implementing local JSONL diagnostics for repeated hands-free trigger loops.

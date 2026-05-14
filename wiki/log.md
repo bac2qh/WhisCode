@@ -3,3 +3,6 @@
 ## 2026-05-13
 - Added hands-free keyword detection documentation for local start/end phrase triggering.
 - Updated hands-free documentation for guided Python microphone enrollment.
+
+## 2026-05-14
+- Documented local JSONL telemetry for hands-free diagnostics and guided enrollment.

@@ -30,3 +30,15 @@ uv run whiscode --hands-free
 If either reference folder has fewer than three WAV files, startup offers to run guided enrollment before loading the wake detectors. Use `--no-enroll-prompt` to fail fast instead.
 
 The wake phrase starts capture, the end phrase stops capture, and the captured audio between those phrases is passed to Whisper. Use `--hands-free-debug` to print detector distances while tuning `--hands-free-threshold`.
+
+## Telemetry
+
+Hands-free mode and guided enrollment write local JSONL telemetry by default:
+
+```bash
+~/.config/whiscode/telemetry/events.jsonl
+```
+
+The telemetry records app lifecycle, enrollment progress, reference counts, detector load results, audio loop status, throttled detector distance summaries, wake/end detections, recording durations, transcription outcomes, and suspected rapid trigger loops. It does not record raw audio, transcripts, prompts, hotword contents, or typed text.
+
+Use `--telemetry-path PATH` to write to another JSONL file, or `--no-telemetry` to disable local telemetry.
