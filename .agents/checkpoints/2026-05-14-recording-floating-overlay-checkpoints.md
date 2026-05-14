@@ -16,4 +16,7 @@
   - `uv run whiscode-enroll --help` succeeded.
   - `PYTHONPATH=. uv run python -m py_compile whiscode/recording_overlay.py whiscode/main.py whiscode/recorder.py whiscode/handsfree.py` succeeded.
   - `git diff --check` passed.
-- Immediate next step: merge the task branch back into local `main`.
+- Merged into local `main` by fast-forward; no merge commit.
+- Archived plan at `.agents/plans/archive/2026-05-14-recording-floating-overlay.md`.
+- Removed task worktree `.agents/worktrees/add-recording-overlay` and deleted local branch `add-recording-overlay`.
+- Immediate next step: run WhisCode normally and validate the overlay with live microphone recording on macOS.

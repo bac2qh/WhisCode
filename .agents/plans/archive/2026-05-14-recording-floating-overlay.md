@@ -1,5 +1,14 @@
 # Recording Floating Overlay With Stopwatch And Waveform
 
+## Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-14-recording-floating-overlay-checkpoints.md`.
+- Implementation commits: `6a28bb5`, `8158c27`.
+- Merge: fast-forward to local `main`; no merge commit.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest`, `uv run whiscode --help`, `uv run whiscode-enroll --help`, `PYTHONPATH=. uv run python -m py_compile whiscode/recording_overlay.py whiscode/main.py whiscode/recorder.py whiscode/handsfree.py`, and `git diff --check`.
+- Cleanup: task worktree `.agents/worktrees/add-recording-overlay` removed; local branch `add-recording-overlay` deleted.
+- Shipped a recording-only macOS floating overlay with stopwatch and live waveform bars, plus CLI flags to disable the overlay or keep notification banners.
+
 ## Summary
 Replace recording start/end banners with a small macOS floating overlay shown only while recording. The overlay is non-activating, always-on-top, and shows elapsed recording time plus live input waveform bars.
 
