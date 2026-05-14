@@ -11,4 +11,8 @@
   - `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 78 tests.
   - `uv run whiscode --help` succeeded.
   - `uv run whiscode-enroll --help` succeeded.
-- Immediate next step: commit and merge the task branch back into local `main`.
+- Implemented in commit `5e95c82`.
+- Fast-forward merged into local `main` at `5e95c82`; no merge commit was created.
+- Archived the plan to `.agents/plans/archive/2026-05-14-signal-safe-telemetry-shutdown.md`.
+- Removed task worktree `.agents/worktrees/fix-signal-safe-telemetry` and deleted local branch `fix-signal-safe-telemetry`.
+- Immediate next step: none for this plan.

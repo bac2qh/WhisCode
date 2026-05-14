@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Checkpoint: `.agents/checkpoints/2026-05-14-signal-safe-telemetry-shutdown-checkpoints.md`.
+- Implementation commit: `5e95c82`.
+- Merge: fast-forward to `5e95c82`; no merge commit created.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 78 tests; `uv run whiscode --help` and `uv run whiscode-enroll --help` succeeded.
+- Cleanup: removed task worktree `.agents/worktrees/fix-signal-safe-telemetry` and deleted local branch `fix-signal-safe-telemetry`.
+- Summary: restored signal-safe Ctrl+C behavior by moving telemetry emission out of the signal handler.
+
 # Signal-Safe Telemetry Shutdown Fix
 
 ## Summary
