@@ -10,3 +10,4 @@
 - Added signal-safe telemetry shutdown memory after fixing the Ctrl+C handler regression.
 - Added hands-free speech-energy gate memory after preventing silence and partial-window false positives from reaching the keyword detector.
 - Added hands-free end-threshold memory after splitting wake and end detection thresholds to reduce premature stop detections.
+- Added repository hygiene memory after ignoring local `.agents` runtime/worktree/lock state while keeping durable agent project state tracked.

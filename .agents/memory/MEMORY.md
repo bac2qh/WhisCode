@@ -3,3 +3,4 @@
 ## Topics
 - [Hands-free keyword detection](hands-free-keyword-detection.md)
 - [Recording status notifications](recording-status-notifications.md)
+- [Repository hygiene](repository-hygiene.md)

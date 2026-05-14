@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+
+# Local agent runtime state. Durable project state under .agents/plans,
+# .agents/checkpoints, and .agents/memory is intentionally tracked.
+.agents/worktree/
+.agents/worktrees/
+.agents/locks/
