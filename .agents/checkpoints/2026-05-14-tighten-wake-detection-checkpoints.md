@@ -9,8 +9,9 @@
 - Added wake confirmation state so one matched detector window is treated as pending instead of starting recording.
 - Added bounded `handsfree.detector_confirmation_pending` and `handsfree.detector_confirmation_completed` telemetry.
 - Updated README, wiki, and project memory for the safer defaults and tuning path.
+- Implementation commit: `dbf5e37`.
 - Verification passed:
   - `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 90 tests.
   - `uv run whiscode --help` succeeded and showed `--hands-free-wake-confirmations` plus threshold default `0.055`.
   - `git diff --check` passed.
-- Immediate next step: commit and merge the task branch back into local `main`.
+- Immediate next step: merge the task branch back into local `main`.
