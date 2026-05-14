@@ -193,6 +193,25 @@ def test_stricter_end_threshold_rejects_cross_phrase_distance():
     assert session.state == "recording"
 
 
+def test_recording_chunks_report_audio_level():
+    levels = []
+    session = HandsFreeSession(
+        FakeDetector([Detection("wake-01.wav", 0.05)]),
+        FakeDetector([]),
+        sample_rate=10,
+        window_seconds=0.2,
+        tail_seconds=0.1,
+        level_callback=levels.append,
+    )
+    session.feed(chunk(1))
+    session.feed(chunk(1))
+
+    session.feed(chunk(0.5))
+
+    assert len(levels) == 1
+    assert levels[0] > 0
+
+
 def test_suspended_session_ignores_audio():
     session = HandsFreeSession(
         FakeDetector([Detection("wake-01.wav", 0.05)]),

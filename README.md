@@ -49,6 +49,15 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 | `--no-enroll-prompt` | off | Exit instead of offering guided enrollment when samples are missing |
 | `--telemetry-path PATH` | `~/.config/whiscode/telemetry/events.jsonl` | Local JSONL telemetry path |
 | `--no-telemetry` | off | Disable local telemetry |
+| `--recording-overlay` | on | Show floating recording stopwatch/waveform overlay |
+| `--no-recording-overlay` | off | Disable floating recording overlay |
+| `--recording-notifications` | off | Keep macOS start/end notification banners in addition to overlay |
+
+## Recording Overlay
+
+WhisCode shows a small floating macOS overlay while recording. The overlay hides when recording stops, shows an elapsed stopwatch, and renders live microphone levels as waveform bars.
+
+Use `--no-recording-overlay` to disable it. Use `--recording-notifications` if you also want the older macOS start/end notification banners.
 
 ## Hands-Free Mode
 

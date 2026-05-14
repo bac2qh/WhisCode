@@ -34,6 +34,7 @@ from whiscode.injector import type_text
 from whiscode.postprocess import postprocess, postprocess_for_refine
 from whiscode.refiner import refine
 from whiscode.recorder import Recorder, SAMPLE_RATE
+from whiscode.recording_overlay import RecordingOverlayClient
 from whiscode.reminders import start_reminders
 from whiscode.stats import Stats
 from whiscode.status_notifier import notify_recording_completed, notify_recording_now
@@ -75,6 +76,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--enroll-seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds per guided enrollment sample (default: {DEFAULT_ENROLL_SECONDS})")
     parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
     parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry")
+    parser.set_defaults(recording_overlay=True)
+    parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay (default)")
+    parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay")
+    parser.add_argument("--recording-notifications", action="store_true", help="Keep macOS start/end notification banners in addition to the overlay")
     args = parser.parse_args(argv)
     wake_threshold_supplied = "--hands-free-threshold" in raw_argv
     if args.hands_free_threshold is None:
@@ -184,10 +189,11 @@ def main():
 
     stats = Stats()
     start_reminders(stats)
+    overlay = RecordingOverlayClient(enabled=args.recording_overlay)
 
     state = State.IDLE
     state_lock = threading.Lock()
-    recorder = Recorder()
+    recorder = Recorder(level_callback=overlay.update_level)
     shutdown_event = threading.Event()
     hotkey_queue = queue.Queue()
     handsfree_queue = queue.Queue()
@@ -234,6 +240,16 @@ def main():
             return
         last_hotkey_time = now
         hotkey_queue.put_nowait("toggle")
+
+    def show_recording_status() -> None:
+        overlay.show()
+        if args.recording_notifications:
+            notify_recording_now()
+
+    def hide_recording_status() -> None:
+        overlay.hide()
+        if args.recording_notifications:
+            notify_recording_completed()
 
     def start_transcription(audio, audio_seconds, resume_handsfree=None):
         def process(audio=audio, audio_seconds=audio_seconds):
@@ -301,13 +317,13 @@ def main():
                 if state == State.IDLE:
                     transition_to(State.RECORDING, "hotkey")
                     recorder.start()
-                    notify_recording_now()
+                    show_recording_status()
                     print("Recording...")
 
                 elif state == State.RECORDING:
                     transition_to(State.TRANSCRIBING, "hotkey")
                     audio = recorder.stop()
-                    notify_recording_completed()
+                    hide_recording_status()
                     print("Transcribing...")
                     start_transcription(audio, len(audio) / SAMPLE_RATE)
 
@@ -341,14 +357,14 @@ def main():
             if state == State.IDLE:
                 transition_to(State.RECORDING, "manual_handsfree_hotkey")
                 handsfree_session.manual_start()
-                notify_recording_now()
+                show_recording_status()
                 print("Recording... (manual)")
 
             elif state == State.RECORDING:
                 event = handsfree_session.manual_stop()
                 transition_to(State.TRANSCRIBING, "manual_handsfree_hotkey", audio_seconds=round(event.duration_seconds, 3))
                 handsfree_session.suspend()
-                notify_recording_completed()
+                hide_recording_status()
                 print("Transcribing... (manual)")
                 start_transcription(event.audio, event.duration_seconds, handsfree_session.resume)
 
@@ -362,7 +378,7 @@ def main():
                         "handsfree_wake",
                         detection_distance=round(event.detection.distance, 6) if event.detection else None,
                     )
-                    notify_recording_now()
+                    show_recording_status()
                     print(f"handsfree.wake.detected distance={event.detection.distance:.4f}")
                     print("Recording...")
                     telemetry.emit(
@@ -378,17 +394,17 @@ def main():
                 if state == State.RECORDING:
                     transition_to(State.TRANSCRIBING, f"handsfree_{event.kind}", audio_seconds=round(event.duration_seconds, 3))
                     handsfree_session.suspend()
-                    notify_recording_completed()
+                    hide_recording_status()
                     if event.kind == "timeout":
                         print(f"handsfree.timeout seconds={event.duration_seconds:.2f}")
                         telemetry.emit("handsfree.timeout", audio_seconds=round(event.duration_seconds, 3))
                     else:
                         print(f"handsfree.end.detected distance={event.detection.distance:.4f}")
                         telemetry.emit(
-                        "handsfree.end_detected",
-                        distance=round(event.detection.distance, 6) if event.detection else None,
-                        threshold=args.hands_free_end_threshold,
-                        audio_seconds=round(event.duration_seconds, 3),
+                            "handsfree.end_detected",
+                            distance=round(event.detection.distance, 6) if event.detection else None,
+                            threshold=args.hands_free_end_threshold,
+                            audio_seconds=round(event.duration_seconds, 3),
                             rms=round(event.detection.rms, 6) if event.detection and event.detection.rms is not None else None,
                             active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                         )
@@ -442,6 +458,7 @@ def main():
             min_rms=args.hands_free_min_rms,
             min_active_ratio=args.hands_free_min_active_ratio,
             active_level=args.hands_free_active_level,
+            level_callback=overlay.update_level,
         )
         handsfree_loop = HandsFreeAudioLoop(handsfree_session, handsfree_queue, stop_event=shutdown_event, telemetry=telemetry)
         handsfree_loop.start()
@@ -463,6 +480,8 @@ def main():
 
     if handsfree_loop:
         handsfree_loop.join(timeout=1.0)
+
+    overlay.stop()
 
     with state_lock:
         if not args.hands_free and state == State.RECORDING:

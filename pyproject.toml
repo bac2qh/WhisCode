@@ -9,6 +9,7 @@ dependencies = [
     "pynput",
     "numpy",
     "local-wake==0.1.2",
+    "pyobjc-framework-Cocoa",
 ]
 
 [project.scripts]

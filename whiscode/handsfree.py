@@ -129,6 +129,7 @@ class HandsFreeSession:
         min_rms: float = DEFAULT_MIN_RMS,
         min_active_ratio: float = DEFAULT_MIN_ACTIVE_RATIO,
         active_level: float = DEFAULT_ACTIVE_LEVEL,
+        level_callback: Any | None = None,
     ):
         self.wake_detector = wake_detector
         self.end_detector = end_detector
@@ -143,6 +144,7 @@ class HandsFreeSession:
         self.min_rms = min_rms
         self.min_active_ratio = min_active_ratio
         self.active_level = active_level
+        self.level_callback = level_callback
 
         self.state = "idle"
         self.suspended = False
@@ -202,6 +204,7 @@ class HandsFreeSession:
             return []
 
         self._recorded_samples += len(chunk)
+        self._emit_level(chunk)
         self._append_recording_chunk(chunk)
         self._end_buffer = _shift_append(self._end_buffer, chunk)
         self._end_filled_samples = min(self.window_samples, self._end_filled_samples + len(chunk))
@@ -380,6 +383,10 @@ class HandsFreeSession:
         if self.telemetry:
             self.telemetry.emit(event, **properties)
 
+    def _emit_level(self, chunk: np.ndarray) -> None:
+        if self.level_callback:
+            self.level_callback(_level_from_audio(chunk))
+
 
 class HandsFreeAudioLoop:
     def __init__(
@@ -449,6 +456,11 @@ def _audio_metrics(audio: np.ndarray, active_level: float) -> tuple[float, float
     rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float32))))
     active_ratio = float(np.mean(np.abs(audio) >= active_level))
     return rms, active_ratio
+
+
+def _level_from_audio(audio: np.ndarray) -> float:
+    rms, _ = _audio_metrics(audio, DEFAULT_ACTIVE_LEVEL)
+    return min(1.0, rms / 0.08)
 
 
 def _update_min_max(stats: dict[str, float | str], name: str, value: float) -> None:

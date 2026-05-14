@@ -46,6 +46,8 @@ def test_parse_args_hands_free_options():
         "--telemetry-path",
         "/tmp/whiscode-events.jsonl",
         "--no-telemetry",
+        "--no-recording-overlay",
+        "--recording-notifications",
     ])
 
     assert args.hands_free is True
@@ -66,6 +68,8 @@ def test_parse_args_hands_free_options():
     assert args.enroll_seconds == 1.25
     assert args.telemetry_path == Path("/tmp/whiscode-events.jsonl")
     assert args.no_telemetry is True
+    assert args.recording_overlay is False
+    assert args.recording_notifications is True
 
 
 def test_parse_args_legacy_threshold_applies_to_end_when_end_threshold_omitted():
