@@ -29,7 +29,7 @@ uv run whiscode --hands-free
 
 If either reference folder has fewer than three WAV files, startup offers to run guided enrollment before loading the wake detectors. Use `--no-enroll-prompt` to fail fast instead.
 
-The wake phrase starts capture, the end phrase stops capture, and the captured audio between those phrases is passed to Whisper. WhisCode waits until a detector window is fully populated and has enough speech-like energy before calling the keyword matcher, so silence and low-level room noise do not trigger wake/end detection. Use `--hands-free-debug` to print detector distances while tuning `--hands-free-threshold`.
+The wake phrase starts capture, the end phrase stops capture, and the captured audio between those phrases is passed to Whisper. WhisCode waits until a detector window is fully populated and has enough speech-like energy before calling the keyword matcher, so silence and low-level room noise do not trigger wake/end detection. End detection uses its own stricter threshold to avoid prematurely stopping on wake or dictated speech. Use `--hands-free-debug` to print detector distances while tuning `--hands-free-threshold` and `--hands-free-end-threshold`.
 
 The speech-energy gate can be tuned with `--hands-free-min-rms`, `--hands-free-min-active-ratio`, and `--hands-free-active-level`.
 

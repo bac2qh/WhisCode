@@ -19,6 +19,21 @@ class FakeDetector:
         return detection
 
 
+class ThresholdDetector:
+    def __init__(self, distance, threshold):
+        self.distance = distance
+        self.threshold = threshold
+        self.last_distance = None
+        self.calls = 0
+
+    def detect(self, audio):
+        self.calls += 1
+        self.last_distance = self.distance
+        if self.distance < self.threshold:
+            return Detection("match.wav", self.distance)
+        return None
+
+
 def chunk(value):
     return np.array([value], dtype=np.float32)
 
@@ -155,6 +170,26 @@ def test_end_detector_waits_for_full_recording_window():
     assert session.feed(chunk(1)) == []
 
     assert end_detector.calls == 0
+    assert session.state == "recording"
+
+
+def test_stricter_end_threshold_rejects_cross_phrase_distance():
+    wake_detector = ThresholdDetector(distance=0.04, threshold=0.1)
+    end_detector = ThresholdDetector(distance=0.068, threshold=0.055)
+    session = HandsFreeSession(
+        wake_detector,
+        end_detector,
+        sample_rate=10,
+        window_seconds=0.2,
+        tail_seconds=0.1,
+    )
+    session.feed(chunk(1))
+    session.feed(chunk(1))
+
+    assert session.feed(chunk(1)) == []
+    assert session.feed(chunk(1)) == []
+
+    assert end_detector.calls == 1
     assert session.state == "recording"
 
 

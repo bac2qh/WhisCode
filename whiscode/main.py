@@ -12,6 +12,7 @@ from pynput import keyboard
 
 from whiscode.handsfree import (
     DEFAULT_END_DIR,
+    DEFAULT_END_THRESHOLD,
     DEFAULT_ACTIVE_LEVEL,
     DEFAULT_MAX_SECONDS,
     DEFAULT_MIN_ACTIVE_RATIO,
@@ -47,6 +48,7 @@ class State(Enum):
 
 
 def parse_args(argv: list[str] | None = None):
+    raw_argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-turbo", help="Whisper model to use")
@@ -58,7 +60,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free", action="store_true", help="Use local keyword detection instead of Right Shift as the primary trigger")
     parser.add_argument("--hands-free-wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake phrase reference WAV folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--hands-free-end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End phrase reference WAV folder (default: {DEFAULT_END_DIR})")
-    parser.add_argument("--hands-free-threshold", type=float, default=DEFAULT_THRESHOLD, help=f"Keyword detection threshold (default: {DEFAULT_THRESHOLD})")
+    parser.add_argument("--hands-free-threshold", type=float, default=None, help=f"Wake keyword detection threshold (default: {DEFAULT_THRESHOLD})")
+    parser.add_argument("--hands-free-end-threshold", type=float, default=None, help=f"End keyword detection threshold (default: {DEFAULT_END_THRESHOLD})")
     parser.add_argument("--hands-free-window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, help=f"Detector window size in seconds (default: {DEFAULT_WINDOW_SECONDS})")
     parser.add_argument("--hands-free-slide-seconds", type=float, default=DEFAULT_SLIDE_SECONDS, help=f"Detector slide size in seconds (default: {DEFAULT_SLIDE_SECONDS})")
     parser.add_argument("--hands-free-tail-seconds", type=float, default=DEFAULT_TAIL_SECONDS, help=f"Audio tail to discard when the end phrase is detected (default: {DEFAULT_TAIL_SECONDS})")
@@ -72,7 +75,13 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--enroll-seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds per guided enrollment sample (default: {DEFAULT_ENROLL_SECONDS})")
     parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
     parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    wake_threshold_supplied = "--hands-free-threshold" in raw_argv
+    if args.hands_free_threshold is None:
+        args.hands_free_threshold = DEFAULT_THRESHOLD
+    if args.hands_free_end_threshold is None:
+        args.hands_free_end_threshold = args.hands_free_threshold if wake_threshold_supplied else DEFAULT_END_THRESHOLD
+    return args
 
 
 def _resolve_model_path(model_name: str) -> str:
@@ -376,10 +385,10 @@ def main():
                     else:
                         print(f"handsfree.end.detected distance={event.detection.distance:.4f}")
                         telemetry.emit(
-                            "handsfree.end_detected",
-                            distance=round(event.detection.distance, 6) if event.detection else None,
-                            threshold=args.hands_free_threshold,
-                            audio_seconds=round(event.duration_seconds, 3),
+                        "handsfree.end_detected",
+                        distance=round(event.detection.distance, 6) if event.detection else None,
+                        threshold=args.hands_free_end_threshold,
+                        audio_seconds=round(event.duration_seconds, 3),
                             rms=round(event.detection.rms, 6) if event.detection and event.detection.rms is not None else None,
                             active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                         )
@@ -408,9 +417,13 @@ def main():
 
     if args.hands_free:
         try:
-            telemetry.emit("handsfree.detector_load_started", threshold=args.hands_free_threshold)
+            telemetry.emit(
+                "handsfree.detector_load_started",
+                wake_threshold=args.hands_free_threshold,
+                end_threshold=args.hands_free_end_threshold,
+            )
             wake_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)
-            end_detector = LocalWakeDetector(args.hands_free_end_dir, args.hands_free_threshold)
+            end_detector = LocalWakeDetector(args.hands_free_end_dir, args.hands_free_end_threshold)
             telemetry.emit("handsfree.detector_load_completed")
         except ValueError as e:
             telemetry.emit("handsfree.detector_load_failed", error_type=type(e).__name__)

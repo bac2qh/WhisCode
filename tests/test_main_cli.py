@@ -8,6 +8,8 @@ def test_parse_args_defaults_to_hotkey_mode():
 
     assert args.hands_free is False
     assert args.hotkey == "shift_r"
+    assert args.hands_free_threshold == 0.1
+    assert args.hands_free_end_threshold == 0.055
 
 
 def test_parse_args_hands_free_options():
@@ -19,6 +21,8 @@ def test_parse_args_hands_free_options():
         "/tmp/end",
         "--hands-free-threshold",
         "0.2",
+        "--hands-free-end-threshold",
+        "0.07",
         "--hands-free-window-seconds",
         "1.5",
         "--hands-free-slide-seconds",
@@ -48,6 +52,7 @@ def test_parse_args_hands_free_options():
     assert args.hands_free_wake_dir == Path("/tmp/wake")
     assert args.hands_free_end_dir == Path("/tmp/end")
     assert args.hands_free_threshold == 0.2
+    assert args.hands_free_end_threshold == 0.07
     assert args.hands_free_window_seconds == 1.5
     assert args.hands_free_slide_seconds == 0.1
     assert args.hands_free_tail_seconds == 0.75
@@ -61,6 +66,13 @@ def test_parse_args_hands_free_options():
     assert args.enroll_seconds == 1.25
     assert args.telemetry_path == Path("/tmp/whiscode-events.jsonl")
     assert args.no_telemetry is True
+
+
+def test_parse_args_legacy_threshold_applies_to_end_when_end_threshold_omitted():
+    args = parse_args(["--hands-free-threshold", "0.08"])
+
+    assert args.hands_free_threshold == 0.08
+    assert args.hands_free_end_threshold == 0.08
 
 
 def test_ensure_hands_free_references_returns_true_when_samples_exist(tmp_path):
