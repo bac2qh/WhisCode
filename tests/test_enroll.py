@@ -1,9 +1,17 @@
 from pathlib import Path
 from unittest.mock import patch
+import wave
 
+import numpy as np
 import pytest
 
-from whiscode.enroll import import_samples, parse_args
+from whiscode.enroll import (
+    import_samples,
+    parse_args,
+    record_guided_samples,
+    validate_recording_options,
+    write_wav,
+)
 
 
 def make_samples(tmp_path, count=3):
@@ -20,6 +28,14 @@ def test_parse_args_accepts_voice_memo_samples():
 
     assert args.kind == "wake"
     assert args.samples == ["one.m4a", "two.m4a", "three.m4a"]
+
+
+def test_parse_args_accepts_record_mode():
+    args = parse_args(["--record", "--sample-count", "4", "--seconds", "1.5"])
+
+    assert args.record is True
+    assert args.sample_count == 4
+    assert args.seconds == 1.5
 
 
 def test_import_samples_converts_to_16khz_mono_wav(tmp_path):
@@ -66,3 +82,56 @@ def test_import_samples_rejects_missing_file(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="Sample not found"):
         import_samples("wake", samples, wake_dir=tmp_path / "wake", end_dir=tmp_path / "end")
+
+
+def test_record_guided_samples_records_wake_and_end_defaults(tmp_path):
+    captured_prompts = []
+    audio = np.array([0.1, -0.1], dtype=np.float32)
+
+    written = record_guided_samples(
+        wake_dir=tmp_path / "wake",
+        end_dir=tmp_path / "end",
+        input_fn=lambda prompt: captured_prompts.append(prompt),
+        capture_fn=lambda seconds: audio,
+    )
+
+    assert len(written) == 6
+    assert written[0] == tmp_path / "wake" / "wake-01.wav"
+    assert written[3] == tmp_path / "end" / "end-01.wav"
+    assert len(captured_prompts) == 6
+    assert all(path.exists() for path in written)
+
+
+def test_record_guided_samples_honors_count_and_seconds(tmp_path):
+    seconds_seen = []
+
+    written = record_guided_samples(
+        wake_dir=tmp_path / "wake",
+        end_dir=tmp_path / "end",
+        sample_count=4,
+        seconds=1.25,
+        input_fn=lambda prompt: None,
+        capture_fn=lambda seconds: seconds_seen.append(seconds) or np.array([0.0], dtype=np.float32),
+    )
+
+    assert len(written) == 8
+    assert seconds_seen == [1.25] * 8
+
+
+def test_record_guided_samples_rejects_invalid_options():
+    with pytest.raises(ValueError, match="at least 3"):
+        validate_recording_options(2, 2.0)
+    with pytest.raises(ValueError, match="positive"):
+        validate_recording_options(3, 0)
+
+
+def test_write_wav_writes_16khz_mono_file(tmp_path):
+    path = tmp_path / "sample.wav"
+
+    write_wav(path, np.array([0.0, 0.5], dtype=np.float32))
+
+    with wave.open(str(path), "rb") as f:
+        assert f.getnchannels() == 1
+        assert f.getframerate() == 16000
+        assert f.getsampwidth() == 2
+        assert f.getnframes() == 2

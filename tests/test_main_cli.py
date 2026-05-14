@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from whiscode.main import parse_args
+from whiscode.main import ensure_hands_free_references, parse_args
 
 
 def test_parse_args_defaults_to_hotkey_mode():
@@ -28,6 +28,11 @@ def test_parse_args_hands_free_options():
         "--hands-free-max-seconds",
         "30",
         "--hands-free-debug",
+        "--no-enroll-prompt",
+        "--enroll-samples",
+        "4",
+        "--enroll-seconds",
+        "1.25",
     ])
 
     assert args.hands_free is True
@@ -39,3 +44,65 @@ def test_parse_args_hands_free_options():
     assert args.hands_free_tail_seconds == 0.75
     assert args.hands_free_max_seconds == 30
     assert args.hands_free_debug is True
+    assert args.no_enroll_prompt is True
+    assert args.enroll_samples == 4
+    assert args.enroll_seconds == 1.25
+
+
+def test_ensure_hands_free_references_returns_true_when_samples_exist(tmp_path):
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    wake_dir.mkdir()
+    end_dir.mkdir()
+    for i in range(3):
+        (wake_dir / f"wake-{i}.wav").write_text("x")
+        (end_dir / f"end-{i}.wav").write_text("x")
+    args = parse_args(["--hands-free", "--hands-free-wake-dir", str(wake_dir), "--hands-free-end-dir", str(end_dir)])
+
+    assert ensure_hands_free_references(args) is True
+
+
+def test_ensure_hands_free_references_decline_prompt_exits(tmp_path):
+    args = parse_args(["--hands-free", "--hands-free-wake-dir", str(tmp_path / "wake"), "--hands-free-end-dir", str(tmp_path / "end")])
+
+    assert ensure_hands_free_references(args, input_fn=lambda prompt: "n") is False
+
+
+def test_ensure_hands_free_references_no_prompt_exits_without_input(tmp_path):
+    args = parse_args([
+        "--hands-free",
+        "--no-enroll-prompt",
+        "--hands-free-wake-dir",
+        str(tmp_path / "wake"),
+        "--hands-free-end-dir",
+        str(tmp_path / "end"),
+    ])
+
+    assert ensure_hands_free_references(args, input_fn=lambda prompt: (_ for _ in ()).throw(AssertionError("prompted"))) is False
+
+
+def test_ensure_hands_free_references_accept_prompt_runs_enrollment(tmp_path):
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    args = parse_args([
+        "--hands-free",
+        "--hands-free-wake-dir",
+        str(wake_dir),
+        "--hands-free-end-dir",
+        str(end_dir),
+        "--enroll-samples",
+        "3",
+        "--enroll-seconds",
+        "1.5",
+    ])
+
+    def enroll_fn(*, wake_dir, end_dir, sample_count, seconds):
+        assert sample_count == 3
+        assert seconds == 1.5
+        wake_dir.mkdir(parents=True)
+        end_dir.mkdir(parents=True)
+        for i in range(3):
+            (wake_dir / f"wake-{i}.wav").write_text("x")
+            (end_dir / f"end-{i}.wav").write_text("x")
+
+    assert ensure_hands_free_references(args, input_fn=lambda prompt: "", enroll_fn=enroll_fn) is True

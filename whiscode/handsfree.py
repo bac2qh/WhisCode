@@ -22,6 +22,19 @@ DEFAULT_MAX_SECONDS = 180.0
 MIN_REFERENCE_FILES = 3
 
 
+def reference_sample_count(path: Path) -> int:
+    return len(list(Path(path).glob("*.wav"))) if Path(path).exists() else 0
+
+
+def missing_reference_messages(wake_dir: Path, end_dir: Path, minimum: int = MIN_REFERENCE_FILES) -> list[str]:
+    messages = []
+    for label, path in (("wake", wake_dir), ("end", end_dir)):
+        count = reference_sample_count(path)
+        if count < minimum:
+            messages.append(f"{label}: {count}/{minimum} WAV samples in {path}")
+    return messages
+
+
 @dataclass(frozen=True)
 class Detection:
     name: str

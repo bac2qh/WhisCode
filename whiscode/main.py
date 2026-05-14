@@ -21,7 +21,9 @@ from whiscode.handsfree import (
     HandsFreeAudioLoop,
     HandsFreeSession,
     LocalWakeDetector,
+    missing_reference_messages,
 )
+from whiscode.enroll import DEFAULT_ENROLL_SECONDS, record_guided_samples
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import type_text
 from whiscode.postprocess import postprocess, postprocess_for_refine
@@ -57,6 +59,9 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-tail-seconds", type=float, default=DEFAULT_TAIL_SECONDS, help=f"Audio tail to discard when the end phrase is detected (default: {DEFAULT_TAIL_SECONDS})")
     parser.add_argument("--hands-free-max-seconds", type=float, default=DEFAULT_MAX_SECONDS, help=f"Maximum recording length before timeout; 0 disables (default: {DEFAULT_MAX_SECONDS})")
     parser.add_argument("--hands-free-debug", action="store_true", help="Print keyword detector distances for threshold tuning")
+    parser.add_argument("--no-enroll-prompt", action="store_true", help="Exit instead of prompting to record missing hands-free samples")
+    parser.add_argument("--enroll-samples", type=int, default=3, help="Samples per phrase for guided enrollment when --hands-free needs setup (default: 3)")
+    parser.add_argument("--enroll-seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds per guided enrollment sample (default: {DEFAULT_ENROLL_SECONDS})")
     return parser.parse_args(argv)
 
 
@@ -65,12 +70,50 @@ def _resolve_model_path(model_name: str) -> str:
     return str(cache_dir) if cache_dir.exists() else model_name
 
 
+def ensure_hands_free_references(args, *, input_fn=input, enroll_fn=record_guided_samples) -> bool:
+    missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir)
+    if not missing:
+        return True
+
+    print("Hands-free enrollment is incomplete:")
+    for message in missing:
+        print(f"  {message}")
+
+    command = "uv run whiscode-enroll --record"
+    if args.no_enroll_prompt:
+        print(f"Run `{command}` to record samples, then start `uv run whiscode --hands-free` again.", file=sys.stderr)
+        return False
+
+    answer = input_fn("Run guided enrollment now? [Y/n] ").strip().lower()
+    if answer not in ("", "y", "yes"):
+        print(f"Run `{command}` when you are ready, then start `uv run whiscode --hands-free` again.")
+        return False
+
+    enroll_fn(
+        wake_dir=args.hands_free_wake_dir,
+        end_dir=args.hands_free_end_dir,
+        sample_count=args.enroll_samples,
+        seconds=args.enroll_seconds,
+    )
+
+    missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir)
+    if missing:
+        print("Hands-free enrollment is still incomplete:", file=sys.stderr)
+        for message in missing:
+            print(f"  {message}", file=sys.stderr)
+        return False
+    return True
+
+
 def main():
     args = parse_args()
 
     hotkey = getattr(keyboard.Key, args.hotkey, None)
     if hotkey is None:
         print(f"Error: Unknown hotkey '{args.hotkey}'. Use keys like shift_r, f10, ctrl, alt, etc.")
+        sys.exit(1)
+
+    if args.hands_free and not ensure_hands_free_references(args):
         sys.exit(1)
 
     hotwords_path = Path(args.hotwords_file) if args.hotwords_file else None
