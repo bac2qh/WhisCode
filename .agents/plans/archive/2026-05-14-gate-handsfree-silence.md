@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Checkpoint: `.agents/checkpoints/2026-05-14-gate-handsfree-silence-checkpoints.md`.
+- Implementation commit: `013f1e8`.
+- Merge: fast-forward to `013f1e8`; no merge commit created.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 82 tests; `uv run whiscode --help` and `uv run whiscode-enroll --help` succeeded.
+- Cleanup: removed task worktree `.agents/worktrees/gate-handsfree-silence` and deleted local branch `gate-handsfree-silence`.
+- Summary: gated hands-free keyword detection on full detector windows and speech-like energy so silence and zero-padded startup windows do not reach `local-wake`.
+
 # Prevent Hands-Free False Triggers On Silence
 
 ## Summary
