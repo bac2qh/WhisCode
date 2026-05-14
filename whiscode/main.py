@@ -21,6 +21,7 @@ from whiscode.handsfree import (
     DEFAULT_TAIL_SECONDS,
     DEFAULT_THRESHOLD,
     DEFAULT_WAKE_DIR,
+    DEFAULT_WAKE_CONFIRMATIONS,
     DEFAULT_WINDOW_SECONDS,
     HandsFreeAudioLoop,
     HandsFreeSession,
@@ -70,6 +71,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-min-rms", type=float, default=DEFAULT_MIN_RMS, help=f"Minimum detector-window RMS required before keyword matching (default: {DEFAULT_MIN_RMS})")
     parser.add_argument("--hands-free-min-active-ratio", type=float, default=DEFAULT_MIN_ACTIVE_RATIO, help=f"Minimum ratio of active samples required before keyword matching (default: {DEFAULT_MIN_ACTIVE_RATIO})")
     parser.add_argument("--hands-free-active-level", type=float, default=DEFAULT_ACTIVE_LEVEL, help=f"Absolute sample level counted as active for keyword matching (default: {DEFAULT_ACTIVE_LEVEL})")
+    parser.add_argument("--hands-free-wake-confirmations", type=int, default=DEFAULT_WAKE_CONFIRMATIONS, help=f"Consecutive wake matches required before recording starts (default: {DEFAULT_WAKE_CONFIRMATIONS})")
     parser.add_argument("--hands-free-debug", action="store_true", help="Print keyword detector distances for threshold tuning")
     parser.add_argument("--no-enroll-prompt", action="store_true", help="Exit instead of prompting to record missing hands-free samples")
     parser.add_argument("--enroll-samples", type=int, default=3, help="Samples per phrase for guided enrollment when --hands-free needs setup (default: 3)")
@@ -458,6 +460,7 @@ def main():
             min_rms=args.hands_free_min_rms,
             min_active_ratio=args.hands_free_min_active_ratio,
             active_level=args.hands_free_active_level,
+            wake_confirmations=args.hands_free_wake_confirmations,
             level_callback=overlay.update_level,
         )
         handsfree_loop = HandsFreeAudioLoop(handsfree_session, handsfree_queue, stop_event=shutdown_event, telemetry=telemetry)

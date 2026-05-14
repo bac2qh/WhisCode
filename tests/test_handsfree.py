@@ -39,7 +39,7 @@ def chunk(value):
 
 
 def test_wake_detection_starts_recording_without_capturing_wake_audio():
-    wake_detector = FakeDetector([Detection("wake-01.wav", 0.05)])
+    wake_detector = FakeDetector([Detection("wake-01.wav", 0.05), Detection("wake-02.wav", 0.04)])
     session = HandsFreeSession(
         wake_detector,
         FakeDetector([]),
@@ -50,12 +50,42 @@ def test_wake_detection_starts_recording_without_capturing_wake_audio():
     )
 
     assert session.feed(chunk(9)) == []
+    assert session.feed(chunk(9)) == []
     events = session.feed(chunk(9))
 
     assert [event.kind for event in events] == ["wake.detected"]
-    assert wake_detector.calls == 1
+    assert wake_detector.calls == 2
     assert session.state == "recording"
     assert session.manual_stop().audio.size == 0
+
+
+def test_single_wake_detection_waits_for_confirmation():
+    telemetry = FakeTelemetry()
+    wake_detector = FakeDetector([Detection("wake-01.wav", 0.05), None])
+    session = HandsFreeSession(
+        wake_detector,
+        FakeDetector([]),
+        sample_rate=10,
+        window_seconds=0.2,
+        slide_seconds=0.1,
+        tail_seconds=0.2,
+        telemetry=telemetry,
+    )
+
+    assert session.feed(chunk(9)) == []
+    assert session.feed(chunk(9)) == []
+    assert session.feed(chunk(9)) == []
+
+    assert wake_detector.calls == 2
+    assert session.state == "idle"
+    assert ("handsfree.detector_confirmation_pending", {
+        "detector": "wake",
+        "count": 1,
+        "required": 2,
+        "distance": 0.05,
+        "rms": 9.0,
+        "active_ratio": 1.0,
+    }) in telemetry.events
 
 
 def test_end_detection_stops_recording_and_excludes_pending_tail():
@@ -66,6 +96,7 @@ def test_end_detection_stops_recording_and_excludes_pending_tail():
         window_seconds=0.2,
         slide_seconds=0.1,
         tail_seconds=0.2,
+        wake_confirmations=1,
     )
     assert session.feed(chunk(1)) == []
     session.feed(chunk(1))
@@ -163,6 +194,7 @@ def test_end_detector_waits_for_full_recording_window():
         sample_rate=10,
         window_seconds=0.2,
         tail_seconds=0.1,
+        wake_confirmations=1,
     )
     session.feed(chunk(1))
     session.feed(chunk(1))
@@ -182,6 +214,7 @@ def test_stricter_end_threshold_rejects_cross_phrase_distance():
         sample_rate=10,
         window_seconds=0.2,
         tail_seconds=0.1,
+        wake_confirmations=1,
     )
     session.feed(chunk(1))
     session.feed(chunk(1))
@@ -202,6 +235,7 @@ def test_recording_chunks_report_audio_level():
         window_seconds=0.2,
         tail_seconds=0.1,
         level_callback=levels.append,
+        wake_confirmations=1,
     )
     session.feed(chunk(1))
     session.feed(chunk(1))
@@ -218,6 +252,7 @@ def test_suspended_session_ignores_audio():
         FakeDetector([]),
         sample_rate=10,
         window_seconds=0.2,
+        wake_confirmations=1,
     )
 
     session.suspend()
@@ -245,6 +280,7 @@ def test_session_emits_telemetry_for_detection_and_finish():
         tail_seconds=0.1,
         telemetry=telemetry,
         distance_summary_seconds=0,
+        wake_confirmations=1,
     )
 
     session.feed(chunk(1))

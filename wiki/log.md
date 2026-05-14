@@ -9,3 +9,4 @@
 - Documented hands-free detector speech-energy gating for suppressing silence and partial-window false positives.
 - Documented stricter end-threshold tuning for hands-free mode.
 - Documented the floating recording overlay with stopwatch and live microphone levels.
+- Documented stricter wake defaults and wake confirmation tuning to reduce hands-free false starts from incidental sound.

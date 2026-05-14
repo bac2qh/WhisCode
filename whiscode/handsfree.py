@@ -14,7 +14,8 @@ from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 
 DEFAULT_WAKE_DIR = Path.home() / ".config" / "whiscode" / "wake" / "wake"
 DEFAULT_END_DIR = Path.home() / ".config" / "whiscode" / "wake" / "end"
-DEFAULT_THRESHOLD = 0.1
+DEFAULT_THRESHOLD = 0.055
+DEFAULT_WAKE_CONFIRMATIONS = 2
 DEFAULT_WINDOW_SECONDS = 2.0
 DEFAULT_SLIDE_SECONDS = 0.25
 DEFAULT_TAIL_SECONDS = 1.0
@@ -129,6 +130,7 @@ class HandsFreeSession:
         min_rms: float = DEFAULT_MIN_RMS,
         min_active_ratio: float = DEFAULT_MIN_ACTIVE_RATIO,
         active_level: float = DEFAULT_ACTIVE_LEVEL,
+        wake_confirmations: int = DEFAULT_WAKE_CONFIRMATIONS,
         level_callback: Any | None = None,
     ):
         self.wake_detector = wake_detector
@@ -144,6 +146,7 @@ class HandsFreeSession:
         self.min_rms = min_rms
         self.min_active_ratio = min_active_ratio
         self.active_level = active_level
+        self.wake_confirmations = max(1, int(wake_confirmations))
         self.level_callback = level_callback
 
         self.state = "idle"
@@ -155,6 +158,8 @@ class HandsFreeSession:
         self._recorded_samples = 0
         self._wake_filled_samples = 0
         self._end_filled_samples = 0
+        self._wake_confirmation_count = 0
+        self._end_confirmation_count = 0
         self._distance_stats: dict[str, dict[str, float]] = {}
         self._gate_stats: dict[str, dict[str, float | str]] = {}
         self._last_distance_summary = time.monotonic()
@@ -179,6 +184,8 @@ class HandsFreeSession:
         self._recorded_samples = 0
         self._wake_filled_samples = 0
         self._end_filled_samples = 0
+        self._wake_confirmation_count = 0
+        self._end_confirmation_count = 0
 
     def manual_start(self) -> HandsFreeEvent:
         self._start_recording(source="manual")
@@ -198,6 +205,7 @@ class HandsFreeSession:
             self._wake_buffer = _shift_append(self._wake_buffer, chunk)
             self._wake_filled_samples = min(self.window_samples, self._wake_filled_samples + len(chunk))
             detection = self._maybe_detect(self.wake_detector, self._wake_buffer, "wake", self._wake_filled_samples)
+            detection = self._confirm_detection(detection, "wake", self.wake_confirmations)
             if detection:
                 self._start_recording(source="wake")
                 return [HandsFreeEvent("wake.detected", detection=detection)]
@@ -209,6 +217,7 @@ class HandsFreeSession:
         self._end_buffer = _shift_append(self._end_buffer, chunk)
         self._end_filled_samples = min(self.window_samples, self._end_filled_samples + len(chunk))
         detection = self._maybe_detect(self.end_detector, self._end_buffer, "end", self._end_filled_samples)
+        detection = self._confirm_detection(detection, "end", 1)
         if detection:
             event = self._finish_recording("end.detected", include_pending=False)
             return [HandsFreeEvent(event.kind, event.audio, detection, event.duration_seconds)]
@@ -255,6 +264,8 @@ class HandsFreeSession:
         self._captured = []
         self._recorded_samples = 0
         self._end_filled_samples = 0
+        self._wake_confirmation_count = 0
+        self._end_confirmation_count = 0
         self._emit("handsfree.session_started_recording", source=source)
 
     def _append_recording_chunk(self, chunk: np.ndarray) -> None:
@@ -382,6 +393,39 @@ class HandsFreeSession:
     def _emit(self, event: str, **properties) -> None:
         if self.telemetry:
             self.telemetry.emit(event, **properties)
+
+    def _confirm_detection(self, detection: Detection | None, label: str, required: int) -> Detection | None:
+        count_attr = f"_{label}_confirmation_count"
+        required = max(1, int(required))
+        if detection is None:
+            setattr(self, count_attr, 0)
+            return None
+
+        count = int(getattr(self, count_attr)) + 1
+        setattr(self, count_attr, count)
+        if count < required:
+            self._emit(
+                "handsfree.detector_confirmation_pending",
+                detector=label,
+                count=count,
+                required=required,
+                distance=round(detection.distance, 6),
+                rms=round(detection.rms, 6) if detection.rms is not None else None,
+                active_ratio=round(detection.active_ratio, 6) if detection.active_ratio is not None else None,
+            )
+            return None
+
+        setattr(self, count_attr, 0)
+        if required > 1:
+            self._emit(
+                "handsfree.detector_confirmation_completed",
+                detector=label,
+                required=required,
+                distance=round(detection.distance, 6),
+                rms=round(detection.rms, 6) if detection.rms is not None else None,
+                active_ratio=round(detection.active_ratio, 6) if detection.active_ratio is not None else None,
+            )
+        return detection
 
     def _emit_level(self, chunk: np.ndarray) -> None:
         if self.level_callback:

@@ -18,5 +18,6 @@
 - Added detector-window readiness and speech-energy gating to prevent `local-wake` from matching zero-padded startup windows, silence, or low-level background noise.
 - Added `--hands-free-min-rms`, `--hands-free-min-active-ratio`, and `--hands-free-active-level` for tuning the gate; default thresholds were chosen from observed enrolled sample levels.
 - Hands-free telemetry now includes detector gate summaries plus RMS and active-sample ratio on wake/end detection events.
-- Split wake and end thresholds so end detection is stricter by default. Wake remains at `0.1`; end defaults to `0.055` to reject wake/non-end speech that previously matched the end detector around `0.063-0.070`.
+- Split wake and end thresholds so end detection was initially stricter by default. Wake stayed at `0.1` at that point; end defaulted to `0.055` to reject wake/non-end speech that previously matched the end detector around `0.063-0.070`.
 - Added `--hands-free-end-threshold` for tuning end detection separately while preserving explicit legacy `--hands-free-threshold` behavior when the end threshold is omitted.
+- Tightened wake defaults after observing high false-positive rates from incidental sound. Wake now defaults to threshold `0.055` and requires two consecutive matching windows before recording starts; `--hands-free-wake-confirmations` can tune that confirmation count.

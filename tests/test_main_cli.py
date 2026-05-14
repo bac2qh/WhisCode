@@ -8,8 +8,9 @@ def test_parse_args_defaults_to_hotkey_mode():
 
     assert args.hands_free is False
     assert args.hotkey == "shift_r"
-    assert args.hands_free_threshold == 0.1
+    assert args.hands_free_threshold == 0.055
     assert args.hands_free_end_threshold == 0.055
+    assert args.hands_free_wake_confirmations == 2
 
 
 def test_parse_args_hands_free_options():
@@ -37,6 +38,8 @@ def test_parse_args_hands_free_options():
         "0.2",
         "--hands-free-active-level",
         "0.03",
+        "--hands-free-wake-confirmations",
+        "3",
         "--hands-free-debug",
         "--no-enroll-prompt",
         "--enroll-samples",
@@ -62,6 +65,7 @@ def test_parse_args_hands_free_options():
     assert args.hands_free_min_rms == 0.01
     assert args.hands_free_min_active_ratio == 0.2
     assert args.hands_free_active_level == 0.03
+    assert args.hands_free_wake_confirmations == 3
     assert args.hands_free_debug is True
     assert args.no_enroll_prompt is True
     assert args.enroll_samples == 4

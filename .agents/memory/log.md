@@ -12,3 +12,4 @@
 - Added hands-free end-threshold memory after splitting wake and end detection thresholds to reduce premature stop detections.
 - Added repository hygiene memory after ignoring local `.agents` runtime/worktree/lock state while keeping durable agent project state tracked.
 - Added recording overlay memory after replacing normal recording banners with a floating stopwatch and live microphone-level UI.
+- Added hands-free wake confirmation memory after tightening wake defaults to reduce false starts from incidental sound.
