@@ -27,6 +27,12 @@ def test_parse_args_hands_free_options():
         "0.75",
         "--hands-free-max-seconds",
         "30",
+        "--hands-free-min-rms",
+        "0.01",
+        "--hands-free-min-active-ratio",
+        "0.2",
+        "--hands-free-active-level",
+        "0.03",
         "--hands-free-debug",
         "--no-enroll-prompt",
         "--enroll-samples",
@@ -46,6 +52,9 @@ def test_parse_args_hands_free_options():
     assert args.hands_free_slide_seconds == 0.1
     assert args.hands_free_tail_seconds == 0.75
     assert args.hands_free_max_seconds == 30
+    assert args.hands_free_min_rms == 0.01
+    assert args.hands_free_min_active_ratio == 0.2
+    assert args.hands_free_active_level == 0.03
     assert args.hands_free_debug is True
     assert args.no_enroll_prompt is True
     assert args.enroll_samples == 4

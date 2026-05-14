@@ -8,3 +8,4 @@
 ## 2026-05-14
 - Added hands-free telemetry memory after implementing local JSONL diagnostics for repeated hands-free trigger loops.
 - Added signal-safe telemetry shutdown memory after fixing the Ctrl+C handler regression.
+- Added hands-free speech-energy gate memory after preventing silence and partial-window false positives from reaching the keyword detector.

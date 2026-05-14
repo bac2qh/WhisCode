@@ -15,3 +15,6 @@
 - Added `--telemetry-path` and `--no-telemetry` to both runtime and enrollment CLIs.
 - Telemetry records bounded lifecycle, detector, recording, enrollment, transcription, and loop-suspected metadata, while avoiding raw audio, transcripts, prompts, hotword contents, and typed text.
 - Fixed a telemetry regression where `app.signal_received` was emitted inside the Ctrl+C signal handler. Signal handlers must remain signal-safe and only update simple in-memory shutdown state; telemetry is emitted after the main listener loop exits.
+- Added detector-window readiness and speech-energy gating to prevent `local-wake` from matching zero-padded startup windows, silence, or low-level background noise.
+- Added `--hands-free-min-rms`, `--hands-free-min-active-ratio`, and `--hands-free-active-level` for tuning the gate; default thresholds were chosen from observed enrolled sample levels.
+- Hands-free telemetry now includes detector gate summaries plus RMS and active-sample ratio on wake/end detection events.

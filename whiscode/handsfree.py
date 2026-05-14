@@ -19,6 +19,9 @@ DEFAULT_WINDOW_SECONDS = 2.0
 DEFAULT_SLIDE_SECONDS = 0.25
 DEFAULT_TAIL_SECONDS = 1.0
 DEFAULT_MAX_SECONDS = 180.0
+DEFAULT_MIN_RMS = 0.006
+DEFAULT_MIN_ACTIVE_RATIO = 0.05
+DEFAULT_ACTIVE_LEVEL = 0.01
 MIN_REFERENCE_FILES = 3
 
 
@@ -39,6 +42,8 @@ def missing_reference_messages(wake_dir: Path, end_dir: Path, minimum: int = MIN
 class Detection:
     name: str
     distance: float
+    rms: float | None = None
+    active_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +125,9 @@ class HandsFreeSession:
         debug: bool = False,
         telemetry: Any | None = None,
         distance_summary_seconds: float = 5.0,
+        min_rms: float = DEFAULT_MIN_RMS,
+        min_active_ratio: float = DEFAULT_MIN_ACTIVE_RATIO,
+        active_level: float = DEFAULT_ACTIVE_LEVEL,
     ):
         self.wake_detector = wake_detector
         self.end_detector = end_detector
@@ -131,6 +139,9 @@ class HandsFreeSession:
         self.debug = debug
         self.telemetry = telemetry
         self.distance_summary_seconds = distance_summary_seconds
+        self.min_rms = min_rms
+        self.min_active_ratio = min_active_ratio
+        self.active_level = active_level
 
         self.state = "idle"
         self.suspended = False
@@ -139,8 +150,12 @@ class HandsFreeSession:
         self._pending_tail = np.array([], dtype=np.float32)
         self._captured: list[np.ndarray] = []
         self._recorded_samples = 0
+        self._wake_filled_samples = 0
+        self._end_filled_samples = 0
         self._distance_stats: dict[str, dict[str, float]] = {}
+        self._gate_stats: dict[str, dict[str, float | str]] = {}
         self._last_distance_summary = time.monotonic()
+        self._last_gate_summary = time.monotonic()
 
     def suspend(self) -> None:
         self.suspended = True
@@ -159,6 +174,8 @@ class HandsFreeSession:
         self._pending_tail = np.array([], dtype=np.float32)
         self._captured = []
         self._recorded_samples = 0
+        self._wake_filled_samples = 0
+        self._end_filled_samples = 0
 
     def manual_start(self) -> HandsFreeEvent:
         self._start_recording(source="manual")
@@ -176,7 +193,8 @@ class HandsFreeSession:
 
         if self.state == "idle":
             self._wake_buffer = _shift_append(self._wake_buffer, chunk)
-            detection = self._detect(self.wake_detector, self._wake_buffer, "wake")
+            self._wake_filled_samples = min(self.window_samples, self._wake_filled_samples + len(chunk))
+            detection = self._maybe_detect(self.wake_detector, self._wake_buffer, "wake", self._wake_filled_samples)
             if detection:
                 self._start_recording(source="wake")
                 return [HandsFreeEvent("wake.detected", detection=detection)]
@@ -185,7 +203,8 @@ class HandsFreeSession:
         self._recorded_samples += len(chunk)
         self._append_recording_chunk(chunk)
         self._end_buffer = _shift_append(self._end_buffer, chunk)
-        detection = self._detect(self.end_detector, self._end_buffer, "end")
+        self._end_filled_samples = min(self.window_samples, self._end_filled_samples + len(chunk))
+        detection = self._maybe_detect(self.end_detector, self._end_buffer, "end", self._end_filled_samples)
         if detection:
             event = self._finish_recording("end.detected", include_pending=False)
             return [HandsFreeEvent(event.kind, event.audio, detection, event.duration_seconds)]
@@ -195,14 +214,31 @@ class HandsFreeSession:
 
         return []
 
-    def _detect(self, detector: Detector, audio: np.ndarray, label: str) -> Detection | None:
+    def _maybe_detect(self, detector: Detector, audio: np.ndarray, label: str, filled_samples: int) -> Detection | None:
+        if filled_samples < self.window_samples:
+            self._record_gate_skip(label, "partial_window", filled_samples=filled_samples)
+            return None
+
+        rms, active_ratio = _audio_metrics(audio, self.active_level)
+        if rms < self.min_rms:
+            self._record_gate_skip(label, "low_rms", rms=rms, active_ratio=active_ratio, filled_samples=filled_samples)
+            return None
+        if active_ratio < self.min_active_ratio:
+            self._record_gate_skip(label, "low_active_ratio", rms=rms, active_ratio=active_ratio, filled_samples=filled_samples)
+            return None
+
+        return self._detect(detector, audio, label, rms=rms, active_ratio=active_ratio)
+
+    def _detect(self, detector: Detector, audio: np.ndarray, label: str, *, rms: float, active_ratio: float) -> Detection | None:
         try:
             detection = detector.detect(audio)
             if self.debug and detector.last_distance is not None:
                 print(f"handsfree.{label}.distance={detector.last_distance:.4f}")
             if detector.last_distance is not None:
                 self._record_distance(label, detector.last_distance, detected=detection is not None)
-            return detection
+            if detection:
+                return Detection(detection.name, detection.distance, rms=rms, active_ratio=active_ratio)
+            return None
         except Exception as e:
             print(f"handsfree.detector.error detector={label} error={e}", file=sys.stderr)
             self._emit("handsfree.detector_error", detector=label, error_type=type(e).__name__)
@@ -214,6 +250,7 @@ class HandsFreeSession:
         self._pending_tail = np.array([], dtype=np.float32)
         self._captured = []
         self._recorded_samples = 0
+        self._end_filled_samples = 0
         self._emit("handsfree.session_started_recording", source=source)
 
     def _append_recording_chunk(self, chunk: np.ndarray) -> None:
@@ -258,6 +295,68 @@ class HandsFreeSession:
         if now - self._last_distance_summary >= self.distance_summary_seconds:
             self._emit_distance_summary()
             self._last_distance_summary = now
+
+    def _record_gate_skip(
+        self,
+        label: str,
+        reason: str,
+        *,
+        rms: float | None = None,
+        active_ratio: float | None = None,
+        filled_samples: int,
+    ) -> None:
+        key = f"{label}:{reason}"
+        stats = self._gate_stats.setdefault(
+            key,
+            {
+                "detector": label,
+                "reason": reason,
+                "count": 0.0,
+                "min_filled_samples": float(filled_samples),
+                "max_filled_samples": float(filled_samples),
+            },
+        )
+        stats["count"] = float(stats["count"]) + 1
+        stats["min_filled_samples"] = min(float(stats["min_filled_samples"]), float(filled_samples))
+        stats["max_filled_samples"] = max(float(stats["max_filled_samples"]), float(filled_samples))
+        if rms is not None:
+            _update_min_max(stats, "rms", rms)
+        if active_ratio is not None:
+            _update_min_max(stats, "active_ratio", active_ratio)
+
+        now = time.monotonic()
+        if stats["count"] == 1:
+            self._emit_gate_summary(reset=False)
+        elif now - self._last_gate_summary >= self.distance_summary_seconds:
+            self._emit_gate_summary(reset=True)
+            self._last_gate_summary = now
+
+    def _emit_gate_summary(self, *, reset: bool) -> None:
+        for stats in self._gate_stats.values():
+            properties = {
+                "detector": stats["detector"],
+                "reason": stats["reason"],
+                "count": int(float(stats["count"])),
+                "min_filled_samples": int(float(stats["min_filled_samples"])),
+                "max_filled_samples": int(float(stats["max_filled_samples"])),
+                "window_samples": self.window_samples,
+                "min_rms_threshold": self.min_rms,
+                "min_active_ratio_threshold": self.min_active_ratio,
+                "active_level": self.active_level,
+            }
+            for key in (
+                "min_rms",
+                "max_rms",
+                "last_rms",
+                "min_active_ratio",
+                "max_active_ratio",
+                "last_active_ratio",
+            ):
+                if key in stats:
+                    properties[key] = round(float(stats[key]), 6)
+            self._emit("handsfree.detector_gate_summary", **properties)
+        if reset:
+            self._gate_stats = {}
 
     def _emit_distance_summary(self) -> None:
         for label, stats in self._distance_stats.items():
@@ -341,6 +440,23 @@ def _shift_append(buffer: np.ndarray, chunk: np.ndarray) -> np.ndarray:
     shifted = np.roll(buffer, -len(chunk))
     shifted[-len(chunk):] = chunk
     return shifted
+
+
+def _audio_metrics(audio: np.ndarray, active_level: float) -> tuple[float, float]:
+    if len(audio) == 0:
+        return 0.0, 0.0
+    rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float32))))
+    active_ratio = float(np.mean(np.abs(audio) >= active_level))
+    return rms, active_ratio
+
+
+def _update_min_max(stats: dict[str, float | str], name: str, value: float) -> None:
+    min_key = f"min_{name}"
+    max_key = f"max_{name}"
+    last_key = f"last_{name}"
+    stats[min_key] = min(float(stats.get(min_key, value)), value)
+    stats[max_key] = max(float(stats.get(max_key, value)), value)
+    stats[last_key] = value
 
 
 def process_hands_free_events(

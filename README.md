@@ -41,6 +41,9 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 | `--hands-free` | off | Use local start/end phrase detection instead of Right Shift as the primary trigger |
 | `--hands-free-threshold FLOAT` | `0.1` | Detection threshold for start/end phrase matching |
 | `--hands-free-tail-seconds FLOAT` | `1.0` | Audio tail to discard when the end phrase is detected |
+| `--hands-free-min-rms FLOAT` | `0.006` | Minimum detector-window RMS before keyword matching |
+| `--hands-free-min-active-ratio FLOAT` | `0.05` | Minimum ratio of active samples before keyword matching |
+| `--hands-free-active-level FLOAT` | `0.01` | Absolute sample level counted as active |
 | `--hands-free-debug` | off | Print detector distances for threshold tuning |
 | `--no-enroll-prompt` | off | Exit instead of offering guided enrollment when samples are missing |
 | `--telemetry-path PATH` | `~/.config/whiscode/telemetry/events.jsonl` | Local JSONL telemetry path |
@@ -72,6 +75,8 @@ uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
 ```
 
 Right Shift remains available as a fallback start/stop control while hands-free mode is running.
+
+WhisCode ignores partial detector windows and quiet windows before calling the keyword matcher. This prevents silence and microphone background noise from triggering wake/end phrases. If your wake phrase is very quiet, lower `--hands-free-min-rms` or `--hands-free-min-active-ratio`.
 
 Hands-free mode and guided enrollment write local JSONL telemetry to:
 

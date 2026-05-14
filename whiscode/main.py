@@ -12,7 +12,10 @@ from pynput import keyboard
 
 from whiscode.handsfree import (
     DEFAULT_END_DIR,
+    DEFAULT_ACTIVE_LEVEL,
     DEFAULT_MAX_SECONDS,
+    DEFAULT_MIN_ACTIVE_RATIO,
+    DEFAULT_MIN_RMS,
     DEFAULT_SLIDE_SECONDS,
     DEFAULT_TAIL_SECONDS,
     DEFAULT_THRESHOLD,
@@ -60,6 +63,9 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-slide-seconds", type=float, default=DEFAULT_SLIDE_SECONDS, help=f"Detector slide size in seconds (default: {DEFAULT_SLIDE_SECONDS})")
     parser.add_argument("--hands-free-tail-seconds", type=float, default=DEFAULT_TAIL_SECONDS, help=f"Audio tail to discard when the end phrase is detected (default: {DEFAULT_TAIL_SECONDS})")
     parser.add_argument("--hands-free-max-seconds", type=float, default=DEFAULT_MAX_SECONDS, help=f"Maximum recording length before timeout; 0 disables (default: {DEFAULT_MAX_SECONDS})")
+    parser.add_argument("--hands-free-min-rms", type=float, default=DEFAULT_MIN_RMS, help=f"Minimum detector-window RMS required before keyword matching (default: {DEFAULT_MIN_RMS})")
+    parser.add_argument("--hands-free-min-active-ratio", type=float, default=DEFAULT_MIN_ACTIVE_RATIO, help=f"Minimum ratio of active samples required before keyword matching (default: {DEFAULT_MIN_ACTIVE_RATIO})")
+    parser.add_argument("--hands-free-active-level", type=float, default=DEFAULT_ACTIVE_LEVEL, help=f"Absolute sample level counted as active for keyword matching (default: {DEFAULT_ACTIVE_LEVEL})")
     parser.add_argument("--hands-free-debug", action="store_true", help="Print keyword detector distances for threshold tuning")
     parser.add_argument("--no-enroll-prompt", action="store_true", help="Exit instead of prompting to record missing hands-free samples")
     parser.add_argument("--enroll-samples", type=int, default=3, help="Samples per phrase for guided enrollment when --hands-free needs setup (default: 3)")
@@ -354,6 +360,8 @@ def main():
                         "handsfree.wake_detected",
                         distance=round(event.detection.distance, 6) if event.detection else None,
                         threshold=args.hands_free_threshold,
+                        rms=round(event.detection.rms, 6) if event.detection and event.detection.rms is not None else None,
+                        active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                     )
                 return
 
@@ -372,6 +380,8 @@ def main():
                             distance=round(event.detection.distance, 6) if event.detection else None,
                             threshold=args.hands_free_threshold,
                             audio_seconds=round(event.duration_seconds, 3),
+                            rms=round(event.detection.rms, 6) if event.detection and event.detection.rms is not None else None,
+                            active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                         )
                     record_handsfree_cycle(event.kind, event.duration_seconds)
                     print("Transcribing...")
@@ -416,6 +426,9 @@ def main():
             max_seconds=args.hands_free_max_seconds,
             debug=args.hands_free_debug,
             telemetry=telemetry,
+            min_rms=args.hands_free_min_rms,
+            min_active_ratio=args.hands_free_min_active_ratio,
+            active_level=args.hands_free_active_level,
         )
         handsfree_loop = HandsFreeAudioLoop(handsfree_session, handsfree_queue, stop_event=shutdown_event, telemetry=telemetry)
         handsfree_loop.start()

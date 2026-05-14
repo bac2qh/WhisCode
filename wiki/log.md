@@ -6,3 +6,4 @@
 
 ## 2026-05-14
 - Documented local JSONL telemetry for hands-free diagnostics and guided enrollment.
+- Documented hands-free detector speech-energy gating for suppressing silence and partial-window false positives.
