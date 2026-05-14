@@ -9,10 +9,11 @@
 - Added CLI flags `--recording-overlay`, `--no-recording-overlay`, and `--recording-notifications`.
 - Added explicit `pyobjc-framework-Cocoa` dependency and updated `uv.lock`.
 - Updated README, wiki, and project memory.
+- Implementation commit: `6a28bb5`.
 - Verification passed:
   - `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 89 tests.
   - `uv run whiscode --help` succeeded and showed the overlay flags.
   - `uv run whiscode-enroll --help` succeeded.
   - `PYTHONPATH=. uv run python -m py_compile whiscode/recording_overlay.py whiscode/main.py whiscode/recorder.py whiscode/handsfree.py` succeeded.
   - `git diff --check` passed.
-- Immediate next step: commit and merge the task branch back into local `main`.
+- Immediate next step: merge the task branch back into local `main`.
