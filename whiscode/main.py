@@ -383,11 +383,12 @@ def main():
                 print("handsfree.detector.error", file=sys.stderr)
 
     ctrl_c_count = 0
+    last_signal = None
 
     def handle_signal(signum, frame):
-        nonlocal ctrl_c_count
+        nonlocal ctrl_c_count, last_signal
         ctrl_c_count += 1
-        telemetry.emit("app.signal_received", signal=signum, count=ctrl_c_count)
+        last_signal = signum
         shutdown_event.set()
         if ctrl_c_count >= 2:
             os._exit(0)
@@ -428,6 +429,9 @@ def main():
 
     while listener.is_alive() and not shutdown_event.is_set():
         listener.join(timeout=0.5)
+
+    if last_signal is not None:
+        telemetry.emit("app.signal_received", signal=last_signal, count=ctrl_c_count)
 
     listener.stop()
 

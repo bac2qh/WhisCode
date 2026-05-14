@@ -7,3 +7,4 @@
 
 ## 2026-05-14
 - Added hands-free telemetry memory after implementing local JSONL diagnostics for repeated hands-free trigger loops.
+- Added signal-safe telemetry shutdown memory after fixing the Ctrl+C handler regression.

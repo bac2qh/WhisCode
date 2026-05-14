@@ -14,3 +14,4 @@
 - Telemetry is local-only and defaults to `~/.config/whiscode/telemetry/events.jsonl` for `--hands-free` and guided `whiscode-enroll --record`.
 - Added `--telemetry-path` and `--no-telemetry` to both runtime and enrollment CLIs.
 - Telemetry records bounded lifecycle, detector, recording, enrollment, transcription, and loop-suspected metadata, while avoiding raw audio, transcripts, prompts, hotword contents, and typed text.
+- Fixed a telemetry regression where `app.signal_received` was emitted inside the Ctrl+C signal handler. Signal handlers must remain signal-safe and only update simple in-memory shutdown state; telemetry is emitted after the main listener loop exits.
