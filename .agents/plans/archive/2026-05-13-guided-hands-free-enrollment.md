@@ -1,5 +1,14 @@
 # Guided Hands-Free Enrollment
 
+## Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-13-guided-hands-free-enrollment-checkpoints.md`.
+- Implementation commits: `5fcbb3d`, `34336dd`.
+- Merge commit: none; local `main` was fast-forwarded to `34336dd`.
+- Verification performed: `uv run --with pytest python -m pytest` passed with 73 tests; `uv run whiscode --help` passed; `uv run whiscode-enroll --help` passed; missing-reference `--no-enroll-prompt` path exited with expected instructions.
+- Worktree and branch cleanup: removed `.agents/worktrees/guided-hands-free-enrollment`; deleted local branch `guided-hands-free-enrollment`.
+- Shipped: guided Python microphone enrollment through `whiscode-enroll --record`, automatic `--hands-free` setup prompt, non-interactive fail-fast option, docs, tests, and memory.
+
 ## Summary
 - Add an in-app enrollment wizard so Voice Memos are no longer needed.
 - Keep the existing file-import path for advanced/manual use.

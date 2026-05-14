@@ -25,4 +25,11 @@
   - `uv run whiscode-enroll --help` passed.
   - `uv run whiscode --hands-free --no-enroll-prompt --hands-free-wake-dir /tmp/whiscode-missing-wake-test --hands-free-end-dir /tmp/whiscode-missing-end-test` exited with the expected missing-enrollment instructions.
 - Implementation commit: `5fcbb3d` (`Add guided hands-free enrollment`).
-- Immediate next step: commit this checkpoint update, then close out by merging the branch back to local `main`.
+- Bookkeeping commit: `34336dd` (`Record guided enrollment implementation checkpoint`).
+- Closeout:
+  - Fast-forwarded local `main` to `34336dd`.
+  - Added closeout note to the plan before archival.
+  - Archived the plan under `.agents/plans/archive/`.
+  - Removed `.agents/worktrees/guided-hands-free-enrollment`.
+  - Deleted local branch `guided-hands-free-enrollment`.
+- Immediate next step: commit closeout bookkeeping on local `main`.
