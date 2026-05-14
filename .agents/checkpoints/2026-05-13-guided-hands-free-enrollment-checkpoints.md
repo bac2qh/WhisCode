@@ -24,4 +24,5 @@
   - `uv run whiscode --help` passed.
   - `uv run whiscode-enroll --help` passed.
   - `uv run whiscode --hands-free --no-enroll-prompt --hands-free-wake-dir /tmp/whiscode-missing-wake-test --hands-free-end-dir /tmp/whiscode-missing-end-test` exited with the expected missing-enrollment instructions.
-- Immediate next step: commit the implementation and documentation, then record the implementation commit hash.
+- Implementation commit: `5fcbb3d` (`Add guided hands-free enrollment`).
+- Immediate next step: commit this checkpoint update, then close out by merging the branch back to local `main`.
