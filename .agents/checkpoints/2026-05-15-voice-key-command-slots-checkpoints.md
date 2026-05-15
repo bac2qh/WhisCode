@@ -9,6 +9,7 @@
 
 ## 2026-05-15 Implementation
 
+- Implementation commit: `7996220` (`Add trained hands-free key commands`).
 - Added configurable command reference folders under `~/.config/whiscode/wake/commands/{page-up,page-down,enter}`.
 - Extended guided enrollment and sample import to support wake, end, and the three key command slots.
 - Extended hands-free runtime with idle-only command detectors. Commands use the same detector window, speech-energy gate, distance telemetry, and confirmation behavior as wake detection, then reset the idle buffer after a command event to avoid repeated key taps from one utterance.
@@ -20,4 +21,4 @@
   - `uv run whiscode --help` passed.
   - `uv run whiscode-enroll --help` passed.
   - `uv run whiscode-calibrate --help` passed.
-- Immediate next step: commit the implementation, record the commit hash, then close out and merge to local `main`.
+- Immediate next step: commit this checkpoint update, then close out and merge to local `main`.
