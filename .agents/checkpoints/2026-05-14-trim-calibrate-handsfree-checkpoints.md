@@ -9,6 +9,7 @@
 - Added `whiscode-calibrate` as a read-only calibration report CLI.
 - Calibration report includes reference distances, telemetry trigger distances, detector-summary minima, p05/median/p95 tails, and an advisory reference-separation threshold.
 - Updated README, wiki, and project memory.
+- Implementation commit: `55046e6`.
 - Verification passed:
   - `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 96 tests.
   - `uv run whiscode-enroll --help` succeeded.
@@ -17,4 +18,4 @@
   - `PYTHONPATH=. uv run python -m py_compile whiscode/enroll.py whiscode/calibrate.py` succeeded.
   - `uv lock --check` succeeded.
   - `git diff --check` passed.
-- Immediate next step: commit and merge the task branch back into local `main`.
+- Immediate next step: merge the task branch back into local `main`.
