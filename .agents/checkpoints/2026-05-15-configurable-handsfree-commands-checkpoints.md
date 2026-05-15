@@ -15,4 +15,5 @@
 - Added bounded `handsfree.command_config_loaded` telemetry with config existence, enabled command names/counts, and disabled count.
 - Updated README documentation with sample config and behavior notes.
 - Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 129 tests.
-- Immediate next step: commit the implementation and checkpoint/memory updates.
+- Implementation commit: `c212bc9`.
+- Immediate next step: merge the task branch back to local `main` and archive the plan during closeout.
