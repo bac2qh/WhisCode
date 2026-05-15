@@ -1,3 +1,13 @@
+# Closeout
+
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-15-fix-recording-overlay-crash-checkpoints.md`.
+- Implementation commits: `c7b1242` (`Fix recording overlay helper crash`), `3b33e71` (`Record overlay crash checkpoint`).
+- Merge result: fast-forwarded local `main` from `870a643` to `3b33e71`; no merge commit was created.
+- Verification performed: `uv run --with pytest python -m pytest` passed with 111 tests; `uv run whiscode --help`, `uv run whiscode-enroll --help`, `git diff --check`, and the live AppKit overlay helper probe passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/fix-recording-overlay-crash` and deleted local branch `fix-recording-overlay-crash`.
+- Summary: fixed the invisible overlay by rendering timer text through `NSAttributedString`; added bounded helper crash diagnostics.
+
 # Fix Invisible Recording Overlay Crash
 
 ## Summary

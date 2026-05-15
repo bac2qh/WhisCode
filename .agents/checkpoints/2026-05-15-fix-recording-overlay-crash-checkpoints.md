@@ -22,3 +22,11 @@
   - `git diff --check` passed.
   - Live overlay helper probe passed: `poll_after_start None`, `poll_after_show None`, `returncode 0`, no stderr.
 - Immediate next step: commit this checkpoint update, then close out to local `main`.
+
+## 2026-05-15 Closeout
+
+- Merged `fix-recording-overlay-crash` into local `main` with a fast-forward from `870a643` to `3b33e71`; no merge commit was created.
+- Archived the plan to `.agents/plans/archive/2026-05-15-fix-recording-overlay-crash.md` with a closeout note.
+- Removed `.agents/worktrees/fix-recording-overlay-crash` and deleted local branch `fix-recording-overlay-crash`.
+- Verification carried forward from implementation: `uv run --with pytest python -m pytest` passed with 111 tests; `uv run whiscode --help`, `uv run whiscode-enroll --help`, `git diff --check`, and the live helper probe passed.
+- Immediate next step: none for this plan.
