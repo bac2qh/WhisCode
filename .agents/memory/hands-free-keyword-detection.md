@@ -21,3 +21,4 @@
 - Split wake and end thresholds so end detection was initially stricter by default. Wake stayed at `0.1` at that point; end defaulted to `0.055` to reject wake/non-end speech that previously matched the end detector around `0.063-0.070`.
 - Added `--hands-free-end-threshold` for tuning end detection separately while preserving explicit legacy `--hands-free-threshold` behavior when the end threshold is omitted.
 - Tightened wake defaults after observing high false-positive rates from incidental sound. Wake now defaults to threshold `0.055` and requires two consecutive matching windows before recording starts; `--hands-free-wake-confirmations` can tune that confirmation count.
+- Added VAD trimming to guided/imported enrollment samples after observing 2-second reference WAVs with only about 0.54-0.80 seconds of actual speech. Added `whiscode-calibrate` to summarize reference and telemetry distance distributions before changing thresholds.

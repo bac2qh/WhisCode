@@ -10,7 +10,7 @@ The normal enrollment path records samples directly from the default microphone:
 uv run whiscode-enroll --record
 ```
 
-This records three 2-second wake samples followed by three 2-second end samples, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
+This records three wake samples followed by three end samples, trims leading and trailing silence with local VAD, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
 
 Existing audio files can still be imported manually:
 
@@ -32,6 +32,14 @@ If either reference folder has fewer than three WAV files, startup offers to run
 The wake phrase starts capture, the end phrase stops capture, and the captured audio between those phrases is passed to Whisper. WhisCode waits until a detector window is fully populated and has enough speech-like energy before calling the keyword matcher, so silence and low-level room noise do not trigger wake/end detection. Wake detection uses a stricter default threshold and requires two consecutive matching windows before recording starts. Use `--hands-free-debug` to print detector distances while tuning `--hands-free-threshold`, `--hands-free-end-threshold`, and `--hands-free-wake-confirmations`.
 
 The speech-energy gate can be tuned with `--hands-free-min-rms`, `--hands-free-min-active-ratio`, and `--hands-free-active-level`.
+
+Inspect reference and telemetry distance distributions with:
+
+```bash
+uv run whiscode-calibrate
+```
+
+Use the report to decide threshold changes after re-enrollment and live observation.
 
 ## Telemetry
 

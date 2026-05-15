@@ -8,6 +8,8 @@ import pytest
 from whiscode.enroll import (
     import_samples,
     parse_args,
+    preprocess_reference_audio,
+    read_wav,
     record_guided_samples,
     validate_recording_options,
     write_wav,
@@ -53,8 +55,17 @@ def test_import_samples_converts_to_16khz_mono_wav(tmp_path):
     samples = make_samples(tmp_path)
     wake_dir = tmp_path / "wake"
 
-    with patch("subprocess.run") as mock_run:
-        written = import_samples("wake", samples, wake_dir=wake_dir, end_dir=tmp_path / "end")
+    def fake_run(command, check):
+        write_wav(Path(command[2]), np.array([0.25, -0.25], dtype=np.float32))
+
+    with patch("subprocess.run", side_effect=fake_run) as mock_run:
+        written = import_samples(
+            "wake",
+            samples,
+            wake_dir=wake_dir,
+            end_dir=tmp_path / "end",
+            preprocess_fn=lambda audio: audio,
+        )
 
     assert written == [wake_dir / "wake-01.wav", wake_dir / "wake-02.wav", wake_dir / "wake-03.wav"]
     first_call = mock_run.call_args_list[0].args[0]
@@ -75,8 +86,17 @@ def test_import_samples_uses_end_folder(tmp_path):
     samples = make_samples(tmp_path)
     end_dir = tmp_path / "end"
 
-    with patch("subprocess.run"):
-        written = import_samples("end", samples, wake_dir=tmp_path / "wake", end_dir=end_dir)
+    def fake_run(command, check):
+        write_wav(Path(command[2]), np.array([0.25, -0.25], dtype=np.float32))
+
+    with patch("subprocess.run", side_effect=fake_run):
+        written = import_samples(
+            "end",
+            samples,
+            wake_dir=tmp_path / "wake",
+            end_dir=end_dir,
+            preprocess_fn=lambda audio: audio,
+        )
 
     assert written[0] == end_dir / "end-01.wav"
 
@@ -104,6 +124,7 @@ def test_record_guided_samples_records_wake_and_end_defaults(tmp_path):
         end_dir=tmp_path / "end",
         input_fn=lambda prompt: captured_prompts.append(prompt),
         capture_fn=lambda seconds: audio,
+        preprocess_fn=lambda audio: audio,
     )
 
     assert len(written) == 6
@@ -123,6 +144,7 @@ def test_record_guided_samples_honors_count_and_seconds(tmp_path):
         seconds=1.25,
         input_fn=lambda prompt: None,
         capture_fn=lambda seconds: seconds_seen.append(seconds) or np.array([0.0], dtype=np.float32),
+        preprocess_fn=lambda audio: audio,
     )
 
     assert len(written) == 8
@@ -145,6 +167,7 @@ def test_record_guided_samples_emits_telemetry(tmp_path):
         end_dir=tmp_path / "end",
         input_fn=lambda prompt: None,
         capture_fn=lambda seconds: np.array([0.0], dtype=np.float32),
+        preprocess_fn=lambda audio: audio,
         telemetry=telemetry,
     )
 
@@ -172,3 +195,38 @@ def test_write_wav_writes_16khz_mono_file(tmp_path):
         assert f.getframerate() == 16000
         assert f.getsampwidth() == 2
         assert f.getnframes() == 2
+
+
+def test_read_wav_round_trips_written_audio(tmp_path):
+    path = tmp_path / "sample.wav"
+
+    write_wav(path, np.array([0.0, 0.5], dtype=np.float32))
+
+    audio = read_wav(path)
+    assert audio.shape == (2,)
+    assert audio[0] == 0.0
+    assert audio[1] > 0.49
+
+
+def test_preprocess_reference_audio_trims_and_pads():
+    audio = np.arange(10, dtype=np.float32)
+
+    processed = preprocess_reference_audio(
+        audio,
+        trim_fn=lambda shaped, sample_rate: shaped[3:7],
+        min_samples=8,
+    )
+
+    np.testing.assert_array_equal(processed, np.array([0, 0, 3, 4, 5, 6, 0, 0], dtype=np.float32))
+
+
+def test_preprocess_reference_audio_preserves_audio_when_trim_finds_no_speech():
+    audio = np.array([0.1, -0.1], dtype=np.float32)
+
+    processed = preprocess_reference_audio(
+        audio,
+        trim_fn=lambda shaped, sample_rate: shaped,
+        min_samples=4,
+    )
+
+    np.testing.assert_allclose(processed, np.array([0.0, 0.1, -0.1, 0.0], dtype=np.float32))

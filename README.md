@@ -70,7 +70,7 @@ Start hands-free mode:
 uv run whiscode --hands-free
 ```
 
-If samples are missing, WhisCode offers guided enrollment and records three 2-second wake samples followed by three 2-second end samples from your default microphone.
+If samples are missing, WhisCode offers guided enrollment and records three wake samples followed by three end samples from your default microphone. Each sample is trimmed with local VAD before it is saved, so the reference WAVs focus on the phrase instead of leading and trailing silence.
 
 You can also run enrollment directly:
 
@@ -85,6 +85,14 @@ uv run whiscode-enroll wake wake1.m4a wake2.m4a wake3.m4a
 uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
 ```
 
+After enrollment, inspect the local detector score separation:
+
+```bash
+uv run whiscode-calibrate
+```
+
+The report compares wake samples against wake samples, end samples against end samples, wake samples against end samples, and recent telemetry trigger distances. Use it to choose threshold changes after observing live runs rather than guessing from one false positive.
+
 Right Shift remains available as a fallback start/stop control while hands-free mode is running.
 
 WhisCode ignores partial detector windows and quiet windows before calling the keyword matcher. This prevents silence and microphone background noise from triggering wake/end phrases. Wake detection also requires two consecutive matching windows by default, which prevents a single noisy match from starting a recording. If your wake phrase is very quiet, lower `--hands-free-min-rms` or `--hands-free-min-active-ratio`, raise `--hands-free-threshold` slightly, or set `--hands-free-wake-confirmations 1`; if your end phrase is not detected, raise `--hands-free-end-threshold` slightly.
@@ -95,7 +103,7 @@ Hands-free mode and guided enrollment write local JSONL telemetry to:
 ~/.config/whiscode/telemetry/events.jsonl
 ```
 
-Use it to inspect wake/end detections, detector distances, recording durations, transcription outcomes, and suspected rapid trigger loops. Telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, or typed text. Disable it with `--no-telemetry` or write to another file with `--telemetry-path`.
+Use it to inspect wake/end detections, detector distances, recording durations, transcription outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes these distances alongside reference-sample distances. Telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, or typed text. Disable it with `--no-telemetry` or write to another file with `--telemetry-path`.
 
 ## Refine Mode
 

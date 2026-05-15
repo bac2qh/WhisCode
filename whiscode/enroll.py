@@ -15,6 +15,7 @@ from whiscode.status_notifier import notify_recording_completed, notify_recordin
 from whiscode.telemetry import telemetry_from_args
 
 DEFAULT_ENROLL_SECONDS = 2.0
+FALLBACK_MIN_REFERENCE_SAMPLES = 12400
 
 
 def parse_args(argv: list[str] | None = None):
@@ -61,7 +62,61 @@ def convert_sample(input_path: Path, output_path: Path) -> None:
     )
 
 
-def import_samples(kind: str, samples: list[Path], wake_dir: Path = DEFAULT_WAKE_DIR, end_dir: Path = DEFAULT_END_DIR) -> list[Path]:
+def read_wav(path: Path) -> np.ndarray:
+    with wave.open(str(path), "rb") as f:
+        channels = f.getnchannels()
+        sample_width = f.getsampwidth()
+        frames = f.getnframes()
+        data = f.readframes(frames)
+
+    if sample_width != 2:
+        raise ValueError(f"Expected 16-bit PCM WAV for {path}; got sample width {sample_width}.")
+    audio = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32767.0
+    if channels > 1:
+        audio = audio.reshape(-1, channels).mean(axis=1)
+    return audio.astype(np.float32)
+
+
+def preprocess_reference_audio(
+    audio: np.ndarray,
+    *,
+    sample_rate: int = SAMPLE_RATE,
+    trim_silence: bool = True,
+    trim_fn=None,
+    min_samples: int | None = None,
+) -> np.ndarray:
+    audio = np.asarray(audio, dtype=np.float32).flatten()
+    if trim_silence and len(audio):
+        if trim_fn is None:
+            from lwake.record import trim_silence_with_vad
+
+            trim_fn = trim_silence_with_vad
+        trimmed = trim_fn(audio.reshape(-1, 1), sample_rate)
+        audio = np.asarray(trimmed, dtype=np.float32).flatten()
+
+    if min_samples is None:
+        try:
+            from lwake.record import MIN_SAMPLES
+        except ImportError:
+            MIN_SAMPLES = FALLBACK_MIN_REFERENCE_SAMPLES
+        min_samples = MIN_SAMPLES
+
+    if len(audio) < min_samples:
+        pad_total = min_samples - len(audio)
+        pad_left = pad_total // 2
+        pad_right = pad_total - pad_left
+        audio = np.pad(audio, (pad_left, pad_right), mode="constant")
+    return audio.astype(np.float32)
+
+
+def import_samples(
+    kind: str,
+    samples: list[Path],
+    wake_dir: Path = DEFAULT_WAKE_DIR,
+    end_dir: Path = DEFAULT_END_DIR,
+    *,
+    preprocess_fn=preprocess_reference_audio,
+) -> list[Path]:
     if len(samples) < MIN_REFERENCE_FILES:
         raise ValueError(f"Provide at least {MIN_REFERENCE_FILES} samples for {kind}; got {len(samples)}.")
 
@@ -74,6 +129,8 @@ def import_samples(kind: str, samples: list[Path], wake_dir: Path = DEFAULT_WAKE
     for index, sample in enumerate(samples, start=1):
         output_path = target_dir / f"{kind}-{index:02d}.wav"
         convert_sample(sample, output_path)
+        audio = preprocess_fn(read_wav(output_path))
+        write_wav(output_path, audio)
         written.append(output_path)
     return written
 
@@ -121,6 +178,7 @@ def record_one_sample(
     *,
     input_fn=input,
     capture_fn=capture_audio,
+    preprocess_fn=preprocess_reference_audio,
     telemetry: Any | None = None,
 ) -> Path:
     output_path = target_dir / f"{kind}-{index:02d}.wav"
@@ -134,6 +192,7 @@ def record_one_sample(
         output_path.unlink(missing_ok=True)
         _emit(telemetry, "enrollment.sample_failed", kind=kind, index=index)
         raise
+    audio = preprocess_fn(audio)
     write_wav(output_path, audio)
     _emit(
         telemetry,
@@ -155,6 +214,7 @@ def record_guided_samples(
     seconds: float = DEFAULT_ENROLL_SECONDS,
     input_fn=input,
     capture_fn=capture_audio,
+    preprocess_fn=preprocess_reference_audio,
     telemetry: Any | None = None,
 ) -> list[Path]:
     validate_recording_options(sample_count, seconds)
@@ -171,6 +231,7 @@ def record_guided_samples(
                     target_dir,
                     input_fn=input_fn,
                     capture_fn=capture_fn,
+                    preprocess_fn=preprocess_fn,
                     telemetry=telemetry,
                 )
             )
