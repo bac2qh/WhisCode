@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-15-configurable-handsfree-commands-checkpoints.md`.
+- Implementation commits: `c212bc9`, `428dd47`.
+- Merge commit: none expected; local `main` will fast-forward to the closeout commit.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 129 tests; `git diff --check` passed.
+- Worktree and branch cleanup: pending until local `main` fast-forward succeeds.
+- Summary: Shipped configurable hands-free command enablement so runtime, enrollment, and calibration only use enabled command slots when `commands.ini` exists while preserving all-enabled behavior when it does not.
+
 # Configurable Hands-Free Commands
 
 ## Summary

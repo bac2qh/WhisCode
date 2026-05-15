@@ -16,4 +16,12 @@
 - Updated README documentation with sample config and behavior notes.
 - Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 129 tests.
 - Implementation commit: `c212bc9`.
-- Immediate next step: merge the task branch back to local `main` and archive the plan during closeout.
+- Checkpoint commit: `428dd47`.
+- Immediate next step: merge the task branch back to local `main` and remove the task worktree/branch.
+
+## 2026-05-15 Closeout
+
+- Archived the active plan to `.agents/plans/archive/2026-05-15-configurable-handsfree-commands.md`.
+- Closeout verification before merge: `git diff --check` and `PYTHONPATH=. uv run --with pytest python -m pytest` passed.
+- Closeout commit: pending.
+- Immediate next step: commit closeout bookkeeping, fast-forward local `main`, then clean up the worktree and branch.
