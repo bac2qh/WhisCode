@@ -19,3 +19,4 @@
 ## 2026-05-15
 - Added hands-free key command memory after implementing trained Page Up, Page Down, and Enter voice command slots.
 - Added enrollment overlay memory after replacing guided enrollment notification banners with the floating recording overlay.
+- Added recording overlay crash memory after fixing AppKit timer text drawing and adding helper crash diagnostics.

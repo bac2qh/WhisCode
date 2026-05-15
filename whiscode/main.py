@@ -207,7 +207,7 @@ def main():
 
     stats = Stats()
     start_reminders(stats)
-    overlay = RecordingOverlayClient(enabled=args.recording_overlay)
+    overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry)
 
     state = State.IDLE
     state_lock = threading.Lock()

@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from whiscode.recording_overlay import RecordingOverlayClient
+from whiscode.recording_overlay import RecordingOverlayClient, _draw_attributed_text
 
 
 def make_process():
@@ -53,3 +53,72 @@ def test_overlay_client_disables_when_helper_fails_to_start():
         client.show()
 
     assert client.enabled is False
+
+
+class FakeTelemetry:
+    def __init__(self):
+        self.events = []
+
+    def emit(self, event, **properties):
+        self.events.append((event, properties))
+
+
+def test_overlay_client_reports_helper_exit(capsys):
+    process = make_process()
+    process.poll.return_value = -5
+    telemetry = FakeTelemetry()
+
+    with patch("subprocess.Popen", return_value=process):
+        client = RecordingOverlayClient(telemetry=telemetry)
+        client.show()
+
+    assert client.enabled is False
+    assert client._visible is False
+    assert sent_commands(process) == []
+    assert ("recording_overlay.disabled", {"reason": "helper_exited", "stage": "show", "returncode": -5}) in telemetry.events
+    assert "recording overlay disabled: reason=helper_exited stage=show returncode=-5" in capsys.readouterr().err
+
+
+def test_overlay_client_stop_before_show_is_quiet(capsys):
+    telemetry = FakeTelemetry()
+    client = RecordingOverlayClient(telemetry=telemetry)
+
+    client.stop()
+
+    assert client.enabled is True
+    assert telemetry.events == []
+    assert capsys.readouterr().err == ""
+
+
+class FakeAttributedString:
+    last = None
+
+    @classmethod
+    def alloc(cls):
+        return cls()
+
+    def initWithString_attributes_(self, text, attrs):
+        self.text = text
+        self.attrs = attrs
+        self.point = None
+        FakeAttributedString.last = self
+        return self
+
+    def drawAtPoint_(self, point):
+        self.point = point
+
+
+def test_draw_attributed_text_uses_attributed_string_draw_path():
+    attrs = {"font": "mono", "color": "white"}
+
+    result = _draw_attributed_text(
+        "00:03",
+        "point",
+        attrs,
+        attributed_string_class=FakeAttributedString,
+    )
+
+    assert result is FakeAttributedString.last
+    assert result.text == "00:03"
+    assert result.attrs == attrs
+    assert result.point == "point"

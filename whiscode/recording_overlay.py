@@ -14,9 +14,10 @@ import numpy as np
 
 
 class RecordingOverlayClient:
-    def __init__(self, *, enabled: bool = True, update_interval: float = 0.08):
+    def __init__(self, *, enabled: bool = True, update_interval: float = 0.08, telemetry: Any | None = None):
         self.enabled = enabled
         self.update_interval = update_interval
+        self.telemetry = telemetry
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
         self._latest_level = 0.0
@@ -30,8 +31,8 @@ class RecordingOverlayClient:
         if not self._ensure_process():
             return
         self._visible = True
-        self._send({"command": "show"})
-        self._ensure_sender_thread()
+        if self._send({"command": "show"}):
+            self._ensure_sender_thread()
 
     def hide(self) -> None:
         if not self.enabled:
@@ -74,8 +75,8 @@ class RecordingOverlayClient:
                 bufsize=1,
             )
             return True
-        except OSError:
-            self.enabled = False
+        except OSError as e:
+            self._disable("launch_failed", stage="start", error_type=type(e).__name__)
             return False
 
     def _ensure_sender_thread(self) -> None:
@@ -93,14 +94,43 @@ class RecordingOverlayClient:
                 self._send({"command": "level", "level": level})
             time.sleep(self.update_interval)
 
-    def _send(self, command: dict[str, Any]) -> None:
-        if not self._process or not self._process.stdin or self._process.poll() is not None:
-            return
+    def _send(self, command: dict[str, Any]) -> bool:
+        if not self._process or not self._process.stdin:
+            return False
+        returncode = self._process.poll()
+        if returncode is not None:
+            self._disable("helper_exited", stage=str(command.get("command", "unknown")), returncode=returncode)
+            return False
         try:
             self._process.stdin.write(json.dumps(command, separators=(",", ":")) + "\n")
             self._process.stdin.flush()
+            return True
         except (BrokenPipeError, OSError):
-            self.enabled = False
+            self._disable("pipe_failed", stage=str(command.get("command", "unknown")))
+            return False
+
+    def _disable(
+        self,
+        reason: str,
+        *,
+        stage: str,
+        returncode: int | None = None,
+        error_type: str | None = None,
+    ) -> None:
+        if not self.enabled:
+            return
+        self.enabled = False
+        self._visible = False
+        self._stop_event.set()
+        properties = {"reason": reason, "stage": stage}
+        if returncode is not None:
+            properties["returncode"] = returncode
+        if error_type is not None:
+            properties["error_type"] = error_type
+        if self.telemetry:
+            self.telemetry.emit("recording_overlay.disabled", **properties)
+        details = " ".join(f"{key}={value}" for key, value in properties.items())
+        print(f"recording overlay disabled: {details}", file=sys.stderr)
 
 
 def _audio_level(audio: np.ndarray) -> float:
@@ -108,6 +138,16 @@ def _audio_level(audio: np.ndarray) -> float:
         return 0.0
     rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float32))))
     return min(1.0, rms / 0.08)
+
+
+def _draw_attributed_text(text: str, point: Any, attrs: dict[Any, Any], *, attributed_string_class=None) -> Any:
+    if attributed_string_class is None:
+        from AppKit import NSAttributedString
+
+        attributed_string_class = NSAttributedString
+    attributed = attributed_string_class.alloc().initWithString_attributes_(text, attrs)
+    attributed.drawAtPoint_(point)
+    return attributed
 
 
 def _run_helper() -> None:
@@ -175,7 +215,7 @@ def _run_helper() -> None:
                 NSFontAttributeName: NSFont.monospacedDigitSystemFontOfSize_weight_(16, 0.3),
                 NSForegroundColorAttributeName: NSColor.whiteColor(),
             }
-            text.drawAtPoint_withAttributes_(NSMakePoint(36, 13), attrs)
+            _draw_attributed_text(text, NSMakePoint(36, 13), attrs)
 
             bar_x = 92
             bar_width = 4

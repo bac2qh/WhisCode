@@ -13,4 +13,5 @@
 - Documented VAD-trimmed hands-free enrollment and the local calibration report for threshold tuning.
 - Documented trained hands-free key command slots for Page Up, Page Down, and Enter.
 - Documented the guided enrollment recording overlay replacing enrollment notification banners.
+- Documented recording overlay helper crash diagnostics.
 - Documented padding VAD-trimmed reference samples to the detector window length.

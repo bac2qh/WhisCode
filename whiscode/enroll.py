@@ -285,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     telemetry = telemetry_from_args(args, default_enabled=args.record or args.telemetry_path is not None)
     telemetry.emit("enrollment.cli_started", mode="record" if args.record else "import")
-    overlay = RecordingOverlayClient(enabled=args.recording_overlay) if args.record else None
+    overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry) if args.record else None
     try:
         if args.record:
             written = record_guided_samples(
