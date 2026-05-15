@@ -10,4 +10,8 @@
 - Replaced normal recording start/end banners with a floating AppKit overlay by default.
 - The overlay is shown only while recording, displays a stopwatch and live microphone level bars, and runs in a helper process so UI failures do not block recording.
 - Added `--no-recording-overlay` to disable the overlay and `--recording-notifications` to keep start/end notification banners in addition to the overlay.
-- Guided enrollment keeps using the existing notification banners.
+- Guided enrollment initially kept using the existing notification banners.
+
+## 2026-05-15
+- Replaced guided enrollment sample recording banners with the same floating recording overlay used by normal recording.
+- Enrollment capture now streams microphone levels to the overlay while each sample records, hides the overlay on success or failure, and supports `uv run whiscode-enroll --record --no-recording-overlay`.

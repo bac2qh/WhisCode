@@ -7,11 +7,13 @@ import pytest
 
 from whiscode.enroll import (
     DEFAULT_REFERENCE_SECONDS,
+    capture_audio,
     import_samples,
     parse_args,
     preprocess_reference_audio,
     read_wav,
     record_guided_samples,
+    record_one_sample,
     validate_recording_options,
     write_wav,
 )
@@ -51,6 +53,7 @@ def test_parse_args_accepts_record_mode():
         "/tmp/events.jsonl",
         "--command-dir",
         "/tmp/commands",
+        "--no-recording-overlay",
         "--no-telemetry",
     ])
 
@@ -59,7 +62,14 @@ def test_parse_args_accepts_record_mode():
     assert args.seconds == 1.5
     assert args.telemetry_path == Path("/tmp/events.jsonl")
     assert args.command_dir == Path("/tmp/commands")
+    assert args.recording_overlay is False
     assert args.no_telemetry is True
+
+
+def test_parse_args_recording_overlay_defaults_on():
+    args = parse_args(["--record"])
+
+    assert args.recording_overlay is True
 
 
 def test_import_samples_converts_to_16khz_mono_wav(tmp_path):
@@ -214,6 +224,91 @@ def test_record_guided_samples_emits_telemetry(tmp_path):
     assert event_names.count("enrollment.sample_started") == 15
     assert event_names.count("enrollment.sample_completed") == 15
     assert event_names[-1] == "enrollment.guided_completed"
+
+
+class FakeOverlay:
+    def __init__(self):
+        self.calls = []
+        self.levels = []
+
+    def show(self):
+        self.calls.append("show")
+
+    def hide(self):
+        self.calls.append("hide")
+
+    def update_level(self, audio):
+        self.levels.append(np.asarray(audio, dtype=np.float32).copy())
+
+
+def test_record_guided_samples_uses_overlay_for_each_sample(tmp_path):
+    overlay = FakeOverlay()
+
+    def capture_fn(seconds, *, level_callback=None):
+        audio = np.array([0.25, -0.25], dtype=np.float32)
+        level_callback(audio)
+        return audio
+
+    record_guided_samples(
+        wake_dir=tmp_path / "wake",
+        end_dir=tmp_path / "end",
+        command_dir=tmp_path / "commands",
+        input_fn=lambda prompt: None,
+        capture_fn=capture_fn,
+        preprocess_fn=lambda audio: audio,
+        overlay=overlay,
+    )
+
+    assert overlay.calls == ["show", "hide"] * 15
+    assert len(overlay.levels) == 15
+    np.testing.assert_array_equal(overlay.levels[0], np.array([0.25, -0.25], dtype=np.float32))
+
+
+def test_record_one_sample_hides_overlay_when_capture_fails(tmp_path):
+    overlay = FakeOverlay()
+
+    def capture_fn(seconds, *, level_callback=None):
+        raise RuntimeError("microphone failed")
+
+    with pytest.raises(RuntimeError, match="microphone failed"):
+        record_one_sample(
+            "wake",
+            1,
+            2.0,
+            tmp_path / "wake",
+            input_fn=lambda prompt: None,
+            capture_fn=capture_fn,
+            preprocess_fn=lambda audio: audio,
+            overlay=overlay,
+        )
+
+    assert overlay.calls == ["show", "hide"]
+
+
+class FakeStream:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self, frames):
+        return np.ones((frames, 1), dtype=np.float32) * 0.5, False
+
+
+def test_capture_audio_reports_levels_for_chunks():
+    levels = []
+
+    audio = capture_audio(
+        0.2,
+        stream_factory=lambda: (FakeStream(), 10),
+        level_callback=lambda chunk: levels.append(chunk.copy()),
+    )
+
+    assert len(levels) == 2
+    np.testing.assert_array_equal(levels[0], np.array([0.5], dtype=np.float32))
+    assert len(audio) == int(0.2 * 16000)
+    np.testing.assert_allclose(audio, np.full(len(audio), 0.5, dtype=np.float32))
 
 
 def test_record_guided_samples_rejects_invalid_options():

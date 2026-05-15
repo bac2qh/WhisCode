@@ -58,9 +58,9 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 
 ## Recording Overlay
 
-WhisCode shows a small floating macOS overlay while recording. The overlay hides when recording stops, shows an elapsed stopwatch, and renders live microphone levels as waveform bars.
+WhisCode shows a small floating macOS overlay while recording. The overlay hides when recording stops, shows an elapsed stopwatch, and renders live microphone levels as waveform bars. Guided enrollment uses the same overlay while each sample is being recorded.
 
-Use `--no-recording-overlay` to disable it. Use `--recording-notifications` if you also want the older macOS start/end notification banners.
+Use `--no-recording-overlay` to disable it. Use `--recording-notifications` with `whiscode` if you also want the older macOS start/end notification banners during normal recording.
 
 ## Hands-Free Mode
 
@@ -79,6 +79,8 @@ You can also run enrollment directly:
 ```bash
 uv run whiscode-enroll --record
 ```
+
+Guided enrollment shows the floating recording overlay for each sample by default. Disable it with `uv run whiscode-enroll --record --no-recording-overlay`.
 
 Existing audio files can still be imported manually:
 

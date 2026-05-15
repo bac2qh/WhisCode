@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import subprocess
 import sys
 import wave
@@ -19,7 +20,7 @@ from whiscode.handsfree import (
     command_reference_dirs,
 )
 from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
-from whiscode.status_notifier import notify_recording_completed, notify_recording_now
+from whiscode.recording_overlay import RecordingOverlayClient
 from whiscode.telemetry import telemetry_from_args
 
 DEFAULT_ENROLL_SECONDS = 2.0
@@ -39,6 +40,9 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
     parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry for guided recording")
+    parser.set_defaults(recording_overlay=True)
+    parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay during guided recording (default)")
+    parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay during guided recording")
     args = parser.parse_args(argv)
     if not args.record and args.kind is None:
         parser.error("kind is required unless --record is used")
@@ -150,7 +154,7 @@ def import_samples(
     return written
 
 
-def capture_audio(seconds: float, stream_factory=open_input_stream) -> np.ndarray:
+def capture_audio(seconds: float, stream_factory=open_input_stream, *, level_callback=None) -> np.ndarray:
     if seconds <= 0:
         raise ValueError(f"Recording duration must be positive; got {seconds}.")
 
@@ -165,7 +169,10 @@ def capture_audio(seconds: float, stream_factory=open_input_stream) -> np.ndarra
             data, overflowed = stream.read(frames)
             if overflowed:
                 print("  Warning: enrollment audio overflowed", file=sys.stderr)
-            chunks.append(np.asarray(data[:, 0], dtype=np.float32).copy())
+            chunk = np.asarray(data[:, 0], dtype=np.float32).copy()
+            chunks.append(chunk)
+            if level_callback:
+                level_callback(chunk)
             frames_remaining -= frames
 
     audio = np.concatenate(chunks) if chunks else np.array([], dtype=np.float32)
@@ -196,19 +203,23 @@ def record_one_sample(
     preprocess_fn=preprocess_reference_audio,
     prompt_label: str | None = None,
     telemetry: Any | None = None,
+    overlay: Any | None = None,
 ) -> Path:
     output_path = target_dir / f"{kind}-{index:02d}.wav"
     spoken_label = prompt_label or f"{kind} phrase"
     input_fn(f"Press Enter, say your {spoken_label}, recording for {seconds:.1f} seconds...")
     _emit(telemetry, "enrollment.sample_started", kind=kind, index=index, seconds=seconds, label=spoken_label)
     try:
-        notify_recording_now()
-        audio = capture_fn(seconds)
-        notify_recording_completed()
+        if overlay:
+            overlay.show()
+        audio = _capture_with_level_callback(capture_fn, seconds, overlay.update_level if overlay else None)
     except Exception:
         output_path.unlink(missing_ok=True)
         _emit(telemetry, "enrollment.sample_failed", kind=kind, index=index)
         raise
+    finally:
+        if overlay:
+            overlay.hide()
     audio = preprocess_fn(audio)
     write_wav(output_path, audio)
     _emit(
@@ -235,6 +246,7 @@ def record_guided_samples(
     capture_fn=capture_audio,
     preprocess_fn=preprocess_reference_audio,
     telemetry: Any | None = None,
+    overlay: Any | None = None,
 ) -> list[Path]:
     validate_recording_options(sample_count, seconds)
     _emit(telemetry, "enrollment.guided_started", sample_count=sample_count, seconds=seconds)
@@ -262,6 +274,7 @@ def record_guided_samples(
                     preprocess_fn=preprocess_fn,
                     prompt_label=prompt_label,
                     telemetry=telemetry,
+                    overlay=overlay,
                 )
             )
     _emit(telemetry, "enrollment.guided_completed", samples_written=len(written))
@@ -272,6 +285,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     telemetry = telemetry_from_args(args, default_enabled=args.record or args.telemetry_path is not None)
     telemetry.emit("enrollment.cli_started", mode="record" if args.record else "import")
+    overlay = RecordingOverlayClient(enabled=args.recording_overlay) if args.record else None
     try:
         if args.record:
             written = record_guided_samples(
@@ -281,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
                 sample_count=args.sample_count,
                 seconds=args.seconds,
                 telemetry=telemetry,
+                overlay=overlay,
             )
         else:
             written = import_samples(
@@ -294,6 +309,9 @@ def main(argv: list[str] | None = None) -> int:
         telemetry.emit("enrollment.cli_failed", error_type=type(e).__name__)
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    finally:
+        if overlay:
+            overlay.stop()
 
     action = "Recorded" if args.record else "Imported"
     print(f"{action} {len(written)} sample(s):")
@@ -306,6 +324,26 @@ def main(argv: list[str] | None = None) -> int:
 def _emit(telemetry: Any | None, event: str, **properties) -> None:
     if telemetry:
         telemetry.emit(event, **properties)
+
+
+def _capture_with_level_callback(capture_fn, seconds: float, level_callback) -> np.ndarray:
+    if level_callback is None:
+        return capture_fn(seconds)
+
+    try:
+        parameters = inspect.signature(capture_fn).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+
+    accepts_level_callback = "level_callback" in parameters or any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+    )
+    if accepts_level_callback:
+        return capture_fn(seconds, level_callback=level_callback)
+
+    audio = capture_fn(seconds)
+    level_callback(audio)
+    return audio
 
 
 if __name__ == "__main__":
