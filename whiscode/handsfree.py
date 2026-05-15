@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import configparser
 import queue
 import sys
 import threading
@@ -16,6 +17,7 @@ from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 DEFAULT_WAKE_DIR = Path.home() / ".config" / "whiscode" / "wake" / "wake"
 DEFAULT_END_DIR = Path.home() / ".config" / "whiscode" / "wake" / "end"
 DEFAULT_COMMAND_DIR = Path.home() / ".config" / "whiscode" / "wake" / "commands"
+DEFAULT_COMMAND_CONFIG_PATH = Path.home() / ".config" / "whiscode" / "commands.ini"
 DEFAULT_THRESHOLD = 0.055
 DEFAULT_WAKE_CONFIRMATIONS = 2
 DEFAULT_COMMAND_THRESHOLD = DEFAULT_THRESHOLD
@@ -51,9 +53,78 @@ COMMAND_SLOTS = (
 )
 
 
-def command_reference_dirs(base_dir: Path = DEFAULT_COMMAND_DIR) -> dict[str, Path]:
+class CommandConfigError(ValueError):
+    pass
+
+
+def command_slots_for_base(
+    base_dir: Path = DEFAULT_COMMAND_DIR,
+    *,
+    slots: tuple[CommandSlot, ...] = COMMAND_SLOTS,
+) -> tuple[CommandSlot, ...]:
     base = Path(base_dir)
-    return {slot.name: base / slot.name for slot in COMMAND_SLOTS}
+    return tuple(CommandSlot(slot.name, slot.label, base / slot.name) for slot in slots)
+
+
+def command_reference_dirs(
+    base_dir: Path = DEFAULT_COMMAND_DIR,
+    *,
+    slots: tuple[CommandSlot, ...] = COMMAND_SLOTS,
+) -> dict[str, Path]:
+    base = Path(base_dir)
+    return {slot.name: base / slot.name for slot in slots}
+
+
+def active_command_slots(
+    config_path: Path | None = DEFAULT_COMMAND_CONFIG_PATH,
+    *,
+    base_dir: Path = DEFAULT_COMMAND_DIR,
+) -> tuple[CommandSlot, ...]:
+    configured = load_command_config(config_path)
+    if configured is None:
+        return command_slots_for_base(base_dir)
+    enabled = tuple(slot for slot in COMMAND_SLOTS if configured.get(slot.name, False))
+    return command_slots_for_base(base_dir, slots=enabled)
+
+
+def load_command_config(config_path: Path | None = DEFAULT_COMMAND_CONFIG_PATH) -> dict[str, bool] | None:
+    if config_path is None:
+        return None
+    path = Path(config_path)
+    if not path.exists():
+        return None
+
+    parser = configparser.ConfigParser()
+    try:
+        with path.open() as f:
+            parser.read_file(f)
+    except configparser.Error as e:
+        raise CommandConfigError(f"Invalid command config {path}: {e}") from e
+
+    if not parser.has_section("commands"):
+        raise CommandConfigError(f"Command config {path} is missing a [commands] section.")
+
+    valid_names = {slot.name for slot in COMMAND_SLOTS}
+    configured_names = set(parser.options("commands"))
+    unknown = sorted(configured_names - valid_names)
+    if unknown:
+        valid = ", ".join(slot.name for slot in COMMAND_SLOTS)
+        raise CommandConfigError(
+            f"Unknown command name(s) in {path}: {', '.join(unknown)}. Valid commands: {valid}"
+        )
+
+    enabled: dict[str, bool] = {}
+    for slot in COMMAND_SLOTS:
+        if parser.has_option("commands", slot.name):
+            try:
+                enabled[slot.name] = parser.getboolean("commands", slot.name)
+            except ValueError as e:
+                raise CommandConfigError(
+                    f"Invalid boolean for command {slot.name} in {path}: {parser.get('commands', slot.name)!r}"
+                ) from e
+        else:
+            enabled[slot.name] = False
+    return enabled
 
 
 def command_label(name: str) -> str:

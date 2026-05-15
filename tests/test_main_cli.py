@@ -20,6 +20,7 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.hands_free_wake_confirmations == 2
     assert args.hands_free_command_threshold == 0.055
     assert args.hands_free_command_confirmations == 2
+    assert args.hands_free_command_config.name == "commands.ini"
     assert args.max_recording_seconds == 600.0
     assert args.hands_free_max_seconds == 600.0
     assert args.hands_free_audio_queue_seconds == 10.0
@@ -34,6 +35,8 @@ def test_parse_args_hands_free_options():
         "/tmp/end",
         "--hands-free-command-dir",
         "/tmp/commands",
+        "--hands-free-command-config",
+        "/tmp/commands.ini",
         "--hands-free-threshold",
         "0.2",
         "--hands-free-end-threshold",
@@ -79,6 +82,7 @@ def test_parse_args_hands_free_options():
     assert args.hands_free_wake_dir == Path("/tmp/wake")
     assert args.hands_free_end_dir == Path("/tmp/end")
     assert args.hands_free_command_dir == Path("/tmp/commands")
+    assert args.hands_free_command_config == Path("/tmp/commands.ini")
     assert args.hands_free_threshold == 0.2
     assert args.hands_free_end_threshold == 0.07
     assert args.hands_free_command_threshold == 0.06
@@ -141,6 +145,8 @@ def test_ensure_hands_free_references_returns_true_when_samples_exist(tmp_path):
         str(end_dir),
         "--hands-free-command-dir",
         str(command_dir),
+        "--hands-free-command-config",
+        str(tmp_path / "missing-config.ini"),
     ])
 
     assert ensure_hands_free_references(args) is True
@@ -155,6 +161,8 @@ def test_ensure_hands_free_references_decline_prompt_exits(tmp_path):
         str(tmp_path / "end"),
         "--hands-free-command-dir",
         str(tmp_path / "commands"),
+        "--hands-free-command-config",
+        str(tmp_path / "missing-config.ini"),
     ])
 
     assert ensure_hands_free_references(args, input_fn=lambda prompt: "n") is False
@@ -170,6 +178,8 @@ def test_ensure_hands_free_references_no_prompt_exits_without_input(tmp_path):
         str(tmp_path / "end"),
         "--hands-free-command-dir",
         str(tmp_path / "commands"),
+        "--hands-free-command-config",
+        str(tmp_path / "missing-config.ini"),
     ])
 
     assert ensure_hands_free_references(args, input_fn=lambda prompt: (_ for _ in ()).throw(AssertionError("prompted"))) is False
@@ -187,18 +197,20 @@ def test_ensure_hands_free_references_accept_prompt_runs_enrollment(tmp_path):
         str(end_dir),
         "--hands-free-command-dir",
         str(command_dir),
+        "--hands-free-command-config",
+        str(tmp_path / "missing-config.ini"),
         "--enroll-samples",
         "3",
         "--enroll-seconds",
         "1.5",
     ])
 
-    def enroll_fn(*, wake_dir, end_dir, command_dir, sample_count, seconds, telemetry=None):
+    def enroll_fn(*, wake_dir, end_dir, command_dir, sample_count, seconds, telemetry=None, command_slots=None):
         assert sample_count == 3
         assert seconds == 1.5
         write_reference_samples(wake_dir, "wake")
         write_reference_samples(end_dir, "end")
-        for name, path in command_reference_dirs(command_dir).items():
+        for name, path in command_reference_dirs(command_dir, slots=command_slots).items():
             write_reference_samples(path, name)
 
     assert ensure_hands_free_references(args, input_fn=lambda prompt: "", enroll_fn=enroll_fn) is True
@@ -223,6 +235,8 @@ def test_ensure_hands_free_references_emits_missing_telemetry(tmp_path):
         str(tmp_path / "end"),
         "--hands-free-command-dir",
         str(tmp_path / "commands"),
+        "--hands-free-command-config",
+        str(tmp_path / "missing-config.ini"),
     ])
 
     assert ensure_hands_free_references(args, telemetry=telemetry) is False
@@ -231,3 +245,38 @@ def test_ensure_hands_free_references_emits_missing_telemetry(tmp_path):
     assert "handsfree.reference_check_started" in event_names
     assert ("handsfree.reference_check_completed", {"outcome": "missing", "missing_count": 10}) in telemetry.events
     assert ("handsfree.enrollment_prompt_skipped", {"reason": "no_enroll_prompt"}) in telemetry.events
+
+
+def test_ensure_hands_free_references_only_requires_enabled_commands(tmp_path):
+    telemetry = FakeTelemetry()
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    command_dir = tmp_path / "commands"
+    config_path = tmp_path / "commands.ini"
+    config_path.write_text("[commands]\nenter = true\n")
+    write_reference_samples(wake_dir, "wake")
+    write_reference_samples(end_dir, "end")
+    write_reference_samples(command_dir / "enter", "enter")
+    args = parse_args([
+        "--hands-free",
+        "--hands-free-wake-dir",
+        str(wake_dir),
+        "--hands-free-end-dir",
+        str(end_dir),
+        "--hands-free-command-dir",
+        str(command_dir),
+        "--hands-free-command-config",
+        str(config_path),
+    ])
+
+    assert ensure_hands_free_references(args, telemetry=telemetry) is True
+    assert (
+        "handsfree.command_config_loaded",
+        {
+            "config_path": config_path,
+            "config_exists": True,
+            "enabled_commands": ["enter"],
+            "enabled_command_count": 1,
+            "disabled_command_count": 7,
+        },
+    ) in telemetry.events

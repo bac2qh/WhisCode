@@ -12,11 +12,14 @@ import numpy as np
 
 from whiscode.handsfree import (
     COMMAND_SLOTS,
+    DEFAULT_COMMAND_CONFIG_PATH,
     DEFAULT_COMMAND_DIR,
     DEFAULT_END_DIR,
     DEFAULT_WAKE_DIR,
     DEFAULT_WINDOW_SECONDS,
     MIN_REFERENCE_FILES,
+    CommandConfigError,
+    active_command_slots,
     command_reference_dirs,
 )
 from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
@@ -38,6 +41,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake reference folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End reference folder (default: {DEFAULT_END_DIR})")
     parser.add_argument("--command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command reference root folder (default: {DEFAULT_COMMAND_DIR})")
+    parser.add_argument("--command-config", type=Path, default=DEFAULT_COMMAND_CONFIG_PATH, help=f"Command enablement config for guided recording (default: {DEFAULT_COMMAND_CONFIG_PATH})")
     parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
     parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry for guided recording")
     parser.set_defaults(recording_overlay=True)
@@ -247,17 +251,27 @@ def record_guided_samples(
     preprocess_fn=preprocess_reference_audio,
     telemetry: Any | None = None,
     overlay: Any | None = None,
+    command_slots=None,
 ) -> list[Path]:
     validate_recording_options(sample_count, seconds)
-    _emit(telemetry, "enrollment.guided_started", sample_count=sample_count, seconds=seconds)
+    if command_slots is None:
+        command_slots = COMMAND_SLOTS
+    _emit(
+        telemetry,
+        "enrollment.guided_started",
+        sample_count=sample_count,
+        seconds=seconds,
+        enabled_command_count=len(command_slots),
+        enabled_commands=[slot.name for slot in command_slots],
+    )
     written = []
-    command_dirs = command_reference_dirs(command_dir)
+    command_dirs = command_reference_dirs(command_dir, slots=tuple(command_slots))
     phrase_sets = [
         ("wake", wake_dir, "wake phrase"),
         ("end", end_dir, "end phrase"),
         *(
             (slot.name, command_dirs[slot.name], f"command phrase for {slot.label}")
-            for slot in COMMAND_SLOTS
+            for slot in command_slots
         ),
     ]
     for kind, target_dir, prompt_label in phrase_sets:
@@ -288,6 +302,15 @@ def main(argv: list[str] | None = None) -> int:
     overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry) if args.record else None
     try:
         if args.record:
+            command_slots = active_command_slots(args.command_config, base_dir=args.command_dir)
+            telemetry.emit(
+                "handsfree.command_config_loaded",
+                config_path=args.command_config,
+                config_exists=args.command_config.exists(),
+                enabled_commands=[slot.name for slot in command_slots],
+                enabled_command_count=len(command_slots),
+                disabled_command_count=len(COMMAND_SLOTS) - len(command_slots),
+            )
             written = record_guided_samples(
                 wake_dir=args.wake_dir,
                 end_dir=args.end_dir,
@@ -296,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
                 seconds=args.seconds,
                 telemetry=telemetry,
                 overlay=overlay,
+                command_slots=command_slots,
             )
         else:
             written = import_samples(
@@ -305,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.end_dir,
                 command_dir=args.command_dir,
             )
-    except (FileNotFoundError, ValueError, subprocess.CalledProcessError, RuntimeError) as e:
+    except (FileNotFoundError, ValueError, CommandConfigError, subprocess.CalledProcessError, RuntimeError) as e:
         telemetry.emit("enrollment.cli_failed", error_type=type(e).__name__)
         print(f"Error: {e}", file=sys.stderr)
         return 1

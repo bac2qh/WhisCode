@@ -1,6 +1,7 @@
 import json
 
 from whiscode.calibrate import advisory_threshold, build_report, telemetry_distance_groups
+from whiscode.handsfree import active_command_slots
 
 
 def test_advisory_threshold_uses_reference_separation_midpoint():
@@ -71,3 +72,34 @@ def test_build_report_includes_reference_telemetry_and_advisory_threshold(tmp_pa
     assert "command arrow-down within references: no data" in report
     assert "confirmed wake triggers: n=1 min=0.040000 p05=0.040000 median=0.040000 p95=0.040000 max=0.040000" in report
     assert "Advisory threshold: 0.065000" in report
+
+
+def test_build_report_respects_enabled_command_slots(tmp_path):
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    command_dir = tmp_path / "commands"
+    config_path = tmp_path / "commands.ini"
+    wake_dir.mkdir()
+    end_dir.mkdir()
+    for name in ("wake-01.wav", "wake-02.wav"):
+        (wake_dir / name).write_text("x")
+    for name in ("end-01.wav", "end-02.wav"):
+        (end_dir / name).write_text("x")
+    enter_dir = command_dir / "enter"
+    enter_dir.mkdir(parents=True)
+    for name in ("enter-01.wav", "enter-02.wav"):
+        (enter_dir / name).write_text("x")
+    config_path.write_text("[commands]\nenter = true\n")
+
+    report = build_report(
+        wake_dir,
+        end_dir,
+        tmp_path / "events.jsonl",
+        command_dir=command_dir,
+        command_slots=active_command_slots(config_path, base_dir=command_dir),
+        compare_fn=lambda left, right: 0.04,
+    )
+
+    assert "command enter within references: n=1" in report
+    assert "command page-up within references" not in report
+    assert "command cross references: no data" in report

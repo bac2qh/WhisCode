@@ -11,8 +11,8 @@ from pathlib import Path
 from pynput import keyboard
 
 from whiscode.handsfree import (
-    COMMAND_SLOTS,
     DEFAULT_AUDIO_QUEUE_SECONDS,
+    DEFAULT_COMMAND_CONFIG_PATH,
     DEFAULT_COMMAND_DIR,
     DEFAULT_COMMAND_CONFIRMATIONS,
     DEFAULT_COMMAND_THRESHOLD,
@@ -28,9 +28,11 @@ from whiscode.handsfree import (
     DEFAULT_WAKE_DIR,
     DEFAULT_WAKE_CONFIRMATIONS,
     DEFAULT_WINDOW_SECONDS,
+    CommandConfigError,
     HandsFreeAudioLoop,
     HandsFreeSession,
     LocalWakeDetector,
+    active_command_slots,
     command_label,
     command_reference_dirs,
     missing_reference_messages,
@@ -70,6 +72,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake phrase reference WAV folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--hands-free-end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End phrase reference WAV folder (default: {DEFAULT_END_DIR})")
     parser.add_argument("--hands-free-command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command phrase reference root folder (default: {DEFAULT_COMMAND_DIR})")
+    parser.add_argument("--hands-free-command-config", type=Path, default=DEFAULT_COMMAND_CONFIG_PATH, help=f"Hands-free command enablement config (default: {DEFAULT_COMMAND_CONFIG_PATH})")
     parser.add_argument("--hands-free-threshold", type=float, default=None, help=f"Wake keyword detection threshold (default: {DEFAULT_THRESHOLD})")
     parser.add_argument("--hands-free-end-threshold", type=float, default=None, help=f"End keyword detection threshold (default: {DEFAULT_END_THRESHOLD})")
     parser.add_argument("--hands-free-command-threshold", type=float, default=None, help=f"Command keyword detection threshold (default: {DEFAULT_COMMAND_THRESHOLD})")
@@ -112,10 +115,34 @@ def _resolve_model_path(model_name: str) -> str:
     return str(cache_dir) if cache_dir.exists() else model_name
 
 
-def ensure_hands_free_references(args, *, input_fn=input, enroll_fn=record_guided_samples, telemetry=None) -> bool:
+def resolve_active_command_slots(args, *, telemetry=None):
+    slots = active_command_slots(args.hands_free_command_config, base_dir=args.hands_free_command_dir)
+    config_exists = Path(args.hands_free_command_config).exists() if args.hands_free_command_config else False
+    if telemetry:
+        telemetry.emit(
+            "handsfree.command_config_loaded",
+            config_path=args.hands_free_command_config,
+            config_exists=config_exists,
+            enabled_commands=[slot.name for slot in slots],
+            enabled_command_count=len(slots),
+            disabled_command_count=len(command_reference_dirs(args.hands_free_command_dir)) - len(slots),
+        )
+    return slots
+
+
+def ensure_hands_free_references(
+    args,
+    *,
+    command_slots=None,
+    input_fn=input,
+    enroll_fn=record_guided_samples,
+    telemetry=None,
+) -> bool:
+    if command_slots is None:
+        command_slots = resolve_active_command_slots(args, telemetry=telemetry)
     wake_count = reference_sample_count(args.hands_free_wake_dir)
     end_count = reference_sample_count(args.hands_free_end_dir)
-    command_dirs = command_reference_dirs(args.hands_free_command_dir)
+    command_dirs = command_reference_dirs(args.hands_free_command_dir, slots=tuple(command_slots))
     command_counts = {name: reference_sample_count(path) for name, path in command_dirs.items()}
     if telemetry:
         telemetry.emit(
@@ -127,6 +154,7 @@ def ensure_hands_free_references(args, *, input_fn=input, enroll_fn=record_guide
             wake_dir=args.hands_free_wake_dir,
             end_dir=args.hands_free_end_dir,
             command_dir=args.hands_free_command_dir,
+            enabled_command_count=len(command_dirs),
         )
     missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir, command_dirs=command_dirs)
     if not missing:
@@ -162,6 +190,7 @@ def ensure_hands_free_references(args, *, input_fn=input, enroll_fn=record_guide
         wake_dir=args.hands_free_wake_dir,
         end_dir=args.hands_free_end_dir,
         command_dir=args.hands_free_command_dir,
+        command_slots=tuple(command_slots),
         sample_count=args.enroll_samples,
         seconds=args.enroll_seconds,
         telemetry=telemetry,
@@ -191,9 +220,18 @@ def main():
         print(f"Error: Unknown hotkey '{args.hotkey}'. Use keys like shift_r, f10, ctrl, alt, etc.")
         sys.exit(1)
 
-    if args.hands_free and not ensure_hands_free_references(args, telemetry=telemetry):
-        telemetry.emit("app.failed", reason="handsfree_references_incomplete")
-        sys.exit(1)
+    active_slots = ()
+    if args.hands_free:
+        try:
+            active_slots = resolve_active_command_slots(args, telemetry=telemetry)
+            references_complete = ensure_hands_free_references(args, command_slots=active_slots, telemetry=telemetry)
+        except CommandConfigError as e:
+            telemetry.emit("app.failed", reason="handsfree_command_config_invalid", error_type=type(e).__name__)
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        if not references_complete:
+            telemetry.emit("app.failed", reason="handsfree_references_incomplete")
+            sys.exit(1)
 
     hotwords_path = Path(args.hotwords_file) if args.hotwords_file else None
     hot_words, replacements = load_hotwords(hotwords_path) if hotwords_path else load_hotwords()
@@ -502,13 +540,13 @@ def main():
                 wake_threshold=args.hands_free_threshold,
                 end_threshold=args.hands_free_end_threshold,
                 command_threshold=args.hands_free_command_threshold,
-                command_count=len(COMMAND_SLOTS),
+                command_count=len(active_slots),
             )
             wake_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)
             end_detector = LocalWakeDetector(args.hands_free_end_dir, args.hands_free_end_threshold)
             command_detectors = {
                 name: LocalWakeDetector(path, args.hands_free_command_threshold)
-                for name, path in command_reference_dirs(args.hands_free_command_dir).items()
+                for name, path in command_reference_dirs(args.hands_free_command_dir, slots=tuple(active_slots)).items()
             }
             telemetry.emit("handsfree.detector_load_completed")
         except ValueError as e:

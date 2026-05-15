@@ -43,6 +43,7 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 | `--hands-free-threshold FLOAT` | `0.055` | Detection threshold for wake phrase matching |
 | `--hands-free-end-threshold FLOAT` | `0.055` | Detection threshold for end phrase matching |
 | `--hands-free-command-threshold FLOAT` | `0.055` | Detection threshold for hands-free key command matching |
+| `--hands-free-command-config PATH` | `~/.config/whiscode/commands.ini` | Hands-free command enablement config |
 | `--hands-free-tail-seconds FLOAT` | `1.0` | Audio tail to discard when the end phrase is detected |
 | `--hands-free-audio-queue-seconds FLOAT` | `10.0` | Queued hands-free audio allowed between mic capture and detection before oldest chunks are dropped |
 | `--hands-free-min-rms FLOAT` | `0.006` | Minimum detector-window RMS before keyword matching |
@@ -100,6 +101,22 @@ uv run whiscode-enroll arrow-down arrowdown1.m4a arrowdown2.m4a arrowdown3.m4a
 ```
 
 Hands-free mode also supports eight trained key command slots while idle: `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, and `arrow-down`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, Enter, Shift+Enter, Shift+Tab, Tab, Arrow Up, or Arrow Down key action. Command detection is disabled while recording or transcribing so dictated speech cannot press keys.
+
+You can selectively enable key command slots with `~/.config/whiscode/commands.ini`:
+
+```ini
+[commands]
+page-up = true
+page-down = true
+enter = true
+shift-enter = false
+shift-tab = false
+tab = true
+arrow-up = true
+arrow-down = true
+```
+
+If this file does not exist, all command slots stay enabled for backward compatibility. If it exists, only commands set to `true` are enabled; omitted or `false` commands are ignored and do not need reference samples. Enabled commands still need enough recorded samples before they can load. Override the path with `--hands-free-command-config PATH`; guided enrollment and calibration use the same config by default and accept `--command-config PATH`.
 
 After enrollment, inspect the local detector score separation:
 

@@ -53,6 +53,8 @@ def test_parse_args_accepts_record_mode():
         "/tmp/events.jsonl",
         "--command-dir",
         "/tmp/commands",
+        "--command-config",
+        "/tmp/commands.ini",
         "--no-recording-overlay",
         "--no-telemetry",
     ])
@@ -62,6 +64,7 @@ def test_parse_args_accepts_record_mode():
     assert args.seconds == 1.5
     assert args.telemetry_path == Path("/tmp/events.jsonl")
     assert args.command_dir == Path("/tmp/commands")
+    assert args.command_config == Path("/tmp/commands.ini")
     assert args.recording_overlay is False
     assert args.no_telemetry is True
 
@@ -206,6 +209,25 @@ def test_record_guided_samples_honors_count_and_seconds(tmp_path):
 
     assert len(written) == 40
     assert seconds_seen == [1.25] * 40
+
+
+def test_record_guided_samples_accepts_enabled_command_slots(tmp_path):
+    audio = np.array([0.1, -0.1], dtype=np.float32)
+
+    written = record_guided_samples(
+        wake_dir=tmp_path / "wake",
+        end_dir=tmp_path / "end",
+        command_dir=tmp_path / "commands",
+        input_fn=lambda prompt: None,
+        capture_fn=lambda seconds: audio,
+        preprocess_fn=lambda audio: audio,
+        command_slots=(),
+    )
+
+    assert len(written) == 6
+    assert written[0] == tmp_path / "wake" / "wake-01.wav"
+    assert written[3] == tmp_path / "end" / "end-01.wav"
+    assert not (tmp_path / "commands").exists()
 
 
 class FakeTelemetry:
