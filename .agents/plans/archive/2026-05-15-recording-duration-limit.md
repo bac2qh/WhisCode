@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-15-recording-duration-limit-checkpoints.md`.
+- Implementation commits: `140a21d`, `3857f6c`.
+- Merge commit: none; local `main` fast-forwarded to `3857f6c`.
+- Verification: `uv run --with pytest python -m pytest` passed with 114 tests; focused recorder/main CLI/hands-free tests passed with 28 tests; `uv run whiscode --help` passed; `git diff --check` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/recording-duration-limit` and deleted local branch `recording-duration-limit`.
+- Summary: Shipped a shared 10-minute recording duration cap, manual hotkey auto-finalization on timeout, bounded `recording.timeout` telemetry, compatibility for `--hands-free-max-seconds`, and documentation clarifying PortAudio overflow.
+
 # Recording Duration Limit Plan
 
 ## Summary
