@@ -23,3 +23,6 @@
 - Tightened wake defaults after observing high false-positive rates from incidental sound. Wake now defaults to threshold `0.055` and requires two consecutive matching windows before recording starts; `--hands-free-wake-confirmations` can tune that confirmation count.
 - Added VAD trimming to guided/imported enrollment samples after observing 2-second reference WAVs with only about 0.54-0.80 seconds of actual speech. Added `whiscode-calibrate` to summarize reference and telemetry distance distributions before changing thresholds.
 - Corrected the VAD-trimmed enrollment output to pad references back to the detector window length. Padding only to `local-wake`'s `12400`-sample minimum produced `0.775s` references, while runtime compares `2.0s` rolling windows and wake distances rose to about `0.22`.
+
+## 2026-05-15
+- Added trained idle-only hands-free key command slots for `page-up`, `page-down`, and `enter`. Guided enrollment now records samples for wake, end, and each command slot; runtime loads separate local-wake detectors for commands and maps confirmed detections to physical Page Up, Page Down, and Enter key taps through `pynput`. Command detection is ignored while recording or transcribing, uses command-specific threshold/confirmation CLI flags, and emits bounded command/key-injection telemetry without raw audio or transcripts.

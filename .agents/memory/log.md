@@ -15,3 +15,6 @@
 - Added hands-free wake confirmation memory after tightening wake defaults to reduce false starts from incidental sound.
 - Added hands-free enrollment calibration memory after trimming reference samples with local VAD and adding a local distance report command.
 - Added hands-free reference padding memory after fixing short VAD-trimmed references that no longer matched the runtime detector window.
+
+## 2026-05-15
+- Added hands-free key command memory after implementing trained Page Up, Page Down, and Enter voice command slots.

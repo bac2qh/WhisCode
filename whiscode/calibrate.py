@@ -7,7 +7,7 @@ from itertools import combinations, product
 from pathlib import Path
 from typing import Callable, Iterable
 
-from whiscode.handsfree import DEFAULT_END_DIR, DEFAULT_WAKE_DIR
+from whiscode.handsfree import DEFAULT_COMMAND_DIR, DEFAULT_END_DIR, DEFAULT_WAKE_DIR, command_reference_dirs
 
 DEFAULT_TELEMETRY_PATH = Path.home() / ".config" / "whiscode" / "telemetry" / "events.jsonl"
 
@@ -27,6 +27,7 @@ def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Report WhisCode hands-free detector calibration data")
     parser.add_argument("--wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake reference folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End reference folder (default: {DEFAULT_END_DIR})")
+    parser.add_argument("--command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--telemetry-path", type=Path, default=DEFAULT_TELEMETRY_PATH, help=f"Local telemetry JSONL path (default: {DEFAULT_TELEMETRY_PATH})")
     return parser.parse_args(argv)
 
@@ -35,6 +36,7 @@ def reference_distance_groups(
     wake_dir: Path,
     end_dir: Path,
     *,
+    command_dir: Path = DEFAULT_COMMAND_DIR,
     compare_fn: Callable[[str, str], float] | None = None,
 ) -> dict[str, list[float]]:
     if compare_fn is None:
@@ -44,11 +46,28 @@ def reference_distance_groups(
 
     wake_files = sorted(Path(wake_dir).glob("*.wav"))
     end_files = sorted(Path(end_dir).glob("*.wav"))
-    return {
+    groups = {
         "wake within references": [_compare(compare_fn, left, right) for left, right in combinations(wake_files, 2)],
         "end within references": [_compare(compare_fn, left, right) for left, right in combinations(end_files, 2)],
         "wake vs end references": [_compare(compare_fn, left, right) for left, right in product(wake_files, end_files)],
     }
+    command_files_by_name = {
+        name: sorted(path.glob("*.wav"))
+        for name, path in command_reference_dirs(command_dir).items()
+    }
+    for name, files in command_files_by_name.items():
+        groups[f"command {name} within references"] = [
+            _compare(compare_fn, left, right) for left, right in combinations(files, 2)
+        ]
+
+    cross_command = []
+    for left_name, right_name in combinations(command_files_by_name, 2):
+        cross_command.extend(
+            _compare(compare_fn, left, right)
+            for left, right in product(command_files_by_name[left_name], command_files_by_name[right_name])
+        )
+    groups["command cross references"] = cross_command
+    return groups
 
 
 def telemetry_distance_groups(path: Path) -> dict[str, list[float]]:
@@ -56,8 +75,10 @@ def telemetry_distance_groups(path: Path) -> dict[str, list[float]]:
     groups = {
         "confirmed wake triggers": [],
         "confirmed end triggers": [],
+        "confirmed command triggers": [],
         "wake summary minima": [],
         "end summary minima": [],
+        "command summary minima": [],
     }
     for row in rows:
         event = row.get("event")
@@ -66,6 +87,8 @@ def telemetry_distance_groups(path: Path) -> dict[str, list[float]]:
             groups["confirmed wake triggers"].append(float(distance))
         elif event == "handsfree.end_detected" and isinstance(distance, (int, float)):
             groups["confirmed end triggers"].append(float(distance))
+        elif event == "handsfree.command_detected" and isinstance(distance, (int, float)):
+            groups["confirmed command triggers"].append(float(distance))
         elif event == "handsfree.detector_distance_summary":
             detector = row.get("detector")
             minimum = row.get("min_distance")
@@ -73,6 +96,8 @@ def telemetry_distance_groups(path: Path) -> dict[str, list[float]]:
                 groups["wake summary minima"].append(float(minimum))
             elif detector == "end" and isinstance(minimum, (int, float)):
                 groups["end summary minima"].append(float(minimum))
+            elif isinstance(detector, str) and detector.startswith("command.") and isinstance(minimum, (int, float)):
+                groups["command summary minima"].append(float(minimum))
     return groups
 
 
@@ -108,9 +133,10 @@ def build_report(
     end_dir: Path,
     telemetry_path: Path,
     *,
+    command_dir: Path = DEFAULT_COMMAND_DIR,
     compare_fn: Callable[[str, str], float] | None = None,
 ) -> str:
-    reference_groups = reference_distance_groups(wake_dir, end_dir, compare_fn=compare_fn)
+    reference_groups = reference_distance_groups(wake_dir, end_dir, command_dir=command_dir, compare_fn=compare_fn)
     telemetry_groups = telemetry_distance_groups(telemetry_path)
     lines = ["WhisCode hands-free calibration report", ""]
     lines.append("Reference distances")
@@ -134,7 +160,7 @@ def build_report(
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    print(build_report(args.wake_dir, args.end_dir, args.telemetry_path))
+    print(build_report(args.wake_dir, args.end_dir, args.telemetry_path, command_dir=args.command_dir))
     return 0
 
 

@@ -9,7 +9,15 @@ from typing import Any
 
 import numpy as np
 
-from whiscode.handsfree import DEFAULT_END_DIR, DEFAULT_WAKE_DIR, DEFAULT_WINDOW_SECONDS, MIN_REFERENCE_FILES
+from whiscode.handsfree import (
+    COMMAND_SLOTS,
+    DEFAULT_COMMAND_DIR,
+    DEFAULT_END_DIR,
+    DEFAULT_WAKE_DIR,
+    DEFAULT_WINDOW_SECONDS,
+    MIN_REFERENCE_FILES,
+    command_reference_dirs,
+)
 from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 from whiscode.status_notifier import notify_recording_completed, notify_recording_now
 from whiscode.telemetry import telemetry_from_args
@@ -20,13 +28,15 @@ DEFAULT_REFERENCE_SECONDS = DEFAULT_WINDOW_SECONDS
 
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Import WhisCode hands-free trigger samples")
-    parser.add_argument("kind", nargs="?", choices=("wake", "end"), help="Reference phrase set to update for file import")
+    choices = ("wake", "end", *(slot.name for slot in COMMAND_SLOTS))
+    parser.add_argument("kind", nargs="?", choices=choices, help="Reference phrase set to update for file import")
     parser.add_argument("samples", nargs="*", help="Audio samples to import, such as Voice Memo .m4a files")
-    parser.add_argument("--record", action="store_true", help="Record wake and end samples directly from the microphone")
+    parser.add_argument("--record", action="store_true", help="Record wake, end, and key-command samples directly from the microphone")
     parser.add_argument("--sample-count", "--samples", dest="sample_count", type=int, default=MIN_REFERENCE_FILES, help=f"Samples to record per phrase (default: {MIN_REFERENCE_FILES})")
     parser.add_argument("--seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds to record per sample (default: {DEFAULT_ENROLL_SECONDS})")
     parser.add_argument("--wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake reference folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End reference folder (default: {DEFAULT_END_DIR})")
+    parser.add_argument("--command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
     parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry for guided recording")
     args = parser.parse_args(argv)
@@ -104,12 +114,14 @@ def preprocess_reference_audio(
         audio = np.pad(audio, (pad_left, pad_right), mode="constant")
     return audio.astype(np.float32)
 
+
 def import_samples(
     kind: str,
     samples: list[Path],
     wake_dir: Path = DEFAULT_WAKE_DIR,
     end_dir: Path = DEFAULT_END_DIR,
     *,
+    command_dir: Path = DEFAULT_COMMAND_DIR,
     preprocess_fn=preprocess_reference_audio,
 ) -> list[Path]:
     if len(samples) < MIN_REFERENCE_FILES:
@@ -119,7 +131,15 @@ def import_samples(
         if not sample.exists():
             raise FileNotFoundError(f"Sample not found: {sample}")
 
-    target_dir = wake_dir if kind == "wake" else end_dir
+    if kind == "wake":
+        target_dir = wake_dir
+    elif kind == "end":
+        target_dir = end_dir
+    else:
+        command_dirs = command_reference_dirs(command_dir)
+        if kind not in command_dirs:
+            raise ValueError(f"Unknown reference kind: {kind}")
+        target_dir = command_dirs[kind]
     written = []
     for index, sample in enumerate(samples, start=1):
         output_path = target_dir / f"{kind}-{index:02d}.wav"
@@ -174,11 +194,13 @@ def record_one_sample(
     input_fn=input,
     capture_fn=capture_audio,
     preprocess_fn=preprocess_reference_audio,
+    prompt_label: str | None = None,
     telemetry: Any | None = None,
 ) -> Path:
     output_path = target_dir / f"{kind}-{index:02d}.wav"
-    input_fn(f"Press Enter, say your {kind} phrase, recording for {seconds:.1f} seconds...")
-    _emit(telemetry, "enrollment.sample_started", kind=kind, index=index, seconds=seconds)
+    spoken_label = prompt_label or f"{kind} phrase"
+    input_fn(f"Press Enter, say your {spoken_label}, recording for {seconds:.1f} seconds...")
+    _emit(telemetry, "enrollment.sample_started", kind=kind, index=index, seconds=seconds, label=spoken_label)
     try:
         notify_recording_now()
         audio = capture_fn(seconds)
@@ -196,6 +218,7 @@ def record_one_sample(
         index=index,
         audio_seconds=round(len(audio) / SAMPLE_RATE, 3),
         audio_samples=len(audio),
+        label=spoken_label,
     )
     print(f"  Wrote {output_path}")
     return output_path
@@ -205,6 +228,7 @@ def record_guided_samples(
     *,
     wake_dir: Path = DEFAULT_WAKE_DIR,
     end_dir: Path = DEFAULT_END_DIR,
+    command_dir: Path = DEFAULT_COMMAND_DIR,
     sample_count: int = MIN_REFERENCE_FILES,
     seconds: float = DEFAULT_ENROLL_SECONDS,
     input_fn=input,
@@ -215,8 +239,17 @@ def record_guided_samples(
     validate_recording_options(sample_count, seconds)
     _emit(telemetry, "enrollment.guided_started", sample_count=sample_count, seconds=seconds)
     written = []
-    for kind, target_dir in (("wake", wake_dir), ("end", end_dir)):
-        print(f"Recording {sample_count} {kind} sample(s).")
+    command_dirs = command_reference_dirs(command_dir)
+    phrase_sets = [
+        ("wake", wake_dir, "wake phrase"),
+        ("end", end_dir, "end phrase"),
+        *(
+            (slot.name, command_dirs[slot.name], f"command phrase for {slot.label}")
+            for slot in COMMAND_SLOTS
+        ),
+    ]
+    for kind, target_dir, prompt_label in phrase_sets:
+        print(f"Recording {sample_count} {prompt_label} sample(s).")
         for index in range(1, sample_count + 1):
             written.append(
                 record_one_sample(
@@ -227,6 +260,7 @@ def record_guided_samples(
                     input_fn=input_fn,
                     capture_fn=capture_fn,
                     preprocess_fn=preprocess_fn,
+                    prompt_label=prompt_label,
                     telemetry=telemetry,
                 )
             )
@@ -243,12 +277,19 @@ def main(argv: list[str] | None = None) -> int:
             written = record_guided_samples(
                 wake_dir=args.wake_dir,
                 end_dir=args.end_dir,
+                command_dir=args.command_dir,
                 sample_count=args.sample_count,
                 seconds=args.seconds,
                 telemetry=telemetry,
             )
         else:
-            written = import_samples(args.kind, [Path(p) for p in args.samples], args.wake_dir, args.end_dir)
+            written = import_samples(
+                args.kind,
+                [Path(p) for p in args.samples],
+                args.wake_dir,
+                args.end_dir,
+                command_dir=args.command_dir,
+            )
     except (FileNotFoundError, ValueError, subprocess.CalledProcessError, RuntimeError) as e:
         telemetry.emit("enrollment.cli_failed", error_type=type(e).__name__)
         print(f"Error: {e}", file=sys.stderr)

@@ -11,6 +11,10 @@ from pathlib import Path
 from pynput import keyboard
 
 from whiscode.handsfree import (
+    COMMAND_SLOTS,
+    DEFAULT_COMMAND_DIR,
+    DEFAULT_COMMAND_CONFIRMATIONS,
+    DEFAULT_COMMAND_THRESHOLD,
     DEFAULT_END_DIR,
     DEFAULT_END_THRESHOLD,
     DEFAULT_ACTIVE_LEVEL,
@@ -26,12 +30,14 @@ from whiscode.handsfree import (
     HandsFreeAudioLoop,
     HandsFreeSession,
     LocalWakeDetector,
+    command_label,
+    command_reference_dirs,
     missing_reference_messages,
     reference_sample_count,
 )
 from whiscode.enroll import DEFAULT_ENROLL_SECONDS, record_guided_samples
 from whiscode.hotwords import load_hotwords
-from whiscode.injector import type_text
+from whiscode.injector import press_key_command, type_text
 from whiscode.postprocess import postprocess, postprocess_for_refine
 from whiscode.refiner import refine
 from whiscode.recorder import Recorder, SAMPLE_RATE
@@ -62,8 +68,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free", action="store_true", help="Use local keyword detection instead of Right Shift as the primary trigger")
     parser.add_argument("--hands-free-wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake phrase reference WAV folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--hands-free-end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End phrase reference WAV folder (default: {DEFAULT_END_DIR})")
+    parser.add_argument("--hands-free-command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command phrase reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--hands-free-threshold", type=float, default=None, help=f"Wake keyword detection threshold (default: {DEFAULT_THRESHOLD})")
     parser.add_argument("--hands-free-end-threshold", type=float, default=None, help=f"End keyword detection threshold (default: {DEFAULT_END_THRESHOLD})")
+    parser.add_argument("--hands-free-command-threshold", type=float, default=None, help=f"Command keyword detection threshold (default: {DEFAULT_COMMAND_THRESHOLD})")
     parser.add_argument("--hands-free-window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, help=f"Detector window size in seconds (default: {DEFAULT_WINDOW_SECONDS})")
     parser.add_argument("--hands-free-slide-seconds", type=float, default=DEFAULT_SLIDE_SECONDS, help=f"Detector slide size in seconds (default: {DEFAULT_SLIDE_SECONDS})")
     parser.add_argument("--hands-free-tail-seconds", type=float, default=DEFAULT_TAIL_SECONDS, help=f"Audio tail to discard when the end phrase is detected (default: {DEFAULT_TAIL_SECONDS})")
@@ -72,6 +80,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-min-active-ratio", type=float, default=DEFAULT_MIN_ACTIVE_RATIO, help=f"Minimum ratio of active samples required before keyword matching (default: {DEFAULT_MIN_ACTIVE_RATIO})")
     parser.add_argument("--hands-free-active-level", type=float, default=DEFAULT_ACTIVE_LEVEL, help=f"Absolute sample level counted as active for keyword matching (default: {DEFAULT_ACTIVE_LEVEL})")
     parser.add_argument("--hands-free-wake-confirmations", type=int, default=DEFAULT_WAKE_CONFIRMATIONS, help=f"Consecutive wake matches required before recording starts (default: {DEFAULT_WAKE_CONFIRMATIONS})")
+    parser.add_argument("--hands-free-command-confirmations", type=int, default=DEFAULT_COMMAND_CONFIRMATIONS, help=f"Consecutive command matches required before pressing a key (default: {DEFAULT_COMMAND_CONFIRMATIONS})")
     parser.add_argument("--hands-free-debug", action="store_true", help="Print keyword detector distances for threshold tuning")
     parser.add_argument("--no-enroll-prompt", action="store_true", help="Exit instead of prompting to record missing hands-free samples")
     parser.add_argument("--enroll-samples", type=int, default=3, help="Samples per phrase for guided enrollment when --hands-free needs setup (default: 3)")
@@ -88,6 +97,8 @@ def parse_args(argv: list[str] | None = None):
         args.hands_free_threshold = DEFAULT_THRESHOLD
     if args.hands_free_end_threshold is None:
         args.hands_free_end_threshold = args.hands_free_threshold if wake_threshold_supplied else DEFAULT_END_THRESHOLD
+    if args.hands_free_command_threshold is None:
+        args.hands_free_command_threshold = args.hands_free_threshold if wake_threshold_supplied else DEFAULT_COMMAND_THRESHOLD
     return args
 
 
@@ -99,16 +110,20 @@ def _resolve_model_path(model_name: str) -> str:
 def ensure_hands_free_references(args, *, input_fn=input, enroll_fn=record_guided_samples, telemetry=None) -> bool:
     wake_count = reference_sample_count(args.hands_free_wake_dir)
     end_count = reference_sample_count(args.hands_free_end_dir)
+    command_dirs = command_reference_dirs(args.hands_free_command_dir)
+    command_counts = {name: reference_sample_count(path) for name, path in command_dirs.items()}
     if telemetry:
         telemetry.emit(
             "handsfree.reference_check_started",
             wake_count=wake_count,
             end_count=end_count,
+            command_counts=command_counts,
             minimum_samples=3,
             wake_dir=args.hands_free_wake_dir,
             end_dir=args.hands_free_end_dir,
+            command_dir=args.hands_free_command_dir,
         )
-    missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir)
+    missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir, command_dirs=command_dirs)
     if not missing:
         if telemetry:
             telemetry.emit("handsfree.reference_check_completed", outcome="complete")
@@ -141,12 +156,13 @@ def ensure_hands_free_references(args, *, input_fn=input, enroll_fn=record_guide
     enroll_fn(
         wake_dir=args.hands_free_wake_dir,
         end_dir=args.hands_free_end_dir,
+        command_dir=args.hands_free_command_dir,
         sample_count=args.enroll_samples,
         seconds=args.enroll_seconds,
         telemetry=telemetry,
     )
 
-    missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir)
+    missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir, command_dirs=command_dirs)
     if missing:
         if telemetry:
             telemetry.emit("handsfree.reference_check_after_enrollment", outcome="missing", missing_count=len(missing))
@@ -373,6 +389,27 @@ def main():
     def handle_handsfree_event(event):
         nonlocal state
         with state_lock:
+            if event.kind == "command.detected":
+                if state == State.IDLE and event.command:
+                    label = command_label(event.command)
+                    telemetry.emit(
+                        "handsfree.command_detected",
+                        command=event.command,
+                        distance=round(event.detection.distance, 6) if event.detection else None,
+                        threshold=args.hands_free_command_threshold,
+                        rms=round(event.detection.rms, 6) if event.detection and event.detection.rms is not None else None,
+                        active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
+                    )
+                    try:
+                        press_key_command(event.command)
+                    except Exception as e:
+                        telemetry.emit("keyboard_command.failed", command=event.command, error_type=type(e).__name__)
+                        print(f"handsfree.command.failed command={event.command} error={e}", file=sys.stderr)
+                    else:
+                        telemetry.emit("keyboard_command.injected", command=event.command, outcome="pressed")
+                        print(f"handsfree.command.detected command={event.command} key={label}")
+                return
+
             if event.kind == "wake.detected":
                 if state == State.IDLE:
                     transition_to(
@@ -439,9 +476,15 @@ def main():
                 "handsfree.detector_load_started",
                 wake_threshold=args.hands_free_threshold,
                 end_threshold=args.hands_free_end_threshold,
+                command_threshold=args.hands_free_command_threshold,
+                command_count=len(COMMAND_SLOTS),
             )
             wake_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)
             end_detector = LocalWakeDetector(args.hands_free_end_dir, args.hands_free_end_threshold)
+            command_detectors = {
+                name: LocalWakeDetector(path, args.hands_free_command_threshold)
+                for name, path in command_reference_dirs(args.hands_free_command_dir).items()
+            }
             telemetry.emit("handsfree.detector_load_completed")
         except ValueError as e:
             telemetry.emit("handsfree.detector_load_failed", error_type=type(e).__name__)
@@ -461,6 +504,8 @@ def main():
             min_active_ratio=args.hands_free_min_active_ratio,
             active_level=args.hands_free_active_level,
             wake_confirmations=args.hands_free_wake_confirmations,
+            command_detectors=command_detectors,
+            command_confirmations=args.hands_free_command_confirmations,
             level_callback=overlay.update_level,
         )
         handsfree_loop = HandsFreeAudioLoop(handsfree_session, handsfree_queue, stop_event=shutdown_event, telemetry=telemetry)

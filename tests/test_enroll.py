@@ -33,6 +33,13 @@ def test_parse_args_accepts_voice_memo_samples():
     assert args.samples == ["one.m4a", "two.m4a", "three.m4a"]
 
 
+def test_parse_args_accepts_command_samples():
+    args = parse_args(["page-up", "one.m4a", "two.m4a", "three.m4a", "--command-dir", "/tmp/commands"])
+
+    assert args.kind == "page-up"
+    assert args.command_dir == Path("/tmp/commands")
+
+
 def test_parse_args_accepts_record_mode():
     args = parse_args([
         "--record",
@@ -42,6 +49,8 @@ def test_parse_args_accepts_record_mode():
         "1.5",
         "--telemetry-path",
         "/tmp/events.jsonl",
+        "--command-dir",
+        "/tmp/commands",
         "--no-telemetry",
     ])
 
@@ -49,6 +58,7 @@ def test_parse_args_accepts_record_mode():
     assert args.sample_count == 4
     assert args.seconds == 1.5
     assert args.telemetry_path == Path("/tmp/events.jsonl")
+    assert args.command_dir == Path("/tmp/commands")
     assert args.no_telemetry is True
 
 
@@ -102,6 +112,26 @@ def test_import_samples_uses_end_folder(tmp_path):
     assert written[0] == end_dir / "end-01.wav"
 
 
+def test_import_samples_uses_command_folder(tmp_path):
+    samples = make_samples(tmp_path)
+    command_dir = tmp_path / "commands"
+
+    def fake_run(command, check):
+        write_wav(Path(command[2]), np.array([0.25, -0.25], dtype=np.float32))
+
+    with patch("subprocess.run", side_effect=fake_run):
+        written = import_samples(
+            "page-down",
+            samples,
+            wake_dir=tmp_path / "wake",
+            end_dir=tmp_path / "end",
+            command_dir=command_dir,
+            preprocess_fn=lambda audio: audio,
+        )
+
+    assert written[0] == command_dir / "page-down" / "page-down-01.wav"
+
+
 def test_import_samples_requires_three_samples(tmp_path):
     samples = make_samples(tmp_path, count=2)
 
@@ -123,15 +153,20 @@ def test_record_guided_samples_records_wake_and_end_defaults(tmp_path):
     written = record_guided_samples(
         wake_dir=tmp_path / "wake",
         end_dir=tmp_path / "end",
+        command_dir=tmp_path / "commands",
         input_fn=lambda prompt: captured_prompts.append(prompt),
         capture_fn=lambda seconds: audio,
         preprocess_fn=lambda audio: audio,
     )
 
-    assert len(written) == 6
+    assert len(written) == 15
     assert written[0] == tmp_path / "wake" / "wake-01.wav"
     assert written[3] == tmp_path / "end" / "end-01.wav"
-    assert len(captured_prompts) == 6
+    assert written[6] == tmp_path / "commands" / "page-up" / "page-up-01.wav"
+    assert written[9] == tmp_path / "commands" / "page-down" / "page-down-01.wav"
+    assert written[12] == tmp_path / "commands" / "enter" / "enter-01.wav"
+    assert len(captured_prompts) == 15
+    assert any("command phrase for Page Up" in prompt for prompt in captured_prompts)
     assert all(path.exists() for path in written)
 
 
@@ -141,6 +176,7 @@ def test_record_guided_samples_honors_count_and_seconds(tmp_path):
     written = record_guided_samples(
         wake_dir=tmp_path / "wake",
         end_dir=tmp_path / "end",
+        command_dir=tmp_path / "commands",
         sample_count=4,
         seconds=1.25,
         input_fn=lambda prompt: None,
@@ -148,8 +184,8 @@ def test_record_guided_samples_honors_count_and_seconds(tmp_path):
         preprocess_fn=lambda audio: audio,
     )
 
-    assert len(written) == 8
-    assert seconds_seen == [1.25] * 8
+    assert len(written) == 20
+    assert seconds_seen == [1.25] * 20
 
 
 class FakeTelemetry:
@@ -166,6 +202,7 @@ def test_record_guided_samples_emits_telemetry(tmp_path):
     record_guided_samples(
         wake_dir=tmp_path / "wake",
         end_dir=tmp_path / "end",
+        command_dir=tmp_path / "commands",
         input_fn=lambda prompt: None,
         capture_fn=lambda seconds: np.array([0.0], dtype=np.float32),
         preprocess_fn=lambda audio: audio,
@@ -174,8 +211,8 @@ def test_record_guided_samples_emits_telemetry(tmp_path):
 
     event_names = [event for event, properties in telemetry.events]
     assert event_names[0] == "enrollment.guided_started"
-    assert event_names.count("enrollment.sample_started") == 6
-    assert event_names.count("enrollment.sample_completed") == 6
+    assert event_names.count("enrollment.sample_started") == 15
+    assert event_names.count("enrollment.sample_completed") == 15
     assert event_names[-1] == "enrollment.guided_completed"
 
 

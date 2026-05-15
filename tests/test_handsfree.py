@@ -261,6 +261,71 @@ def test_suspended_session_ignores_audio():
     assert session.state == "idle"
 
 
+def test_idle_command_detection_requires_confirmation_and_resets_buffer():
+    command_detector = FakeDetector([
+        Detection("page-up-01.wav", 0.05),
+        Detection("page-up-02.wav", 0.04),
+        Detection("page-up-03.wav", 0.03),
+    ])
+    session = HandsFreeSession(
+        FakeDetector([None, None, None]),
+        FakeDetector([]),
+        command_detectors={"page-up": command_detector},
+        command_confirmations=2,
+        sample_rate=10,
+        window_seconds=0.2,
+        slide_seconds=0.1,
+    )
+
+    assert session.feed(chunk(1)) == []
+    assert session.feed(chunk(1)) == []
+    events = session.feed(chunk(1))
+
+    assert [(event.kind, event.command) for event in events] == [("command.detected", "page-up")]
+    assert events[0].detection.name == "page-up-02.wav"
+    assert session.state == "idle"
+
+    assert session.feed(chunk(1)) == []
+    assert command_detector.calls == 2
+
+
+def test_command_detector_is_ignored_while_recording():
+    command_detector = FakeDetector([Detection("page-down-01.wav", 0.04)])
+    session = HandsFreeSession(
+        FakeDetector([]),
+        FakeDetector([None, None]),
+        command_detectors={"page-down": command_detector},
+        command_confirmations=1,
+        sample_rate=10,
+        window_seconds=0.2,
+    )
+
+    session.manual_start()
+    session.feed(chunk(1))
+    session.feed(chunk(1))
+
+    assert command_detector.calls == 0
+    assert session.state == "recording"
+
+
+def test_command_detection_uses_best_distance_when_multiple_slots_match():
+    page_up_detector = FakeDetector([Detection("page-up-01.wav", 0.05)])
+    enter_detector = FakeDetector([Detection("enter-01.wav", 0.03)])
+    session = HandsFreeSession(
+        FakeDetector([None, None]),
+        FakeDetector([]),
+        command_detectors={"page-up": page_up_detector, "enter": enter_detector},
+        command_confirmations=1,
+        sample_rate=10,
+        window_seconds=0.2,
+    )
+
+    session.feed(chunk(1))
+    events = session.feed(chunk(1))
+
+    assert [(event.kind, event.command) for event in events] == [("command.detected", "enter")]
+
+
 class FakeTelemetry:
     def __init__(self):
         self.events = []

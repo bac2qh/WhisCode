@@ -11,4 +11,5 @@
 - Documented the floating recording overlay with stopwatch and live microphone levels.
 - Documented stricter wake defaults and wake confirmation tuning to reduce hands-free false starts from incidental sound.
 - Documented VAD-trimmed hands-free enrollment and the local calibration report for threshold tuning.
+- Documented trained hands-free key command slots for Page Up, Page Down, and Enter.
 - Documented padding VAD-trimmed reference samples to the detector window length.

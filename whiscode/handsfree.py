@@ -14,8 +14,11 @@ from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 
 DEFAULT_WAKE_DIR = Path.home() / ".config" / "whiscode" / "wake" / "wake"
 DEFAULT_END_DIR = Path.home() / ".config" / "whiscode" / "wake" / "end"
+DEFAULT_COMMAND_DIR = Path.home() / ".config" / "whiscode" / "wake" / "commands"
 DEFAULT_THRESHOLD = 0.055
 DEFAULT_WAKE_CONFIRMATIONS = 2
+DEFAULT_COMMAND_THRESHOLD = DEFAULT_THRESHOLD
+DEFAULT_COMMAND_CONFIRMATIONS = DEFAULT_WAKE_CONFIRMATIONS
 DEFAULT_WINDOW_SECONDS = 2.0
 DEFAULT_SLIDE_SECONDS = 0.25
 DEFAULT_TAIL_SECONDS = 1.0
@@ -27,16 +30,53 @@ DEFAULT_END_THRESHOLD = 0.055
 MIN_REFERENCE_FILES = 3
 
 
+@dataclass(frozen=True)
+class CommandSlot:
+    name: str
+    label: str
+    path: Path
+
+
+COMMAND_SLOTS = (
+    CommandSlot("page-up", "Page Up", DEFAULT_COMMAND_DIR / "page-up"),
+    CommandSlot("page-down", "Page Down", DEFAULT_COMMAND_DIR / "page-down"),
+    CommandSlot("enter", "Enter", DEFAULT_COMMAND_DIR / "enter"),
+)
+
+
+def command_reference_dirs(base_dir: Path = DEFAULT_COMMAND_DIR) -> dict[str, Path]:
+    base = Path(base_dir)
+    return {slot.name: base / slot.name for slot in COMMAND_SLOTS}
+
+
+def command_label(name: str) -> str:
+    for slot in COMMAND_SLOTS:
+        if slot.name == name:
+            return slot.label
+    return name
+
+
 def reference_sample_count(path: Path) -> int:
     return len(list(Path(path).glob("*.wav"))) if Path(path).exists() else 0
 
 
-def missing_reference_messages(wake_dir: Path, end_dir: Path, minimum: int = MIN_REFERENCE_FILES) -> list[str]:
+def missing_reference_messages(
+    wake_dir: Path,
+    end_dir: Path,
+    minimum: int = MIN_REFERENCE_FILES,
+    *,
+    command_dirs: dict[str, Path] | None = None,
+) -> list[str]:
     messages = []
     for label, path in (("wake", wake_dir), ("end", end_dir)):
         count = reference_sample_count(path)
         if count < minimum:
             messages.append(f"{label}: {count}/{minimum} WAV samples in {path}")
+    if command_dirs:
+        for name, path in command_dirs.items():
+            count = reference_sample_count(path)
+            if count < minimum:
+                messages.append(f"command {name}: {count}/{minimum} WAV samples in {path}")
     return messages
 
 
@@ -54,6 +94,7 @@ class HandsFreeEvent:
     audio: np.ndarray | None = None
     detection: Detection | None = None
     duration_seconds: float = 0.0
+    command: str | None = None
 
 
 class Detector(Protocol):
@@ -131,10 +172,13 @@ class HandsFreeSession:
         min_active_ratio: float = DEFAULT_MIN_ACTIVE_RATIO,
         active_level: float = DEFAULT_ACTIVE_LEVEL,
         wake_confirmations: int = DEFAULT_WAKE_CONFIRMATIONS,
+        command_detectors: dict[str, Detector] | None = None,
+        command_confirmations: int = DEFAULT_COMMAND_CONFIRMATIONS,
         level_callback: Any | None = None,
     ):
         self.wake_detector = wake_detector
         self.end_detector = end_detector
+        self.command_detectors = dict(command_detectors or {})
         self.sample_rate = sample_rate
         self.window_samples = max(1, int(window_seconds * sample_rate))
         self.slide_samples = max(1, int(slide_seconds * sample_rate))
@@ -147,6 +191,7 @@ class HandsFreeSession:
         self.min_active_ratio = min_active_ratio
         self.active_level = active_level
         self.wake_confirmations = max(1, int(wake_confirmations))
+        self.command_confirmations = max(1, int(command_confirmations))
         self.level_callback = level_callback
 
         self.state = "idle"
@@ -160,6 +205,7 @@ class HandsFreeSession:
         self._end_filled_samples = 0
         self._wake_confirmation_count = 0
         self._end_confirmation_count = 0
+        self._command_confirmation_counts = {name: 0 for name in self.command_detectors}
         self._distance_stats: dict[str, dict[str, float]] = {}
         self._gate_stats: dict[str, dict[str, float | str]] = {}
         self._last_distance_summary = time.monotonic()
@@ -186,6 +232,7 @@ class HandsFreeSession:
         self._end_filled_samples = 0
         self._wake_confirmation_count = 0
         self._end_confirmation_count = 0
+        self._command_confirmation_counts = {name: 0 for name in self.command_detectors}
 
     def manual_start(self) -> HandsFreeEvent:
         self._start_recording(source="manual")
@@ -205,10 +252,16 @@ class HandsFreeSession:
             self._wake_buffer = _shift_append(self._wake_buffer, chunk)
             self._wake_filled_samples = min(self.window_samples, self._wake_filled_samples + len(chunk))
             detection = self._maybe_detect(self.wake_detector, self._wake_buffer, "wake", self._wake_filled_samples)
-            detection = self._confirm_detection(detection, "wake", self.wake_confirmations)
             if detection:
-                self._start_recording(source="wake")
-                return [HandsFreeEvent("wake.detected", detection=detection)]
+                detection = self._confirm_detection(detection, "wake", self.wake_confirmations)
+                if detection:
+                    self._start_recording(source="wake")
+                    return [HandsFreeEvent("wake.detected", detection=detection)]
+                return []
+            self._confirm_detection(None, "wake", self.wake_confirmations)
+            command_event = self._detect_command()
+            if command_event:
+                return [command_event]
             return []
 
         self._recorded_samples += len(chunk)
@@ -266,7 +319,31 @@ class HandsFreeSession:
         self._end_filled_samples = 0
         self._wake_confirmation_count = 0
         self._end_confirmation_count = 0
+        self._command_confirmation_counts = {name: 0 for name in self.command_detectors}
         self._emit("handsfree.session_started_recording", source=source)
+
+    def _detect_command(self) -> HandsFreeEvent | None:
+        matches: list[tuple[str, Detection]] = []
+        for name, detector in self.command_detectors.items():
+            label = f"command.{name}"
+            detection = self._maybe_detect(detector, self._wake_buffer, label, self._wake_filled_samples)
+            if detection:
+                matches.append((name, detection))
+            else:
+                self._command_confirmation_counts[name] = 0
+        if not matches:
+            return None
+
+        name, detection = min(matches, key=lambda item: item[1].distance)
+        for other_name in self.command_detectors:
+            if other_name != name:
+                self._command_confirmation_counts[other_name] = 0
+        detection = self._confirm_command_detection(name, detection)
+        if detection:
+            event = HandsFreeEvent("command.detected", detection=detection, command=name)
+            self.reset_idle()
+            return event
+        return None
 
     def _append_recording_chunk(self, chunk: np.ndarray) -> None:
         pending = np.concatenate([self._pending_tail, chunk])
@@ -395,13 +472,13 @@ class HandsFreeSession:
             self.telemetry.emit(event, **properties)
 
     def _confirm_detection(self, detection: Detection | None, label: str, required: int) -> Detection | None:
-        count_attr = f"_{label}_confirmation_count"
+        count_attr = f"_{_safe_label(label)}_confirmation_count"
         required = max(1, int(required))
         if detection is None:
             setattr(self, count_attr, 0)
             return None
 
-        count = int(getattr(self, count_attr)) + 1
+        count = int(getattr(self, count_attr, 0)) + 1
         setattr(self, count_attr, count)
         if count < required:
             self._emit(
@@ -420,6 +497,41 @@ class HandsFreeSession:
             self._emit(
                 "handsfree.detector_confirmation_completed",
                 detector=label,
+                required=required,
+                distance=round(detection.distance, 6),
+                rms=round(detection.rms, 6) if detection.rms is not None else None,
+                active_ratio=round(detection.active_ratio, 6) if detection.active_ratio is not None else None,
+            )
+        return detection
+
+    def _confirm_command_detection(self, name: str, detection: Detection | None) -> Detection | None:
+        required = self.command_confirmations
+        detector_label = f"command.{name}"
+        if detection is None:
+            self._command_confirmation_counts[name] = 0
+            return None
+
+        count = int(self._command_confirmation_counts.get(name, 0)) + 1
+        self._command_confirmation_counts[name] = count
+        if count < required:
+            self._emit(
+                "handsfree.detector_confirmation_pending",
+                detector=detector_label,
+                command=name,
+                count=count,
+                required=required,
+                distance=round(detection.distance, 6),
+                rms=round(detection.rms, 6) if detection.rms is not None else None,
+                active_ratio=round(detection.active_ratio, 6) if detection.active_ratio is not None else None,
+            )
+            return None
+
+        self._command_confirmation_counts = {slot_name: 0 for slot_name in self.command_detectors}
+        if required > 1:
+            self._emit(
+                "handsfree.detector_confirmation_completed",
+                detector=detector_label,
+                command=name,
                 required=required,
                 distance=round(detection.distance, 6),
                 rms=round(detection.rms, 6) if detection.rms is not None else None,
@@ -514,6 +626,10 @@ def _update_min_max(stats: dict[str, float | str], name: str, value: float) -> N
     stats[min_key] = min(float(stats.get(min_key, value)), value)
     stats[max_key] = max(float(stats.get(max_key, value)), value)
     stats[last_key] = value
+
+
+def _safe_label(label: str) -> str:
+    return label.replace("-", "_").replace(".", "_")
 
 
 def process_hands_free_events(
