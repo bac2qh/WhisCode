@@ -94,9 +94,12 @@ uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
 uv run whiscode-enroll page-up pageup1.m4a pageup2.m4a pageup3.m4a
 uv run whiscode-enroll shift-enter shiftenter1.m4a shiftenter2.m4a shiftenter3.m4a
 uv run whiscode-enroll shift-tab shifttab1.m4a shifttab2.m4a shifttab3.m4a
+uv run whiscode-enroll tab tab1.m4a tab2.m4a tab3.m4a
+uv run whiscode-enroll arrow-up arrowup1.m4a arrowup2.m4a arrowup3.m4a
+uv run whiscode-enroll arrow-down arrowdown1.m4a arrowdown2.m4a arrowdown3.m4a
 ```
 
-Hands-free mode also supports five trained key command slots while idle: `page-up`, `page-down`, `enter`, `shift-enter`, and `shift-tab`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, Enter, Shift+Enter, or Shift+Tab key action. Command detection is disabled while recording or transcribing so dictated speech cannot press keys.
+Hands-free mode also supports eight trained key command slots while idle: `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, and `arrow-down`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, Enter, Shift+Enter, Shift+Tab, Tab, Arrow Up, or Arrow Down key action. Command detection is disabled while recording or transcribing so dictated speech cannot press keys.
 
 After enrollment, inspect the local detector score separation:
 

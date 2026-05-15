@@ -36,8 +36,20 @@ def test_press_key_command_maps_slots_to_physical_keys(monkeypatch):
     injector.press_key_command("enter")
     injector.press_key_command("shift-enter")
     injector.press_key_command("shift-tab")
+    injector.press_key_command("tab")
+    injector.press_key_command("arrow-up")
+    injector.press_key_command("arrow-down")
 
-    assert keyboard.tapped == [Key.page_up, Key.page_down, Key.enter, Key.enter, Key.tab]
+    assert keyboard.tapped == [
+        Key.page_up,
+        Key.page_down,
+        Key.enter,
+        Key.enter,
+        Key.tab,
+        Key.tab,
+        Key.up,
+        Key.down,
+    ]
     assert keyboard.events == [
         ("tap", Key.page_up),
         ("tap", Key.page_down),
@@ -48,6 +60,9 @@ def test_press_key_command_maps_slots_to_physical_keys(monkeypatch):
         ("press", Key.shift),
         ("tap", Key.tab),
         ("release", Key.shift),
+        ("tap", Key.tab),
+        ("tap", Key.up),
+        ("tap", Key.down),
     ]
 
 

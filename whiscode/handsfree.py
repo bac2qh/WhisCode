@@ -45,6 +45,9 @@ COMMAND_SLOTS = (
     CommandSlot("enter", "Enter", DEFAULT_COMMAND_DIR / "enter"),
     CommandSlot("shift-enter", "Shift+Enter", DEFAULT_COMMAND_DIR / "shift-enter"),
     CommandSlot("shift-tab", "Shift+Tab", DEFAULT_COMMAND_DIR / "shift-tab"),
+    CommandSlot("tab", "Tab", DEFAULT_COMMAND_DIR / "tab"),
+    CommandSlot("arrow-up", "Arrow Up", DEFAULT_COMMAND_DIR / "arrow-up"),
+    CommandSlot("arrow-down", "Arrow Down", DEFAULT_COMMAND_DIR / "arrow-down"),
 )
 
 

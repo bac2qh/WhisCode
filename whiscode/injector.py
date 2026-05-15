@@ -11,6 +11,9 @@ KEY_COMMANDS = {
     "enter": Key.enter,
     "shift-enter": (Key.shift, Key.enter),
     "shift-tab": (Key.shift, Key.tab),
+    "tab": Key.tab,
+    "arrow-up": Key.up,
+    "arrow-down": Key.down,
 }
 
 

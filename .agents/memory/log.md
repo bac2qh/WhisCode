@@ -23,3 +23,4 @@
 - Added shared recording duration cap memory after bounding manual and hands-free recording length by default.
 - Added shift key command memory after extending trained hands-free commands with Shift+Enter and Shift+Tab slots.
 - Added hands-free audio queue memory after decoupling microphone capture from detector processing to reduce PortAudio input overflows.
+- Added tab and arrow key command memory after extending trained hands-free commands with Tab, Arrow Up, and Arrow Down slots.
