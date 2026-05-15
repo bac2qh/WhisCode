@@ -13,4 +13,7 @@
   - `uv run whiscode-calibrate --help` succeeded.
   - `PYTHONPATH=. uv run python -m py_compile whiscode/enroll.py` succeeded.
   - `git diff --check` passed.
-- Immediate next step: merge the task branch back into local `main`.
+- Merged into local `main` by fast-forward; no merge commit.
+- Archived plan at `.agents/plans/archive/2026-05-14-pad-trimmed-references.md`.
+- Removed task worktree `.agents/worktrees/pad-trimmed-references` and deleted local branch `pad-trimmed-references`.
+- Immediate next step: push local `main` to `origin/main`, then re-run guided enrollment so the saved references are regenerated at the detector window length.
