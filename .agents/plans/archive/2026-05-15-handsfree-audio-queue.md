@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-15-handsfree-audio-queue-checkpoints.md`.
+- Implementation commits: `1ff9a58`, `b51a123`.
+- Merge commit: none; local `main` fast-forwarded to `b51a123`.
+- Verification: `uv run --with pytest python -m pytest` passed with 118 tests; focused hands-free/main CLI tests passed with 30 tests; `uv run whiscode --help` and `git diff --check` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/handsfree-audio-queue` and deleted local branch `handsfree-audio-queue`.
+- Summary: Shipped a bounded hands-free audio queue that decouples microphone capture from detector processing, added `--hands-free-audio-queue-seconds`, and added queue/drop/processing telemetry.
+
 # Decouple Hands-Free Audio Capture From Detection
 
 ## Summary
