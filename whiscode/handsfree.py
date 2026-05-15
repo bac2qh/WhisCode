@@ -41,6 +41,8 @@ COMMAND_SLOTS = (
     CommandSlot("page-up", "Page Up", DEFAULT_COMMAND_DIR / "page-up"),
     CommandSlot("page-down", "Page Down", DEFAULT_COMMAND_DIR / "page-down"),
     CommandSlot("enter", "Enter", DEFAULT_COMMAND_DIR / "enter"),
+    CommandSlot("shift-enter", "Shift+Enter", DEFAULT_COMMAND_DIR / "shift-enter"),
+    CommandSlot("shift-tab", "Shift+Tab", DEFAULT_COMMAND_DIR / "shift-tab"),
 )
 
 

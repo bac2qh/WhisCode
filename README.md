@@ -91,9 +91,11 @@ Existing audio files can still be imported manually:
 uv run whiscode-enroll wake wake1.m4a wake2.m4a wake3.m4a
 uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
 uv run whiscode-enroll page-up pageup1.m4a pageup2.m4a pageup3.m4a
+uv run whiscode-enroll shift-enter shiftenter1.m4a shiftenter2.m4a shiftenter3.m4a
+uv run whiscode-enroll shift-tab shifttab1.m4a shifttab2.m4a shifttab3.m4a
 ```
 
-Hands-free mode also supports three trained key command slots while idle: `page-up`, `page-down`, and `enter`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, or Enter key. Command detection is disabled while recording or transcribing so dictated speech cannot press keys.
+Hands-free mode also supports five trained key command slots while idle: `page-up`, `page-down`, `enter`, `shift-enter`, and `shift-tab`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, Enter, Shift+Enter, or Shift+Tab key action. Command detection is disabled while recording or transcribing so dictated speech cannot press keys.
 
 After enrollment, inspect the local detector score separation:
 

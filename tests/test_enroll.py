@@ -36,9 +36,9 @@ def test_parse_args_accepts_voice_memo_samples():
 
 
 def test_parse_args_accepts_command_samples():
-    args = parse_args(["page-up", "one.m4a", "two.m4a", "three.m4a", "--command-dir", "/tmp/commands"])
+    args = parse_args(["shift-tab", "one.m4a", "two.m4a", "three.m4a", "--command-dir", "/tmp/commands"])
 
-    assert args.kind == "page-up"
+    assert args.kind == "shift-tab"
     assert args.command_dir == Path("/tmp/commands")
 
 
@@ -131,7 +131,7 @@ def test_import_samples_uses_command_folder(tmp_path):
 
     with patch("subprocess.run", side_effect=fake_run):
         written = import_samples(
-            "page-down",
+            "shift-enter",
             samples,
             wake_dir=tmp_path / "wake",
             end_dir=tmp_path / "end",
@@ -139,7 +139,7 @@ def test_import_samples_uses_command_folder(tmp_path):
             preprocess_fn=lambda audio: audio,
         )
 
-    assert written[0] == command_dir / "page-down" / "page-down-01.wav"
+    assert written[0] == command_dir / "shift-enter" / "shift-enter-01.wav"
 
 
 def test_import_samples_requires_three_samples(tmp_path):
@@ -169,14 +169,18 @@ def test_record_guided_samples_records_wake_and_end_defaults(tmp_path):
         preprocess_fn=lambda audio: audio,
     )
 
-    assert len(written) == 15
+    assert len(written) == 21
     assert written[0] == tmp_path / "wake" / "wake-01.wav"
     assert written[3] == tmp_path / "end" / "end-01.wav"
     assert written[6] == tmp_path / "commands" / "page-up" / "page-up-01.wav"
     assert written[9] == tmp_path / "commands" / "page-down" / "page-down-01.wav"
     assert written[12] == tmp_path / "commands" / "enter" / "enter-01.wav"
-    assert len(captured_prompts) == 15
+    assert written[15] == tmp_path / "commands" / "shift-enter" / "shift-enter-01.wav"
+    assert written[18] == tmp_path / "commands" / "shift-tab" / "shift-tab-01.wav"
+    assert len(captured_prompts) == 21
     assert any("command phrase for Page Up" in prompt for prompt in captured_prompts)
+    assert any("command phrase for Shift+Enter" in prompt for prompt in captured_prompts)
+    assert any("command phrase for Shift+Tab" in prompt for prompt in captured_prompts)
     assert all(path.exists() for path in written)
 
 
@@ -194,8 +198,8 @@ def test_record_guided_samples_honors_count_and_seconds(tmp_path):
         preprocess_fn=lambda audio: audio,
     )
 
-    assert len(written) == 20
-    assert seconds_seen == [1.25] * 20
+    assert len(written) == 28
+    assert seconds_seen == [1.25] * 28
 
 
 class FakeTelemetry:
@@ -221,8 +225,8 @@ def test_record_guided_samples_emits_telemetry(tmp_path):
 
     event_names = [event for event, properties in telemetry.events]
     assert event_names[0] == "enrollment.guided_started"
-    assert event_names.count("enrollment.sample_started") == 15
-    assert event_names.count("enrollment.sample_completed") == 15
+    assert event_names.count("enrollment.sample_started") == 21
+    assert event_names.count("enrollment.sample_completed") == 21
     assert event_names[-1] == "enrollment.guided_completed"
 
 
@@ -259,8 +263,8 @@ def test_record_guided_samples_uses_overlay_for_each_sample(tmp_path):
         overlay=overlay,
     )
 
-    assert overlay.calls == ["show", "hide"] * 15
-    assert len(overlay.levels) == 15
+    assert overlay.calls == ["show", "hide"] * 21
+    assert len(overlay.levels) == 21
     np.testing.assert_array_equal(overlay.levels[0], np.array([0.25, -0.25], dtype=np.float32))
 
 

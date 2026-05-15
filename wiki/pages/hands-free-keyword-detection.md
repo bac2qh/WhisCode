@@ -10,7 +10,7 @@ The normal enrollment path records samples directly from the default microphone:
 uv run whiscode-enroll --record
 ```
 
-This records three wake samples, three end samples, and three samples for each key command slot. The command slots are `page-up`, `page-down`, and `enter`; the spoken phrase for each slot is arbitrary and comes from the user's recorded samples. Enrollment trims leading and trailing silence with local VAD, pads each result to the detector window, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
+This records three wake samples, three end samples, and three samples for each key command slot. The command slots are `page-up`, `page-down`, `enter`, `shift-enter`, and `shift-tab`; the spoken phrase for each slot is arbitrary and comes from the user's recorded samples. Enrollment trims leading and trailing silence with local VAD, pads each result to the detector window, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
 
 Existing audio files can still be imported manually:
 
@@ -18,6 +18,8 @@ Existing audio files can still be imported manually:
 uv run whiscode-enroll wake wake1.m4a wake2.m4a wake3.m4a
 uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
 uv run whiscode-enroll page-up pageup1.m4a pageup2.m4a pageup3.m4a
+uv run whiscode-enroll shift-enter shiftenter1.m4a shiftenter2.m4a shiftenter3.m4a
+uv run whiscode-enroll shift-tab shifttab1.m4a shifttab2.m4a shifttab3.m4a
 ```
 
 ## Runtime
@@ -32,7 +34,7 @@ If any wake, end, or command reference folder has fewer than three WAV files, st
 
 The wake phrase starts capture, the end phrase stops capture, and the captured audio between those phrases is passed to Whisper. WhisCode waits until a detector window is fully populated and has enough speech-like energy before calling the keyword matcher, so silence and low-level room noise do not trigger wake/end detection. Wake detection uses a stricter default threshold and requires two consecutive matching windows before recording starts. Use `--hands-free-debug` to print detector distances while tuning `--hands-free-threshold`, `--hands-free-end-threshold`, and `--hands-free-wake-confirmations`.
 
-While idle, WhisCode also checks the three trained command slots. A confirmed `page-up`, `page-down`, or `enter` command taps the corresponding physical key through `pynput`. Command detection is disabled while recording or transcribing so dictated text cannot inject keys. Tune commands separately with `--hands-free-command-threshold` and `--hands-free-command-confirmations`.
+While idle, WhisCode also checks the five trained command slots. A confirmed `page-up`, `page-down`, `enter`, `shift-enter`, or `shift-tab` command taps the corresponding physical key or key combo through `pynput`. Command detection is disabled while recording or transcribing so dictated text cannot inject keys. Tune commands separately with `--hands-free-command-threshold` and `--hands-free-command-confirmations`.
 
 The speech-energy gate can be tuned with `--hands-free-min-rms`, `--hands-free-min-active-ratio`, and `--hands-free-active-level`.
 

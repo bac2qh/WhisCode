@@ -9,6 +9,8 @@ KEY_COMMANDS = {
     "page-up": Key.page_up,
     "page-down": Key.page_down,
     "enter": Key.enter,
+    "shift-enter": (Key.shift, Key.enter),
+    "shift-tab": (Key.shift, Key.tab),
 }
 
 
@@ -29,4 +31,9 @@ def press_key_command(command: str) -> None:
         key = KEY_COMMANDS[command]
     except KeyError as e:
         raise ValueError(f"Unknown key command: {command}") from e
+    if isinstance(key, tuple):
+        modifier, target = key
+        with _keyboard.pressed(modifier):
+            _keyboard.tap(target)
+        return
     _keyboard.tap(key)

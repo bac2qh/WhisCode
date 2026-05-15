@@ -21,3 +21,4 @@
 - Added enrollment overlay memory after replacing guided enrollment notification banners with the floating recording overlay.
 - Added recording overlay crash memory after fixing AppKit timer text drawing and adding helper crash diagnostics.
 - Added shared recording duration cap memory after bounding manual and hands-free recording length by default.
+- Added shift key command memory after extending trained hands-free commands with Shift+Enter and Shift+Tab slots.

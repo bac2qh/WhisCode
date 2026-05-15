@@ -64,5 +64,7 @@ def test_build_report_includes_reference_telemetry_and_advisory_threshold(tmp_pa
 
     assert "wake within references: n=1 min=0.040000 p05=0.040000 median=0.040000 p95=0.040000 max=0.040000" in report
     assert "command page-up within references: n=1" in report
+    assert "command shift-enter within references: no data" in report
+    assert "command shift-tab within references: no data" in report
     assert "confirmed wake triggers: n=1 min=0.040000 p05=0.040000 median=0.040000 p95=0.040000 max=0.040000" in report
     assert "Advisory threshold: 0.065000" in report
