@@ -20,6 +20,8 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.hands_free_wake_confirmations == 2
     assert args.hands_free_command_threshold == 0.055
     assert args.hands_free_command_confirmations == 2
+    assert args.max_recording_seconds == 600.0
+    assert args.hands_free_max_seconds == 600.0
 
 
 def test_parse_args_hands_free_options():
@@ -43,6 +45,8 @@ def test_parse_args_hands_free_options():
         "0.1",
         "--hands-free-tail-seconds",
         "0.75",
+        "--max-recording-seconds",
+        "45",
         "--hands-free-max-seconds",
         "30",
         "--hands-free-min-rms",
@@ -78,6 +82,7 @@ def test_parse_args_hands_free_options():
     assert args.hands_free_window_seconds == 1.5
     assert args.hands_free_slide_seconds == 0.1
     assert args.hands_free_tail_seconds == 0.75
+    assert args.max_recording_seconds == 45
     assert args.hands_free_max_seconds == 30
     assert args.hands_free_min_rms == 0.01
     assert args.hands_free_min_active_ratio == 0.2
@@ -100,6 +105,20 @@ def test_parse_args_legacy_threshold_applies_to_end_when_end_threshold_omitted()
     assert args.hands_free_threshold == 0.08
     assert args.hands_free_end_threshold == 0.08
     assert args.hands_free_command_threshold == 0.08
+
+
+def test_parse_args_shared_max_recording_seconds_feeds_hands_free_default():
+    args = parse_args(["--max-recording-seconds", "45"])
+
+    assert args.max_recording_seconds == 45
+    assert args.hands_free_max_seconds == 45
+
+
+def test_parse_args_zero_disables_shared_max_recording_seconds():
+    args = parse_args(["--max-recording-seconds", "0"])
+
+    assert args.max_recording_seconds == 0
+    assert args.hands_free_max_seconds == 0
 
 
 def test_ensure_hands_free_references_returns_true_when_samples_exist(tmp_path):

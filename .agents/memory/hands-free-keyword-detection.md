@@ -26,3 +26,4 @@
 
 ## 2026-05-15
 - Added trained idle-only hands-free key command slots for `page-up`, `page-down`, and `enter`. Guided enrollment now records samples for wake, end, and each command slot; runtime loads separate local-wake detectors for commands and maps confirmed detections to physical Page Up, Page Down, and Enter key taps through `pynput`. Command detection is ignored while recording or transcribing, uses command-specific threshold/confirmation CLI flags, and emits bounded command/key-injection telemetry without raw audio or transcripts.
+- Added a shared `--max-recording-seconds` duration cap that defaults to `600.0` seconds and feeds hands-free timeout behavior unless the legacy `--hands-free-max-seconds` override is set. The cap limits buffered audio and transcription workload after accidental wake detections.

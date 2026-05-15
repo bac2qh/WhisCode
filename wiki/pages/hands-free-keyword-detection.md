@@ -36,6 +36,8 @@ While idle, WhisCode also checks the three trained command slots. A confirmed `p
 
 The speech-energy gate can be tuned with `--hands-free-min-rms`, `--hands-free-min-active-ratio`, and `--hands-free-active-level`.
 
+Recordings auto-finalize after `--max-recording-seconds`, which defaults to `600.0` seconds and also applies to Right Shift recording. Set it to `0` to disable the cap. The legacy `--hands-free-max-seconds` flag remains available as a hands-free-only override. This bounds buffered audio and transcription work after accidental wake detections.
+
 Inspect reference and telemetry distance distributions with:
 
 ```bash
@@ -53,5 +55,7 @@ Hands-free mode and guided enrollment write local JSONL telemetry by default:
 ```
 
 The telemetry records app lifecycle, enrollment progress, reference counts, detector load results, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/command detections, key-command injection outcomes, recording durations, transcription outcomes, and suspected rapid trigger loops. It does not record raw audio, transcripts, prompts, hotword contents, or typed text.
+
+`handsfree.audio_overflow` means PortAudio reported that the microphone read loop fell behind. It is not a direct macOS swap or memory-overflow signal, but it is useful evidence when correlating accidental wake loops with system load.
 
 Use `--telemetry-path PATH` to write to another JSONL file, or `--no-telemetry` to disable local telemetry.

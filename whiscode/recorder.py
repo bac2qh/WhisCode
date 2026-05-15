@@ -54,23 +54,58 @@ def _resample(audio: np.ndarray, orig_rate: int, target_rate: int) -> np.ndarray
 
 
 class Recorder:
-    def __init__(self, level_callback: Callable[[float], None] | None = None):
+    def __init__(
+        self,
+        level_callback: Callable[[float], None] | None = None,
+        max_seconds: float = 0.0,
+        timeout_callback: Callable[[], None] | None = None,
+    ):
         self._chunks: list[np.ndarray] = []
         self._stream: sd.InputStream | None = None
         self._actual_rate: int = SAMPLE_RATE
         self._level_callback = level_callback
+        self._max_seconds = max(0.0, float(max_seconds))
+        self._max_frames = 0
+        self._recorded_frames = 0
+        self._timeout_callback = timeout_callback
+        self._timeout_reported = False
 
     def start(self):
         self._chunks = []
+        self._max_frames = 0
+        self._recorded_frames = 0
+        self._timeout_reported = False
         self._stream, self._actual_rate = _open_stream(self._callback)
+        if self._max_seconds > 0:
+            self._max_frames = max(1, int(self._max_seconds * self._actual_rate))
         if self._actual_rate != SAMPLE_RATE:
             print(f"  (recording at {self._actual_rate}Hz, will resample to {SAMPLE_RATE}Hz)")
         self._stream.start()
 
     def _callback(self, indata: np.ndarray, frames, time_info, status):
-        self._chunks.append(indata.copy())
-        if self._level_callback:
-            self._level_callback(_audio_level(indata))
+        chunk = indata
+        if self._max_frames:
+            remaining = self._max_frames - self._recorded_frames
+            if remaining <= 0:
+                self._report_timeout()
+                return
+            chunk = indata[:remaining]
+
+        if len(chunk):
+            self._chunks.append(chunk.copy())
+            self._recorded_frames += len(chunk)
+            if self._level_callback:
+                self._level_callback(_audio_level(chunk))
+
+        if self._max_frames and self._recorded_frames >= self._max_frames:
+            self._report_timeout()
+
+    def _report_timeout(self) -> None:
+        if self._timeout_reported:
+            return
+        self._timeout_reported = True
+        if self._timeout_callback:
+            self._timeout_callback()
 
     def stop(self) -> np.ndarray:
         if self._stream is not None:

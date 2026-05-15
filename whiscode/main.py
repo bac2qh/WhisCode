@@ -75,7 +75,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, help=f"Detector window size in seconds (default: {DEFAULT_WINDOW_SECONDS})")
     parser.add_argument("--hands-free-slide-seconds", type=float, default=DEFAULT_SLIDE_SECONDS, help=f"Detector slide size in seconds (default: {DEFAULT_SLIDE_SECONDS})")
     parser.add_argument("--hands-free-tail-seconds", type=float, default=DEFAULT_TAIL_SECONDS, help=f"Audio tail to discard when the end phrase is detected (default: {DEFAULT_TAIL_SECONDS})")
-    parser.add_argument("--hands-free-max-seconds", type=float, default=DEFAULT_MAX_SECONDS, help=f"Maximum recording length before timeout; 0 disables (default: {DEFAULT_MAX_SECONDS})")
+    parser.add_argument("--max-recording-seconds", type=float, default=DEFAULT_MAX_SECONDS, help=f"Maximum recording length before timeout; 0 disables (default: {DEFAULT_MAX_SECONDS})")
+    parser.add_argument("--hands-free-max-seconds", type=float, default=None, help="Legacy hands-free-only recording length limit; overrides --max-recording-seconds for hands-free when set")
     parser.add_argument("--hands-free-min-rms", type=float, default=DEFAULT_MIN_RMS, help=f"Minimum detector-window RMS required before keyword matching (default: {DEFAULT_MIN_RMS})")
     parser.add_argument("--hands-free-min-active-ratio", type=float, default=DEFAULT_MIN_ACTIVE_RATIO, help=f"Minimum ratio of active samples required before keyword matching (default: {DEFAULT_MIN_ACTIVE_RATIO})")
     parser.add_argument("--hands-free-active-level", type=float, default=DEFAULT_ACTIVE_LEVEL, help=f"Absolute sample level counted as active for keyword matching (default: {DEFAULT_ACTIVE_LEVEL})")
@@ -99,6 +100,8 @@ def parse_args(argv: list[str] | None = None):
         args.hands_free_end_threshold = args.hands_free_threshold if wake_threshold_supplied else DEFAULT_END_THRESHOLD
     if args.hands_free_command_threshold is None:
         args.hands_free_command_threshold = args.hands_free_threshold if wake_threshold_supplied else DEFAULT_COMMAND_THRESHOLD
+    if args.hands_free_max_seconds is None:
+        args.hands_free_max_seconds = args.max_recording_seconds
     return args
 
 
@@ -211,10 +214,14 @@ def main():
 
     state = State.IDLE
     state_lock = threading.Lock()
-    recorder = Recorder(level_callback=overlay.update_level)
     shutdown_event = threading.Event()
     hotkey_queue = queue.Queue()
     handsfree_queue = queue.Queue()
+    recorder = Recorder(
+        level_callback=overlay.update_level,
+        max_seconds=args.max_recording_seconds,
+        timeout_callback=lambda: hotkey_queue.put_nowait("timeout"),
+    )
     handsfree_session = None
     handsfree_loop = None
     last_hotkey_time = 0.0
@@ -323,7 +330,7 @@ def main():
         nonlocal state
         while not shutdown_event.is_set():
             try:
-                hotkey_queue.get(timeout=0.5)
+                event = hotkey_queue.get(timeout=0.5)
             except queue.Empty:
                 continue
 
@@ -332,18 +339,34 @@ def main():
                     telemetry.emit("hotkey.ignored", reason="transcribing")
                     continue
 
+                if event == "timeout" and state != State.RECORDING:
+                    telemetry.emit("recording.timeout_ignored", reason=state.value)
+                    continue
+
                 if state == State.IDLE:
+                    if event == "timeout":
+                        continue
                     transition_to(State.RECORDING, "hotkey")
                     recorder.start()
                     show_recording_status()
                     print("Recording...")
 
                 elif state == State.RECORDING:
-                    transition_to(State.TRANSCRIBING, "hotkey")
+                    source = "recording_timeout" if event == "timeout" else "hotkey"
+                    transition_to(State.TRANSCRIBING, source)
                     audio = recorder.stop()
+                    audio_seconds = len(audio) / SAMPLE_RATE
                     hide_recording_status()
+                    if event == "timeout":
+                        print(f"Recording limit reached at {audio_seconds:.2f}s.")
+                        telemetry.emit(
+                            "recording.timeout",
+                            mode="hotkey",
+                            max_seconds=args.max_recording_seconds,
+                            audio_seconds=round(audio_seconds, 3),
+                        )
                     print("Transcribing...")
-                    start_transcription(audio, len(audio) / SAMPLE_RATE)
+                    start_transcription(audio, audio_seconds)
 
     def handsfree_worker():
         while not shutdown_event.is_set():

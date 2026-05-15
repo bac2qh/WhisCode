@@ -15,3 +15,6 @@
 - Documented the guided enrollment recording overlay replacing enrollment notification banners.
 - Documented recording overlay helper crash diagnostics.
 - Documented padding VAD-trimmed reference samples to the detector window length.
+
+## 2026-05-15
+- Documented the shared 10-minute recording duration cap and clarified PortAudio overflow telemetry.

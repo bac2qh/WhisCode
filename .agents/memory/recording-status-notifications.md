@@ -16,3 +16,4 @@
 - Replaced guided enrollment sample recording banners with the same floating recording overlay used by normal recording.
 - Enrollment capture now streams microphone levels to the overlay while each sample records, hides the overlay on success or failure, and supports `uv run whiscode-enroll --record --no-recording-overlay`.
 - Fixed an overlay helper crash that made the overlay invisible. The AppKit view was calling `drawAtPoint_withAttributes_` on a Python `str`; timer text now renders through `NSAttributedString`. Overlay helper exits now emit bounded `recording_overlay.disabled` telemetry and a stderr warning instead of failing silently.
+- Manual Right Shift recording now uses the shared `--max-recording-seconds` cap. When the cap is reached, the recorder stops appending microphone chunks, the main loop auto-finalizes the recording, and local telemetry emits `recording.timeout` with bounded duration metadata.

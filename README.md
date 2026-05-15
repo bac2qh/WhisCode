@@ -36,6 +36,7 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 | `--language LANG` | `auto` | Language code (e.g. `en`, `zh`, `ja`) or `auto` to detect from audio |
 | `--prompt TEXT` | — | Additional context to improve transcription accuracy |
 | `--hotwords-file PATH` | `~/.config/whiscode/hotwords.txt` | Path to hotwords/replacements config file |
+| `--max-recording-seconds FLOAT` | `600.0` | Maximum recording length before auto-finalizing; `0` disables the cap |
 | `--refine` | off | Polish transcription with a local Ollama LLM (prose mode) |
 | `--refine-model MODEL` | `qwen3.5:4b` | Ollama model to use for refinement |
 | `--hands-free` | off | Use local start/end phrase detection instead of Right Shift as the primary trigger |
@@ -65,6 +66,8 @@ Use `--no-recording-overlay` to disable it. Use `--recording-notifications` with
 ## Hands-Free Mode
 
 Hands-free mode keeps the microphone open and uses local keyword matching for your recorded start and end phrases. Whisper only receives the captured audio between those phrases.
+
+Recordings auto-finalize after `--max-recording-seconds` seconds, which defaults to 10 minutes. This cap applies to both Right Shift recording and hands-free recording, and bounds buffered audio if a wake phrase fires accidentally. The older `--hands-free-max-seconds` flag is still accepted as a hands-free-only override.
 
 Start hands-free mode:
 
@@ -111,6 +114,8 @@ Hands-free mode and guided enrollment write local JSONL telemetry to:
 ```
 
 Use it to inspect wake/end/command detections, detector distances, recording durations, key-command injection outcomes, transcription outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes these distances alongside reference-sample distances. Telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, or typed text. Disable it with `--no-telemetry` or write to another file with `--telemetry-path`.
+
+`handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. It is not a raw memory-overflow signal, but the recording duration cap limits how much audio WhisCode buffers and sends to transcription after accidental starts.
 
 ## Refine Mode
 
