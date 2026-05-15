@@ -14,3 +14,4 @@
 - Added recording overlay memory after replacing normal recording banners with a floating stopwatch and live microphone-level UI.
 - Added hands-free wake confirmation memory after tightening wake defaults to reduce false starts from incidental sound.
 - Added hands-free enrollment calibration memory after trimming reference samples with local VAD and adding a local distance report command.
+- Added hands-free reference padding memory after fixing short VAD-trimmed references that no longer matched the runtime detector window.

@@ -10,7 +10,7 @@ The normal enrollment path records samples directly from the default microphone:
 uv run whiscode-enroll --record
 ```
 
-This records three wake samples followed by three end samples, trims leading and trailing silence with local VAD, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
+This records three wake samples followed by three end samples, trims leading and trailing silence with local VAD, pads each result to the detector window, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
 
 Existing audio files can still be imported manually:
 

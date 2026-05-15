@@ -70,7 +70,7 @@ Start hands-free mode:
 uv run whiscode --hands-free
 ```
 
-If samples are missing, WhisCode offers guided enrollment and records three wake samples followed by three end samples from your default microphone. Each sample is trimmed with local VAD before it is saved, so the reference WAVs focus on the phrase instead of leading and trailing silence.
+If samples are missing, WhisCode offers guided enrollment and records three wake samples followed by three end samples from your default microphone. Each sample is trimmed with local VAD and then padded to the detector window before it is saved, so the reference WAVs focus on the phrase while still matching the runtime comparison window.
 
 You can also run enrollment directly:
 

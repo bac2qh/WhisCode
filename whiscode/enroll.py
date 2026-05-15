@@ -9,13 +9,13 @@ from typing import Any
 
 import numpy as np
 
-from whiscode.handsfree import DEFAULT_END_DIR, DEFAULT_WAKE_DIR, MIN_REFERENCE_FILES
+from whiscode.handsfree import DEFAULT_END_DIR, DEFAULT_WAKE_DIR, DEFAULT_WINDOW_SECONDS, MIN_REFERENCE_FILES
 from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 from whiscode.status_notifier import notify_recording_completed, notify_recording_now
 from whiscode.telemetry import telemetry_from_args
 
 DEFAULT_ENROLL_SECONDS = 2.0
-FALLBACK_MIN_REFERENCE_SAMPLES = 12400
+DEFAULT_REFERENCE_SECONDS = DEFAULT_WINDOW_SECONDS
 
 
 def parse_args(argv: list[str] | None = None):
@@ -95,11 +95,7 @@ def preprocess_reference_audio(
         audio = np.asarray(trimmed, dtype=np.float32).flatten()
 
     if min_samples is None:
-        try:
-            from lwake.record import MIN_SAMPLES
-        except ImportError:
-            MIN_SAMPLES = FALLBACK_MIN_REFERENCE_SAMPLES
-        min_samples = MIN_SAMPLES
+        min_samples = int(DEFAULT_REFERENCE_SECONDS * sample_rate)
 
     if len(audio) < min_samples:
         pad_total = min_samples - len(audio)
@@ -107,7 +103,6 @@ def preprocess_reference_audio(
         pad_right = pad_total - pad_left
         audio = np.pad(audio, (pad_left, pad_right), mode="constant")
     return audio.astype(np.float32)
-
 
 def import_samples(
     kind: str,

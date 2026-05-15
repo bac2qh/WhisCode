@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from whiscode.enroll import (
+    DEFAULT_REFERENCE_SECONDS,
     import_samples,
     parse_args,
     preprocess_reference_audio,
@@ -218,6 +219,19 @@ def test_preprocess_reference_audio_trims_and_pads():
     )
 
     np.testing.assert_array_equal(processed, np.array([0, 0, 3, 4, 5, 6, 0, 0], dtype=np.float32))
+
+
+def test_preprocess_reference_audio_defaults_to_detector_window_length():
+    audio = np.arange(10, dtype=np.float32)
+
+    processed = preprocess_reference_audio(
+        audio,
+        sample_rate=10,
+        trim_fn=lambda shaped, sample_rate: shaped[3:7],
+    )
+
+    assert len(processed) == int(DEFAULT_REFERENCE_SECONDS * 10)
+    np.testing.assert_array_equal(processed[8:12], np.array([3, 4, 5, 6], dtype=np.float32))
 
 
 def test_preprocess_reference_audio_preserves_audio_when_trim_finds_no_speech():
