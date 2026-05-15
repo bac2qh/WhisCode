@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-15-tab-arrow-command-slots-checkpoints.md`.
+- Implementation commits: `b356283`, `8bb5db9`.
+- Merge commit: none; local `main` fast-forwarded to `8bb5db9`.
+- Verification: `uv run --with pytest python -m pytest` passed with 118 tests; focused command/enrollment/main CLI/calibration/hands-free tests passed with 56 tests; `uv run whiscode --help`, `uv run whiscode-enroll --help`, and `git diff --check` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/tab-arrow-command-slots` and deleted local branch `tab-arrow-command-slots`.
+- Summary: Shipped `tab`, `arrow-up`, and `arrow-down` trained hands-free command slots, mapped them to Tab, Arrow Up, and Arrow Down keys, and updated enrollment, startup checks, calibration visibility, tests, docs, and memory.
+
 # Add Tab And Arrow Voice Command Slots
 
 ## Summary
