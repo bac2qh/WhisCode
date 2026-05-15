@@ -21,3 +21,11 @@
   - `uv run whiscode --help` passed.
   - `git diff --check` passed.
 - Immediate next step: commit this checkpoint update, then close out to local `main`.
+
+## 2026-05-15 Closeout
+
+- Merged `enrollment-recording-overlay` into local `main` with a fast-forward from `bae07e0` to `1a819d7`; no merge commit was created.
+- Archived the plan to `.agents/plans/archive/2026-05-15-enrollment-recording-overlay.md` with a closeout note.
+- Removed `.agents/worktrees/enrollment-recording-overlay` and deleted local branch `enrollment-recording-overlay`.
+- Verification carried forward from implementation: `uv run --with pytest python -m pytest` passed with 108 tests; `uv run whiscode-enroll --help`, `uv run whiscode --help`, and `git diff --check` passed.
+- Immediate next step: none for this plan.

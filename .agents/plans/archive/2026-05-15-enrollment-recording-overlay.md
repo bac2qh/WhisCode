@@ -1,3 +1,13 @@
+# Closeout
+
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-15-enrollment-recording-overlay-checkpoints.md`.
+- Implementation commits: `8336e05` (`Use recording overlay during enrollment`), `1a819d7` (`Record enrollment overlay checkpoint`).
+- Merge result: fast-forwarded local `main` from `bae07e0` to `1a819d7`; no merge commit was created.
+- Verification performed: `uv run --with pytest python -m pytest` passed with 108 tests; `uv run whiscode-enroll --help`, `uv run whiscode --help`, and `git diff --check` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/enrollment-recording-overlay` and deleted local branch `enrollment-recording-overlay`.
+- Summary: guided enrollment now uses the floating recording overlay with waveform/timer by default instead of notification banners, with `--no-recording-overlay` available for enrollment.
+
 # Replace Enrollment Banners With Recording Overlay
 
 ## Summary
