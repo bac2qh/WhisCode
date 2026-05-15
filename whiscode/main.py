@@ -12,6 +12,7 @@ from pynput import keyboard
 
 from whiscode.handsfree import (
     COMMAND_SLOTS,
+    DEFAULT_AUDIO_QUEUE_SECONDS,
     DEFAULT_COMMAND_DIR,
     DEFAULT_COMMAND_CONFIRMATIONS,
     DEFAULT_COMMAND_THRESHOLD,
@@ -77,6 +78,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-tail-seconds", type=float, default=DEFAULT_TAIL_SECONDS, help=f"Audio tail to discard when the end phrase is detected (default: {DEFAULT_TAIL_SECONDS})")
     parser.add_argument("--max-recording-seconds", type=float, default=DEFAULT_MAX_SECONDS, help=f"Maximum recording length before timeout; 0 disables (default: {DEFAULT_MAX_SECONDS})")
     parser.add_argument("--hands-free-max-seconds", type=float, default=None, help="Legacy hands-free-only recording length limit; overrides --max-recording-seconds for hands-free when set")
+    parser.add_argument("--hands-free-audio-queue-seconds", type=float, default=DEFAULT_AUDIO_QUEUE_SECONDS, help=f"Queued hands-free audio between mic capture and detection before oldest chunks are dropped (default: {DEFAULT_AUDIO_QUEUE_SECONDS})")
     parser.add_argument("--hands-free-min-rms", type=float, default=DEFAULT_MIN_RMS, help=f"Minimum detector-window RMS required before keyword matching (default: {DEFAULT_MIN_RMS})")
     parser.add_argument("--hands-free-min-active-ratio", type=float, default=DEFAULT_MIN_ACTIVE_RATIO, help=f"Minimum ratio of active samples required before keyword matching (default: {DEFAULT_MIN_ACTIVE_RATIO})")
     parser.add_argument("--hands-free-active-level", type=float, default=DEFAULT_ACTIVE_LEVEL, help=f"Absolute sample level counted as active for keyword matching (default: {DEFAULT_ACTIVE_LEVEL})")
@@ -531,7 +533,13 @@ def main():
             command_confirmations=args.hands_free_command_confirmations,
             level_callback=overlay.update_level,
         )
-        handsfree_loop = HandsFreeAudioLoop(handsfree_session, handsfree_queue, stop_event=shutdown_event, telemetry=telemetry)
+        handsfree_loop = HandsFreeAudioLoop(
+            handsfree_session,
+            handsfree_queue,
+            stop_event=shutdown_event,
+            telemetry=telemetry,
+            audio_queue_seconds=args.hands_free_audio_queue_seconds,
+        )
         handsfree_loop.start()
         print("Hands-free mode enabled. Right Shift remains available as a fallback.")
         threading.Thread(target=handsfree_worker, daemon=True).start()

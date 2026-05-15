@@ -44,6 +44,7 @@ Press **Right Shift** to start recording, press again to stop. The transcribed t
 | `--hands-free-end-threshold FLOAT` | `0.055` | Detection threshold for end phrase matching |
 | `--hands-free-command-threshold FLOAT` | `0.055` | Detection threshold for hands-free key command matching |
 | `--hands-free-tail-seconds FLOAT` | `1.0` | Audio tail to discard when the end phrase is detected |
+| `--hands-free-audio-queue-seconds FLOAT` | `10.0` | Queued hands-free audio allowed between mic capture and detection before oldest chunks are dropped |
 | `--hands-free-min-rms FLOAT` | `0.006` | Minimum detector-window RMS before keyword matching |
 | `--hands-free-min-active-ratio FLOAT` | `0.05` | Minimum ratio of active samples before keyword matching |
 | `--hands-free-active-level FLOAT` | `0.01` | Absolute sample level counted as active |
@@ -65,7 +66,7 @@ Use `--no-recording-overlay` to disable it. Use `--recording-notifications` with
 
 ## Hands-Free Mode
 
-Hands-free mode keeps the microphone open and uses local keyword matching for your recorded start and end phrases. Whisper only receives the captured audio between those phrases.
+Hands-free mode keeps the microphone open and uses local keyword matching for your recorded start and end phrases. The microphone capture loop continuously drains audio into a bounded queue, and a separate detector worker runs wake/end/command matching so detector work does not block microphone reads. Whisper only receives the captured audio between the start and end phrases.
 
 Recordings auto-finalize after `--max-recording-seconds` seconds, which defaults to 10 minutes. This cap applies to both Right Shift recording and hands-free recording, and bounds buffered audio if a wake phrase fires accidentally. The older `--hands-free-max-seconds` flag is still accepted as a hands-free-only override.
 
@@ -117,7 +118,7 @@ Hands-free mode and guided enrollment write local JSONL telemetry to:
 
 Use it to inspect wake/end/command detections, detector distances, recording durations, key-command injection outcomes, transcription outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes these distances alongside reference-sample distances. Telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, or typed text. Disable it with `--no-telemetry` or write to another file with `--telemetry-path`.
 
-`handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. It is not a raw memory-overflow signal, but the recording duration cap limits how much audio WhisCode buffers and sends to transcription after accidental starts.
+`handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. WhisCode keeps microphone capture lightweight and uses a bounded detector queue to reduce this. If detector processing still falls behind, `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` show how much queued audio was dropped and how long detection took. These diagnostics do not include raw audio or transcript text.
 
 ## Refine Mode
 

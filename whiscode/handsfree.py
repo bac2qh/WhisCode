@@ -5,8 +5,9 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 import numpy as np
 
@@ -23,6 +24,7 @@ DEFAULT_WINDOW_SECONDS = 2.0
 DEFAULT_SLIDE_SECONDS = 0.25
 DEFAULT_TAIL_SECONDS = 1.0
 DEFAULT_MAX_SECONDS = 600.0
+DEFAULT_AUDIO_QUEUE_SECONDS = 10.0
 DEFAULT_MIN_RMS = 0.006
 DEFAULT_MIN_ACTIVE_RATIO = 0.05
 DEFAULT_ACTIVE_LEVEL = 0.01
@@ -97,6 +99,12 @@ class HandsFreeEvent:
     detection: Detection | None = None
     duration_seconds: float = 0.0
     command: str | None = None
+
+
+@dataclass(frozen=True)
+class AudioChunk:
+    audio: np.ndarray
+    sample_rate: int
 
 
 class Detector(Protocol):
@@ -554,46 +562,182 @@ class HandsFreeAudioLoop:
         *,
         stop_event: threading.Event,
         telemetry: Any | None = None,
+        audio_queue_seconds: float = DEFAULT_AUDIO_QUEUE_SECONDS,
+        stream_factory: Callable[[], tuple[Any, int]] = open_input_stream,
     ):
         self.session = session
         self.event_queue = event_queue
         self.stop_event = stop_event
-        self._thread: threading.Thread | None = None
         self.telemetry = telemetry
+        self.audio_queue_seconds = max(0.0, float(audio_queue_seconds))
+        max_chunks = max(1, ceil(self.audio_queue_seconds / (self.session.slide_samples / SAMPLE_RATE)))
+        self._audio_queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=max_chunks)
+        self._stream_factory = stream_factory
+        self._capture_thread: threading.Thread | None = None
+        self._detector_thread: threading.Thread | None = None
+        self._overflow_count = 0
+        self._dropped_count = 0
+        self._processed_count = 0
+        self._processing_total_seconds = 0.0
+        self._processing_max_seconds = 0.0
+        self._last_queue_summary = time.monotonic()
+        self._last_processing_summary = time.monotonic()
+        self._stats_lock = threading.Lock()
 
     def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
+        self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self._detector_thread = threading.Thread(target=self._detector_loop, daemon=True)
+        self._detector_thread.start()
+        self._capture_thread.start()
 
     def join(self, timeout: float | None = None) -> None:
-        if self._thread:
-            self._thread.join(timeout=timeout)
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        for thread in (self._capture_thread, self._detector_thread):
+            if not thread:
+                continue
+            remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+            thread.join(timeout=remaining)
 
-    def _run(self) -> None:
+    def _capture_loop(self) -> None:
         try:
-            stream, actual_rate = open_input_stream()
+            stream, actual_rate = self._stream_factory()
             slide_samples = max(1, int(self.session.slide_samples * actual_rate / SAMPLE_RATE))
-            overflow_count = 0
             with stream:
                 print(f"handsfree.started sample_rate={actual_rate}")
-                self._emit("handsfree.audio_loop_started", sample_rate=actual_rate, slide_samples=slide_samples)
+                self._emit(
+                    "handsfree.audio_loop_started",
+                    sample_rate=actual_rate,
+                    slide_samples=slide_samples,
+                    audio_queue_seconds=self.audio_queue_seconds,
+                    audio_queue_max_chunks=self._audio_queue.maxsize,
+                )
                 while not self.stop_event.is_set():
                     data, overflowed = stream.read(slide_samples)
                     if overflowed:
-                        overflow_count += 1
+                        with self._stats_lock:
+                            self._overflow_count += 1
+                            overflow_count = self._overflow_count
                         print("handsfree.audio.overflow", file=sys.stderr)
                         if overflow_count == 1 or overflow_count % 10 == 0:
                             self._emit("handsfree.audio_overflow", count=overflow_count)
                     chunk = np.asarray(data[:, 0], dtype=np.float32)
-                    if actual_rate != SAMPLE_RATE:
-                        chunk = _resample(chunk, actual_rate, SAMPLE_RATE)
-                    for event in self.session.feed(chunk):
-                        self.event_queue.put(event)
-                self._emit("handsfree.audio_loop_stopped", overflow_count=overflow_count)
+                    self._enqueue_audio_chunk(AudioChunk(chunk.copy(), actual_rate))
+                    self._maybe_emit_queue_summary()
+                self._emit_queue_summary(final=True)
+                self._emit(
+                    "handsfree.audio_loop_stopped",
+                    overflow_count=self._overflow_count,
+                    dropped_count=self._dropped_count,
+                    queue_size=self._audio_queue.qsize(),
+                )
         except Exception as e:
             self.event_queue.put(HandsFreeEvent("detector.error"))
-            print(f"handsfree.detector.error error={e}", file=sys.stderr)
+            print(f"handsfree.audio_loop.error error={e}", file=sys.stderr)
             self._emit("handsfree.audio_loop_error", error_type=type(e).__name__)
+
+    def _detector_loop(self) -> None:
+        while not self.stop_event.is_set() or not self._audio_queue.empty():
+            try:
+                audio_chunk = self._audio_queue.get(timeout=0.05)
+            except queue.Empty:
+                continue
+
+            started = time.monotonic()
+            try:
+                chunk = audio_chunk.audio
+                if audio_chunk.sample_rate != SAMPLE_RATE:
+                    chunk = _resample(chunk, audio_chunk.sample_rate, SAMPLE_RATE)
+                for event in self.session.feed(chunk):
+                    self.event_queue.put(event)
+            except Exception as e:
+                self.event_queue.put(HandsFreeEvent("detector.error"))
+                print(f"handsfree.detector.error error={e}", file=sys.stderr)
+                self._emit("handsfree.audio_loop_error", error_type=type(e).__name__)
+            finally:
+                elapsed = time.monotonic() - started
+                with self._stats_lock:
+                    self._processed_count += 1
+                    self._processing_total_seconds += elapsed
+                    self._processing_max_seconds = max(self._processing_max_seconds, elapsed)
+                self._audio_queue.task_done()
+                self._maybe_emit_processing_summary()
+        self._emit_processing_summary(final=True)
+
+    def _enqueue_audio_chunk(self, audio_chunk: AudioChunk) -> None:
+        try:
+            self._audio_queue.put_nowait(audio_chunk)
+            return
+        except queue.Full:
+            pass
+
+        try:
+            self._audio_queue.get_nowait()
+            self._audio_queue.task_done()
+        except queue.Empty:
+            pass
+        with self._stats_lock:
+            self._dropped_count += 1
+            dropped_count = self._dropped_count
+        if dropped_count == 1 or dropped_count % 10 == 0:
+            self._emit(
+                "handsfree.audio_queue_dropped",
+                count=dropped_count,
+                queue_size=self._audio_queue.qsize(),
+                queue_max_chunks=self._audio_queue.maxsize,
+                audio_queue_seconds=self.audio_queue_seconds,
+            )
+        self._audio_queue.put_nowait(audio_chunk)
+
+    def _maybe_emit_queue_summary(self) -> None:
+        now = time.monotonic()
+        if now - self._last_queue_summary < 5.0:
+            return
+        self._last_queue_summary = now
+        self._emit_queue_summary(final=False)
+
+    def _emit_queue_summary(self, *, final: bool) -> None:
+        with self._stats_lock:
+            overflow_count = self._overflow_count
+            dropped_count = self._dropped_count
+        self._emit(
+            "handsfree.audio_queue_summary",
+            final=final,
+            queue_size=self._audio_queue.qsize(),
+            queue_max_chunks=self._audio_queue.maxsize,
+            audio_queue_seconds=self.audio_queue_seconds,
+            overflow_count=overflow_count,
+            dropped_count=dropped_count,
+            session_state=self.session.state,
+        )
+
+    def _maybe_emit_processing_summary(self) -> None:
+        now = time.monotonic()
+        if now - self._last_processing_summary < 5.0:
+            return
+        self._last_processing_summary = now
+        self._emit_processing_summary(final=False)
+
+    def _emit_processing_summary(self, *, final: bool) -> None:
+        with self._stats_lock:
+            processed_count = self._processed_count
+            total_seconds = self._processing_total_seconds
+            max_seconds = self._processing_max_seconds
+            self._processed_count = 0
+            self._processing_total_seconds = 0.0
+            self._processing_max_seconds = 0.0
+        if processed_count == 0 and not final:
+            return
+        avg_seconds = total_seconds / processed_count if processed_count else 0.0
+        self._emit(
+            "handsfree.detector_processing_summary",
+            final=final,
+            chunks=processed_count,
+            avg_seconds=round(avg_seconds, 6),
+            max_seconds=round(max_seconds, 6),
+            queue_size=self._audio_queue.qsize(),
+            queue_max_chunks=self._audio_queue.maxsize,
+            session_state=self.session.state,
+        )
 
     def _emit(self, event: str, **properties) -> None:
         if self.telemetry:

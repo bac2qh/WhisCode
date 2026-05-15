@@ -19,3 +19,4 @@
 ## 2026-05-15
 - Documented the shared 10-minute recording duration cap and clarified PortAudio overflow telemetry.
 - Documented Shift+Enter and Shift+Tab trained hands-free command slots.
+- Documented the hands-free audio queue that decouples microphone capture from detector processing.

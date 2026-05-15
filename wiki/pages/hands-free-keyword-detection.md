@@ -32,7 +32,9 @@ uv run whiscode --hands-free
 
 If any wake, end, or command reference folder has fewer than three WAV files, startup offers to run guided enrollment before loading the wake detectors. Use `--no-enroll-prompt` to fail fast instead.
 
-The wake phrase starts capture, the end phrase stops capture, and the captured audio between those phrases is passed to Whisper. WhisCode waits until a detector window is fully populated and has enough speech-like energy before calling the keyword matcher, so silence and low-level room noise do not trigger wake/end detection. Wake detection uses a stricter default threshold and requires two consecutive matching windows before recording starts. Use `--hands-free-debug` to print detector distances while tuning `--hands-free-threshold`, `--hands-free-end-threshold`, and `--hands-free-wake-confirmations`.
+The wake phrase starts capture, the end phrase stops capture, and the captured audio between those phrases is passed to Whisper. WhisCode continuously drains microphone audio into a bounded queue and runs detector work on a separate worker, so wake/end/command matching does not block the PortAudio read loop. The detector still uses the configured sliding window and slide interval; `--hands-free-audio-queue-seconds` controls how much queued audio can build up before oldest chunks are dropped.
+
+WhisCode waits until a detector window is fully populated and has enough speech-like energy before calling the keyword matcher, so silence and low-level room noise do not trigger wake/end detection. Wake detection uses a stricter default threshold and requires two consecutive matching windows before recording starts. Use `--hands-free-debug` to print detector distances while tuning `--hands-free-threshold`, `--hands-free-end-threshold`, and `--hands-free-wake-confirmations`.
 
 While idle, WhisCode also checks the five trained command slots. A confirmed `page-up`, `page-down`, `enter`, `shift-enter`, or `shift-tab` command taps the corresponding physical key or key combo through `pynput`. Command detection is disabled while recording or transcribing so dictated text cannot inject keys. Tune commands separately with `--hands-free-command-threshold` and `--hands-free-command-confirmations`.
 
@@ -56,8 +58,8 @@ Hands-free mode and guided enrollment write local JSONL telemetry by default:
 ~/.config/whiscode/telemetry/events.jsonl
 ```
 
-The telemetry records app lifecycle, enrollment progress, reference counts, detector load results, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/command detections, key-command injection outcomes, recording durations, transcription outcomes, and suspected rapid trigger loops. It does not record raw audio, transcripts, prompts, hotword contents, or typed text.
+The telemetry records app lifecycle, enrollment progress, reference counts, detector load results, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/command detections, key-command injection outcomes, recording durations, transcription outcomes, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. It does not record raw audio, transcripts, prompts, hotword contents, or typed text.
 
-`handsfree.audio_overflow` means PortAudio reported that the microphone read loop fell behind. It is not a direct macOS swap or memory-overflow signal, but it is useful evidence when correlating accidental wake loops with system load.
+`handsfree.audio_overflow` means PortAudio reported that the microphone read loop fell behind. `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` help determine whether detector work is falling behind the live microphone stream. These are not direct macOS swap or memory-overflow signals.
 
 Use `--telemetry-path PATH` to write to another JSONL file, or `--no-telemetry` to disable local telemetry.

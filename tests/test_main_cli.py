@@ -22,6 +22,7 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.hands_free_command_confirmations == 2
     assert args.max_recording_seconds == 600.0
     assert args.hands_free_max_seconds == 600.0
+    assert args.hands_free_audio_queue_seconds == 10.0
 
 
 def test_parse_args_hands_free_options():
@@ -49,6 +50,8 @@ def test_parse_args_hands_free_options():
         "45",
         "--hands-free-max-seconds",
         "30",
+        "--hands-free-audio-queue-seconds",
+        "3.5",
         "--hands-free-min-rms",
         "0.01",
         "--hands-free-min-active-ratio",
@@ -84,6 +87,7 @@ def test_parse_args_hands_free_options():
     assert args.hands_free_tail_seconds == 0.75
     assert args.max_recording_seconds == 45
     assert args.hands_free_max_seconds == 30
+    assert args.hands_free_audio_queue_seconds == 3.5
     assert args.hands_free_min_rms == 0.01
     assert args.hands_free_min_active_ratio == 0.2
     assert args.hands_free_active_level == 0.03

@@ -1,6 +1,9 @@
+import queue
+import threading
+
 import numpy as np
 
-from whiscode.handsfree import Detection, HandsFreeSession
+from whiscode.handsfree import AudioChunk, Detection, HandsFreeAudioLoop, HandsFreeEvent, HandsFreeSession
 
 
 class FakeDetector:
@@ -332,6 +335,116 @@ class FakeTelemetry:
 
     def emit(self, event, **properties):
         self.events.append((event, properties))
+
+
+class FakeLoopSession:
+    def __init__(self, events=None):
+        self.slide_samples = 16000
+        self.state = "idle"
+        self.events = list(events or [])
+        self.feed_calls = []
+
+    def feed(self, chunk):
+        self.feed_calls.append(chunk.copy())
+        return self.events.pop(0) if self.events else []
+
+
+class OneReadStream:
+    def __init__(self, stop_event, *, overflowed=False):
+        self.stop_event = stop_event
+        self.overflowed = overflowed
+        self.reads = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self, frames):
+        self.reads += 1
+        self.stop_event.set()
+        return np.ones((frames, 1), dtype=np.float32), self.overflowed
+
+
+def test_audio_loop_capture_enqueues_without_running_detector_inline():
+    stop_event = threading.Event()
+    telemetry = FakeTelemetry()
+    session = FakeLoopSession()
+    stream = OneReadStream(stop_event)
+    loop = HandsFreeAudioLoop(
+        session,
+        queue.Queue(),
+        stop_event=stop_event,
+        telemetry=telemetry,
+        stream_factory=lambda: (stream, 16000),
+    )
+
+    loop._capture_loop()
+
+    assert stream.reads == 1
+    assert session.feed_calls == []
+    assert loop._audio_queue.qsize() == 1
+    assert telemetry.events[0][0] == "handsfree.audio_loop_started"
+
+
+def test_audio_loop_detector_worker_drains_chunks_and_emits_events():
+    stop_event = threading.Event()
+    event_queue = queue.Queue()
+    session = FakeLoopSession([[HandsFreeEvent("wake.detected", detection=Detection("wake.wav", 0.03))]])
+    loop = HandsFreeAudioLoop(session, event_queue, stop_event=stop_event)
+    loop._audio_queue.put(AudioChunk(np.array([1.0], dtype=np.float32), 16000))
+    stop_event.set()
+
+    loop._detector_loop()
+
+    assert len(session.feed_calls) == 1
+    assert event_queue.get_nowait().kind == "wake.detected"
+
+
+def test_audio_loop_drops_oldest_chunk_when_queue_is_full():
+    stop_event = threading.Event()
+    telemetry = FakeTelemetry()
+    session = FakeLoopSession()
+    loop = HandsFreeAudioLoop(
+        session,
+        queue.Queue(),
+        stop_event=stop_event,
+        telemetry=telemetry,
+        audio_queue_seconds=0.5,
+    )
+
+    loop._enqueue_audio_chunk(AudioChunk(np.array([1.0], dtype=np.float32), 16000))
+    loop._enqueue_audio_chunk(AudioChunk(np.array([2.0], dtype=np.float32), 16000))
+
+    queued = loop._audio_queue.get_nowait()
+    np.testing.assert_array_equal(queued.audio, np.array([2.0], dtype=np.float32))
+    assert ("handsfree.audio_queue_dropped", {
+        "count": 1,
+        "queue_size": 0,
+        "queue_max_chunks": 1,
+        "audio_queue_seconds": 0.5,
+    }) in telemetry.events
+
+
+def test_audio_loop_start_and_join_stops_workers():
+    stop_event = threading.Event()
+    session = FakeLoopSession()
+    stream = OneReadStream(stop_event)
+    loop = HandsFreeAudioLoop(
+        session,
+        queue.Queue(),
+        stop_event=stop_event,
+        stream_factory=lambda: (stream, 16000),
+    )
+
+    loop.start()
+    loop.join(timeout=2.0)
+
+    assert loop._capture_thread is not None
+    assert loop._detector_thread is not None
+    assert not loop._capture_thread.is_alive()
+    assert not loop._detector_thread.is_alive()
 
 
 def test_session_emits_telemetry_for_detection_and_finish():
