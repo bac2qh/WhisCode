@@ -22,3 +22,11 @@
   - `uv run whiscode-enroll --help` passed.
   - `uv run whiscode-calibrate --help` passed.
 - Immediate next step: commit this checkpoint update, then close out and merge to local `main`.
+
+## 2026-05-15 Closeout
+
+- Merged `add-voice-key-commands` into local `main` with a fast-forward from `6bf5377` to `cbb6e35`; no merge commit was created.
+- Archived the plan to `.agents/plans/archive/2026-05-15-voice-key-command-slots.md` with a closeout note.
+- Removed `.agents/worktrees/add-voice-key-commands` and deleted local branch `add-voice-key-commands`.
+- Verification carried forward from implementation: `uv run --with pytest python -m pytest` passed with 104 tests; CLI help checks passed for `whiscode`, `whiscode-enroll`, and `whiscode-calibrate`.
+- Immediate next step: none for this plan.

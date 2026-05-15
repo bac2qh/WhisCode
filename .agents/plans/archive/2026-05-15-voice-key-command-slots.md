@@ -1,3 +1,13 @@
+# Closeout
+
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-15-voice-key-command-slots-checkpoints.md`.
+- Implementation commits: `7996220` (`Add trained hands-free key commands`), `cbb6e35` (`Record voice command checkpoint`).
+- Merge result: fast-forwarded local `main` from `6bf5377` to `cbb6e35`; no merge commit was created.
+- Verification performed: `uv run --with pytest python -m pytest` passed with 104 tests; `uv run whiscode --help`, `uv run whiscode-enroll --help`, and `uv run whiscode-calibrate --help` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/add-voice-key-commands` and deleted local branch `add-voice-key-commands`.
+- Summary: shipped trained idle-only voice command slots for Page Up, Page Down, and Enter, plus enrollment/import support, command telemetry, calibration visibility, docs, and tests.
+
 # Add Configurable Hands-Free Key Command Slots
 
 ## Summary
