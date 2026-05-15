@@ -18,4 +18,7 @@
   - `PYTHONPATH=. uv run python -m py_compile whiscode/enroll.py whiscode/calibrate.py` succeeded.
   - `uv lock --check` succeeded.
   - `git diff --check` passed.
-- Immediate next step: merge the task branch back into local `main`.
+- Merged into local `main` by fast-forward; no merge commit.
+- Archived plan at `.agents/plans/archive/2026-05-14-trim-calibrate-handsfree.md`.
+- Removed task worktree `.agents/worktrees/trim-calibrate-handsfree` and deleted local branch `trim-calibrate-handsfree`.
+- Immediate next step: push local `main` to `origin/main`, then re-run guided enrollment so the saved references are VAD-trimmed.

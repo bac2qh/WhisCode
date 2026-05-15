@@ -1,5 +1,14 @@
 # Trim Hands-Free Samples And Prepare Calibration
 
+## Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-14-trim-calibrate-handsfree-checkpoints.md`.
+- Implementation commits: `55046e6`, `4af1178`.
+- Merge: fast-forward to local `main`; no merge commit.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest`, `uv run whiscode-enroll --help`, `uv run whiscode-calibrate --help`, `uv run whiscode-calibrate`, `PYTHONPATH=. uv run python -m py_compile whiscode/enroll.py whiscode/calibrate.py`, `uv lock --check`, and `git diff --check`.
+- Cleanup: task worktree `.agents/worktrees/trim-calibrate-handsfree` removed; local branch `trim-calibrate-handsfree` deleted.
+- Shipped VAD-trimmed reference sample preprocessing and the read-only `whiscode-calibrate` distance report.
+
 ## Summary
 - Fix guided/imported hands-free reference samples so speech is VAD-trimmed before saving.
 - Add a local calibration report command that summarizes reference-set distances and telemetry trigger distances.
