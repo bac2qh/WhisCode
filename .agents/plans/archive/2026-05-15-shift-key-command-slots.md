@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-15-shift-key-command-slots-checkpoints.md`.
+- Implementation commits: `00aee07`, `859929f`.
+- Merge commit: none; local `main` fast-forwarded to `859929f`.
+- Verification: `uv run --with pytest python -m pytest` passed with 114 tests; focused command/enrollment/main CLI/calibration/hands-free tests passed with 52 tests; `uv run whiscode --help`, `uv run whiscode-enroll --help`, and `git diff --check` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/shift-key-command-slots` and deleted local branch `shift-key-command-slots`.
+- Summary: Shipped `shift-enter` and `shift-tab` trained hands-free command slots, mapped them to Shift+Enter and Shift+Tab key combos, and updated enrollment, startup checks, calibration visibility, tests, docs, and memory.
+
 # Add Shift Key Command Slots
 
 ## Summary
