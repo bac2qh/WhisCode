@@ -10,6 +10,7 @@
 
 ## 2026-05-15 Implementation
 
+- Implementation commit: `c7b1242` (`Fix recording overlay helper crash`).
 - Fixed timer text rendering by drawing an `NSAttributedString` instead of calling AppKit drawing selectors on a Python `str`.
 - Added overlay helper failure diagnostics. `RecordingOverlayClient` now disables itself, emits `recording_overlay.disabled`, and prints a bounded stderr warning when launch, pipe, or helper-exit failures occur.
 - Passed telemetry into the overlay client from normal runtime and guided enrollment.
@@ -20,4 +21,4 @@
   - `uv run whiscode-enroll --help` passed.
   - `git diff --check` passed.
   - Live overlay helper probe passed: `poll_after_start None`, `poll_after_show None`, `returncode 0`, no stderr.
-- Immediate next step: commit the implementation, record the commit hash, then close out to local `main`.
+- Immediate next step: commit this checkpoint update, then close out to local `main`.
