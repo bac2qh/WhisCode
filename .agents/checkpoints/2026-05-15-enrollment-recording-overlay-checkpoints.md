@@ -9,6 +9,7 @@
 
 ## 2026-05-15 Implementation
 
+- Implementation commit: `8336e05` (`Use recording overlay during enrollment`).
 - Replaced guided enrollment's direct `notify_recording_now()` and `notify_recording_completed()` calls with `RecordingOverlayClient`.
 - Enrollment now shows the floating overlay during each sample capture, streams capture chunks into `overlay.update_level()`, hides the overlay in a `finally` block, and stops the helper at CLI exit.
 - Added `whiscode-enroll --recording-overlay` and `--no-recording-overlay`; overlay is enabled by default for guided recording.
@@ -19,4 +20,4 @@
   - `uv run whiscode-enroll --help` passed.
   - `uv run whiscode --help` passed.
   - `git diff --check` passed.
-- Immediate next step: commit the implementation and close out to local `main`.
+- Immediate next step: commit this checkpoint update, then close out to local `main`.
