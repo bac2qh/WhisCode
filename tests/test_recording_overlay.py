@@ -1,10 +1,11 @@
 import io
 import json
+import subprocess
 from unittest.mock import Mock, patch
 
 import numpy as np
 
-from whiscode.recording_overlay import RecordingOverlayClient, _draw_attributed_text
+from whiscode.recording_overlay import RecordingOverlayClient, _draw_attributed_text, _read_helper_commands
 
 
 def make_process():
@@ -37,6 +38,21 @@ def test_overlay_client_sends_show_hide_stop_commands():
         {"command": "stop"},
     ]
     process.terminate.assert_called_once()
+    process.wait.assert_called_once()
+
+
+def test_overlay_client_stop_kills_helper_when_terminate_times_out():
+    process = make_process()
+    process.wait.side_effect = [subprocess.TimeoutExpired("overlay", 0.01), None]
+
+    with patch("subprocess.Popen", return_value=process):
+        client = RecordingOverlayClient(stop_timeout=0.01)
+        client.show()
+        client.stop()
+
+    process.terminate.assert_called_once()
+    process.kill.assert_called_once()
+    assert process.wait.call_count == 2
 
 
 def test_overlay_client_update_level_clamps_audio_level():
@@ -122,3 +138,36 @@ def test_draw_attributed_text_uses_attributed_string_draw_path():
     assert result.text == "00:03"
     assert result.attrs == attrs
     assert result.point == "point"
+
+
+def test_read_helper_commands_schedules_stop_on_eof():
+    controller = Mock()
+    calls = []
+
+    _read_helper_commands(
+        io.StringIO('{"command":"show"}\n{"command":"hide"}\n'),
+        controller,
+        lambda fn, command: calls.append((fn, command)),
+    )
+
+    assert calls == [
+        (controller.handle, {"command": "show"}),
+        (controller.handle, {"command": "hide"}),
+        (controller.handle, {"command": "stop"}),
+    ]
+
+
+def test_read_helper_commands_ignores_bad_json_but_stops_on_eof():
+    controller = Mock()
+    calls = []
+
+    _read_helper_commands(
+        io.StringIO('not-json\n{"command":"level","level":0.4}\n'),
+        controller,
+        lambda fn, command: calls.append((fn, command)),
+    )
+
+    assert calls == [
+        (controller.handle, {"command": "level", "level": 0.4}),
+        (controller.handle, {"command": "stop"}),
+    ]

@@ -14,9 +14,17 @@ import numpy as np
 
 
 class RecordingOverlayClient:
-    def __init__(self, *, enabled: bool = True, update_interval: float = 0.08, telemetry: Any | None = None):
+    def __init__(
+        self,
+        *,
+        enabled: bool = True,
+        update_interval: float = 0.08,
+        stop_timeout: float = 1.0,
+        telemetry: Any | None = None,
+    ):
         self.enabled = enabled
         self.update_interval = update_interval
+        self.stop_timeout = stop_timeout
         self.telemetry = telemetry
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
@@ -60,6 +68,19 @@ class RecordingOverlayClient:
                 self._process.terminate()
             except OSError:
                 pass
+            else:
+                try:
+                    self._process.wait(timeout=self.stop_timeout)
+                except subprocess.TimeoutExpired:
+                    try:
+                        self._process.kill()
+                    except OSError:
+                        pass
+                    else:
+                        try:
+                            self._process.wait(timeout=self.stop_timeout)
+                        except subprocess.TimeoutExpired:
+                            pass
         self._process = None
 
     def _ensure_process(self) -> bool:
@@ -148,6 +169,16 @@ def _draw_attributed_text(text: str, point: Any, attrs: dict[Any, Any], *, attri
     attributed = attributed_string_class.alloc().initWithString_attributes_(text, attrs)
     attributed.drawAtPoint_(point)
     return attributed
+
+
+def _read_helper_commands(input_stream: Any, controller: Any, call_after: Any) -> None:
+    for line in input_stream:
+        try:
+            command = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        call_after(controller.handle, command)
+    call_after(controller.handle, {"command": "stop"})
 
 
 def _run_helper() -> None:
@@ -271,18 +302,14 @@ def _run_helper() -> None:
                 self.panel.orderOut_(None)
                 NSApp.terminate_(None)
 
-    def read_commands(controller):
-        for line in sys.stdin:
-            try:
-                command = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            AppHelper.callAfter(controller.handle, command)
-
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     controller = OverlayController()
-    threading.Thread(target=read_commands, args=(controller,), daemon=True).start()
+    threading.Thread(
+        target=_read_helper_commands,
+        args=(sys.stdin, controller, AppHelper.callAfter),
+        daemon=True,
+    ).start()
     AppHelper.runEventLoop()
 
 
