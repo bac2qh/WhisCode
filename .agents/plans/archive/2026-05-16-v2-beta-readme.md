@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-16-v2-beta-readme-checkpoints.md`.
+- Implementation commits: `95b33b8`.
+- Merge commit: none expected; local `main` will fast-forward.
+- Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 129 tests; `git diff --check` passed.
+- Worktree and branch cleanup: pending until local `main` fast-forward succeeds.
+- Summary: Documented `v2.0.0-beta.1` as the hands-free beta, aligned package metadata to `2.0.0b1`, and prepared the local release tag.
+
 # V2 Beta README And Tag
 
 ## Summary

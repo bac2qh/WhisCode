@@ -14,4 +14,11 @@
 - Bumped package metadata from `0.1.0` to PEP 440 beta version `2.0.0b1`.
 - Updated project memory with the v2 beta milestone.
 - Verification: `PYTHONPATH=. uv run --with pytest python -m pytest` passed with 129 tests.
-- Immediate next step: commit the README/version metadata update, merge to local `main`, and tag the merged commit.
+- Implementation commit: `95b33b8`.
+- Immediate next step: merge to local `main`, tag the merged commit, and remove the task worktree/branch.
+
+## 2026-05-16 Closeout
+
+- Archived the active plan to `.agents/plans/archive/2026-05-16-v2-beta-readme.md`.
+- Closeout commit: pending.
+- Immediate next step: commit closeout bookkeeping, fast-forward local `main`, create annotated tag `v2.0.0-beta.1`, then clean up the worktree and branch.
