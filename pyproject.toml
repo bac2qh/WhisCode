@@ -1,6 +1,6 @@
 [project]
 name = "whiscode"
-version = "0.1.0"
+version = "2.0.0b1"
 description = "Voice-to-keyboard for code dictation using Whisper"
 requires-python = ">=3.10"
 dependencies = [

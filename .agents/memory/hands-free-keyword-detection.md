@@ -31,3 +31,6 @@
 - Decoupled hands-free microphone capture from detector processing. The capture worker now continuously drains PortAudio into a bounded queue, while a detector worker runs `HandsFreeSession.feed`; `--hands-free-audio-queue-seconds` defaults to `10.0`, oldest queued chunks are dropped under backlog, and telemetry reports queue drops plus detector processing summaries.
 - Extended trained idle-only hands-free key command slots with `tab`, `arrow-up`, and `arrow-down`. Guided enrollment and manual import now cover eight command slots, and runtime maps the new slots to Tab, Arrow Up, and Arrow Down key taps.
 - Added configurable command enablement via `~/.config/whiscode/commands.ini`. Missing config keeps all command slots enabled for backward compatibility; when the file exists, `[commands]` is an allowlist where only `true` slots are loaded, enrolled, calibrated, and required by startup reference checks.
+
+## 2026-05-16
+- Marked the current hands-free milestone as the `v2.0.0-beta.1` beta in README/package metadata before creating the matching local tag. V2 is documented as the hands-free beta centered on wake/end phrases, voice key commands, bounded continuous capture, and the default floating recording overlay.

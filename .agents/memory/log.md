@@ -26,3 +26,6 @@
 - Added tab and arrow key command memory after extending trained hands-free commands with Tab, Arrow Up, and Arrow Down slots.
 - Added overlay helper lifecycle memory after fixing orphaned floating panels on parent-process exit.
 - Added configurable hands-free command memory after implementing the command allowlist config for runtime, enrollment, and calibration.
+
+## 2026-05-16
+- Added v2 beta memory after documenting `v2.0.0-beta.1` as the hands-free beta and aligning package metadata to `2.0.0b1`.

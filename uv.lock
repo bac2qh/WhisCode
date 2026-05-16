@@ -3083,7 +3083,7 @@ wheels = [
 
 [[package]]
 name = "whiscode"
-version = "0.1.0"
+version = "2.0.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "local-wake" },

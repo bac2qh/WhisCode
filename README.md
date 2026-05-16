@@ -2,6 +2,12 @@
 
 Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your words are typed into any text field. Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples) for fast on-device transcription on Apple Silicon.
 
+## Version Status
+
+Current beta: `v2.0.0-beta.1`.
+
+This v2 beta marks the move from hotkey-first dictation toward hands-free operation. The main v2 changes are local wake/end phrase detection, trained voice key commands, continuous microphone capture with bounded queues, and the floating recording overlay as the default recording indicator. The older macOS start/end notification banners are now opt-in with `--recording-notifications`.
+
 ## Requirements
 
 - macOS with Apple Silicon (M1/M2/M3/M4)
@@ -27,6 +33,12 @@ uv run whiscode
 ```
 
 Press **Right Shift** to start recording, press again to stop. The transcribed text is typed at your cursor position.
+
+For the v2 hands-free flow, start with:
+
+```bash
+uv run whiscode --hands-free
+```
 
 ## Options
 
