@@ -1,3 +1,13 @@
+# Closeout
+
+- Final status: implemented.
+- Related checkpoint file: `.agents/checkpoints/2026-05-19-revert-default-large-v3-checkpoints.md`.
+- Implementation commits: `c8c200d`, `1614809`.
+- Merge commit: none, fast-forwarded local `main` from `604e5ec` to `1614809`.
+- Verification performed: `uv run --with pytest pytest tests/test_main_cli.py` (15 passed) and `uv run --with pytest pytest` (133 passed).
+- Worktree and branch cleanup result: removed `.agents/worktrees/revert-default-large-v3` and deleted local branch `revert-default-large-v3`.
+- Summary: restored the default Whisper model to `mlx-community/whisper-large-v3-mlx`, added a regression assertion, and kept explicit turbo fallback support for users who opt into the turbo model.
+
 # Revert Default Whisper Model To Large V3
 
 ## Goal
