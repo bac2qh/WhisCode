@@ -32,6 +32,7 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.max_recording_seconds == 600.0
     assert args.hands_free_max_seconds == 600.0
     assert args.hands_free_audio_queue_seconds == 10.0
+    assert args.model == "mlx-community/whisper-large-v3-mlx"
 
 
 def test_parse_args_hands_free_options():

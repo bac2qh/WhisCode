@@ -32,3 +32,4 @@
 
 ## 2026-05-19
 - Added model-loading memory after fixing the default MLX Whisper model's missing Hugging Face processor fallback.
+- Updated model-loading memory after restoring the CLI default to `mlx-community/whisper-large-v3-mlx` while retaining explicit turbo fallback support.
