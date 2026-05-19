@@ -17,6 +17,7 @@
 - Restored `parse_args()` default `--model` to `mlx-community/whisper-large-v3-mlx`.
 - Added a default-argument regression assertion in `tests/test_main_cli.py`.
 - Kept explicit turbo processor fallback behavior so users who pass `--model mlx-community/whisper-large-v3-turbo` still get the load-time processor repair.
+- Implementation commit: `c8c200d`.
 
 ### Verification
 
@@ -25,4 +26,4 @@
 
 ### Immediate Next Step
 
-- Commit the implementation and project-state updates, then record the commit hash.
+- Commit this checkpoint update, then run closeout by merging the task branch back to local `main`.
