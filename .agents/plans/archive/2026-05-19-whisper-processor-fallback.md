@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-19-whisper-processor-fallback-checkpoints.md`.
+- Implementation commits: `3f99911` (`Fix default Whisper processor loading`) and `58545c8` (`Record Whisper processor fallback checkpoint`).
+- Merge commit: none; local `main` fast-forwarded to `58545c8`.
+- Verification: `uv run --with pytest pytest` passed with 133 tests; smoke check confirmed the default MLX Whisper model gets a `WhisperProcessor` fallback.
+- Worktree and branch cleanup: removed `.agents/worktrees/fix-whisper-processor-fallback` and deleted local branch `fix-whisper-processor-fallback`.
+- Summary: WhisCode now repairs the default MLX Whisper model by attaching the upstream OpenAI Whisper processor at startup, with fail-fast errors and bounded telemetry for unsupported missing-processor cases.
+
 # Whisper Processor Fallback Plan
 
 ## Status

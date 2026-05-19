@@ -15,3 +15,10 @@
 - Diagnostics: Added bounded telemetry events for processor fallback attempted, completed, failed, and skipped states.
 - Verification: `uv run --with pytest pytest` passed with 133 tests. A smoke check loaded `mlx-community/whisper-large-v3-turbo`, ran `ensure_whisper_processor`, and confirmed `_processor` is a `WhisperProcessor`.
 - Immediate next step: Commit checkpoint hash bookkeeping, merge the task branch to local `main`, archive the plan, and remove the task worktree/branch.
+
+## 2026-05-19 Closeout
+- Done: Fast-forwarded local `main` to `58545c8`; no merge commit was created.
+- Done: Removed `.agents/worktrees/fix-whisper-processor-fallback` and deleted local branch `fix-whisper-processor-fallback`.
+- Done: Archived the plan under `.agents/plans/archive/2026-05-19-whisper-processor-fallback.md`.
+- Verification: No additional tests were needed after archival-only closeout edits; implementation verification remains `uv run --with pytest pytest` with 133 passing tests plus the default-model processor smoke check.
+- Immediate next step: None for this plan.
