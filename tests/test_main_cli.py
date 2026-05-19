@@ -1,7 +1,15 @@
 from pathlib import Path
 
 from whiscode.handsfree import command_reference_dirs
-from whiscode.main import ensure_hands_free_references, parse_args
+from whiscode.main import (
+    _default_whisper_processor_source,
+    ensure_hands_free_references,
+    ensure_whisper_processor,
+    parse_args,
+)
+
+
+WhisperModel = type("Model", (), {"__module__": "mlx_audio.stt.models.whisper.whisper"})
 
 
 def write_reference_samples(path: Path, prefix: str, count: int = 3) -> None:
@@ -127,6 +135,78 @@ def test_parse_args_zero_disables_shared_max_recording_seconds():
 
     assert args.max_recording_seconds == 0
     assert args.hands_free_max_seconds == 0
+
+
+def test_default_whisper_processor_source_maps_mlx_default_to_openai_model():
+    assert (
+        _default_whisper_processor_source("mlx-community/whisper-large-v3-turbo")
+        == "openai/whisper-large-v3-turbo"
+    )
+
+
+def test_ensure_whisper_processor_attaches_fallback_processor():
+    telemetry = FakeTelemetry()
+    model = WhisperModel()
+    model._processor = None
+
+    ensure_whisper_processor(
+        model,
+        "mlx-community/whisper-large-v3-turbo",
+        telemetry=telemetry,
+        processor_loader=lambda source: {"source": source},
+    )
+
+    assert model._processor == {"source": "openai/whisper-large-v3-turbo"}
+    assert (
+        "model.processor_fallback_attempted",
+        {"model_family": "whisper", "processor_source": "openai"},
+    ) in telemetry.events
+    assert (
+        "model.processor_fallback_completed",
+        {"model_family": "whisper", "processor_source": "openai"},
+    ) in telemetry.events
+
+
+def test_ensure_whisper_processor_skips_when_processor_exists():
+    telemetry = FakeTelemetry()
+    model = WhisperModel()
+    model._processor = object()
+
+    ensure_whisper_processor(
+        model,
+        "mlx-community/whisper-large-v3-turbo",
+        telemetry=telemetry,
+        processor_loader=lambda source: (_ for _ in ()).throw(
+            AssertionError("loaded processor")
+        ),
+    )
+
+    assert telemetry.events == [
+        (
+            "model.processor_fallback_skipped",
+            {"reason": "processor_present", "model_family": "whisper"},
+        )
+    ]
+
+
+def test_ensure_whisper_processor_fails_for_unknown_missing_processor():
+    telemetry = FakeTelemetry()
+    model = WhisperModel()
+    model._processor = None
+
+    try:
+        ensure_whisper_processor(model, "mlx-community/unknown-whisper", telemetry=telemetry)
+    except RuntimeError as e:
+        assert "Whisper processor not found" in str(e)
+    else:
+        raise AssertionError("expected RuntimeError")
+
+    assert telemetry.events == [
+        (
+            "model.processor_fallback_skipped",
+            {"reason": "no_processor_source", "model_family": "whisper"},
+        )
+    ]
 
 
 def test_ensure_hands_free_references_returns_true_when_samples_exist(tmp_path):

@@ -29,3 +29,6 @@
 
 ## 2026-05-16
 - Added v2 beta memory after documenting `v2.0.0-beta.1` as the hands-free beta and aligning package metadata to `2.0.0b1`.
+
+## 2026-05-19
+- Added model-loading memory after fixing the default MLX Whisper model's missing Hugging Face processor fallback.

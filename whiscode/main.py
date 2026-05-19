@@ -5,6 +5,7 @@ import signal
 import sys
 import threading
 import time
+import warnings
 from enum import Enum
 from pathlib import Path
 
@@ -50,6 +51,10 @@ from whiscode.stats import Stats
 from whiscode.status_notifier import notify_recording_completed, notify_recording_now
 from whiscode.telemetry import telemetry_from_args
 from whiscode.transcriber import transcribe
+
+WHISPER_PROCESSOR_SOURCES = {
+    "mlx-community/whisper-large-v3-turbo": "openai/whisper-large-v3-turbo",
+}
 
 
 class State(Enum):
@@ -113,6 +118,78 @@ def parse_args(argv: list[str] | None = None):
 def _resolve_model_path(model_name: str) -> str:
     cache_dir = Path.home() / ".cache/huggingface/hub" / f"models--{model_name.replace('/', '--')}" / "snapshots/main"
     return str(cache_dir) if cache_dir.exists() else model_name
+
+
+def _default_whisper_processor_source(model_name: str) -> str | None:
+    return WHISPER_PROCESSOR_SOURCES.get(model_name)
+
+
+def _is_whisper_model(model) -> bool:
+    return ".whisper" in type(model).__module__
+
+
+def ensure_whisper_processor(
+    model,
+    model_name: str,
+    *,
+    telemetry=None,
+    processor_loader=None,
+) -> None:
+    if not _is_whisper_model(model):
+        return
+    if getattr(model, "_processor", None) is not None:
+        if telemetry:
+            telemetry.emit(
+                "model.processor_fallback_skipped",
+                reason="processor_present",
+                model_family="whisper",
+            )
+        return
+
+    processor_source = _default_whisper_processor_source(model_name)
+    if processor_source is None:
+        if telemetry:
+            telemetry.emit(
+                "model.processor_fallback_skipped",
+                reason="no_processor_source",
+                model_family="whisper",
+            )
+        raise RuntimeError(
+            f"Whisper processor not found for model '{model_name}'. "
+            "Use a model repo that includes Hugging Face processor/tokenizer files."
+        )
+
+    if telemetry:
+        telemetry.emit(
+            "model.processor_fallback_attempted",
+            model_family="whisper",
+            processor_source="openai",
+        )
+    try:
+        if processor_loader is None:
+            from transformers import WhisperProcessor
+
+            processor_loader = WhisperProcessor.from_pretrained
+        model._processor = processor_loader(processor_source)
+    except Exception as e:
+        if telemetry:
+            telemetry.emit(
+                "model.processor_fallback_failed",
+                model_family="whisper",
+                processor_source="openai",
+                error_type=type(e).__name__,
+            )
+        raise RuntimeError(
+            f"Whisper processor not found for model '{model_name}', and fallback "
+            f"processor '{processor_source}' could not be loaded."
+        ) from e
+
+    if telemetry:
+        telemetry.emit(
+            "model.processor_fallback_completed",
+            model_family="whisper",
+            processor_source="openai",
+        )
 
 
 def resolve_active_command_slots(args, *, telemetry=None):
@@ -242,7 +319,20 @@ def main():
     telemetry.emit("model.load_started")
     print(f"Loading model: {model_path} ...")
     from mlx_audio.stt.utils import load_model
-    model = load_model(model_path)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Could not load WhisperProcessor:.*",
+                category=UserWarning,
+                module="mlx_audio.stt.models.whisper.whisper",
+            )
+            model = load_model(model_path)
+        ensure_whisper_processor(model, args.model, telemetry=telemetry)
+    except Exception as e:
+        telemetry.emit("model.load_failed", error_type=type(e).__name__)
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     telemetry.emit("model.load_completed")
     print(f"Model loaded. Press {args.hotkey} to start/stop recording.")
     if args.refine:
