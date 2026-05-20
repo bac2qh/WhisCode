@@ -1,5 +1,14 @@
 # Transcription Progress Overlay
 
+## Closeout
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-20-transcription-progress-overlay-checkpoints.md`.
+- Implementation commits: `85a716a` (`Add transcription progress overlay`) and `7f060f4` (`Record transcription overlay checkpoint`).
+- Merge commit: none; local `main` was fast-forwarded.
+- Verification: `uv run --with pytest pytest tests/test_recording_overlay.py tests/test_transcriber.py tests/test_main_cli.py` passed with 29 tests; `uv run python -m py_compile whiscode/recording_overlay.py whiscode/transcriber.py whiscode/main.py` passed.
+- Worktree and branch cleanup: removed `.agents/worktrees/transcription-progress-overlay`; deleted local branch `transcription-progress-overlay`.
+- Summary: shipped the compact transcription progress state in the existing floating overlay, including bounded MLX Whisper frame progress, docs, wiki, memory, and focused tests.
+
 ## Summary
 Add a compact top-screen transcription overlay using the existing AppKit recording overlay helper. It will appear after recording stops, show `Transcribing`, percent complete, processed/total frames, and frames/sec when available, then hide when the app returns to idle.
 
