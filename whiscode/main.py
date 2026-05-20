@@ -53,6 +53,7 @@ from whiscode.telemetry import telemetry_from_args
 from whiscode.transcriber import transcribe
 
 WHISPER_PROCESSOR_SOURCES = {
+    "mlx-community/whisper-large-v3-mlx": "openai/whisper-large-v3",
     "mlx-community/whisper-large-v3-turbo": "openai/whisper-large-v3-turbo",
 }
 

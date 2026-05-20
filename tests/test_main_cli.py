@@ -140,6 +140,13 @@ def test_parse_args_zero_disables_shared_max_recording_seconds():
 
 def test_default_whisper_processor_source_maps_mlx_default_to_openai_model():
     assert (
+        _default_whisper_processor_source("mlx-community/whisper-large-v3-mlx")
+        == "openai/whisper-large-v3"
+    )
+
+
+def test_default_whisper_processor_source_maps_mlx_turbo_to_openai_model():
+    assert (
         _default_whisper_processor_source("mlx-community/whisper-large-v3-turbo")
         == "openai/whisper-large-v3-turbo"
     )
@@ -152,12 +159,12 @@ def test_ensure_whisper_processor_attaches_fallback_processor():
 
     ensure_whisper_processor(
         model,
-        "mlx-community/whisper-large-v3-turbo",
+        "mlx-community/whisper-large-v3-mlx",
         telemetry=telemetry,
         processor_loader=lambda source: {"source": source},
     )
 
-    assert model._processor == {"source": "openai/whisper-large-v3-turbo"}
+    assert model._processor == {"source": "openai/whisper-large-v3"}
     assert (
         "model.processor_fallback_attempted",
         {"model_family": "whisper", "processor_source": "openai"},
