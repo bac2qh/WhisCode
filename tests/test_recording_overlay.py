@@ -41,6 +41,38 @@ def test_overlay_client_sends_show_hide_stop_commands():
     process.wait.assert_called_once()
 
 
+def test_overlay_client_sends_transcription_commands():
+    process = make_process()
+
+    with patch("subprocess.Popen", return_value=process):
+        client = RecordingOverlayClient(update_interval=999)
+        client.show_transcribing(total_frames=10)
+        client.update_transcription_progress(current_frames=5, total_frames=10, rate=123.4)
+        client.hide()
+
+    assert sent_commands(process) == [
+        {"command": "show_transcribing", "total_frames": 10},
+        {"command": "transcription_progress", "current_frames": 5, "total_frames": 10, "rate": 123.4},
+        {"command": "hide"},
+    ]
+    assert client._visible is False
+    assert client._mode is None
+
+
+def test_overlay_client_clamps_transcription_progress():
+    process = make_process()
+
+    with patch("subprocess.Popen", return_value=process):
+        client = RecordingOverlayClient(update_interval=999)
+        client.show_transcribing(total_frames=-10)
+        client.update_transcription_progress(current_frames=-5, total_frames=-10, rate=-3.0)
+
+    assert sent_commands(process) == [
+        {"command": "show_transcribing", "total_frames": 0},
+        {"command": "transcription_progress", "current_frames": 0, "total_frames": 0, "rate": 0.0},
+    ]
+
+
 def test_overlay_client_stop_kills_helper_when_terminate_times_out():
     process = make_process()
     process.wait.side_effect = [subprocess.TimeoutExpired("overlay", 0.01), None]

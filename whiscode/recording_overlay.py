@@ -28,8 +28,10 @@ class RecordingOverlayClient:
         self.telemetry = telemetry
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
+        self._send_lock = threading.Lock()
         self._latest_level = 0.0
         self._visible = False
+        self._mode: str | None = None
         self._stop_event = threading.Event()
         self._sender_thread: threading.Thread | None = None
 
@@ -38,15 +40,55 @@ class RecordingOverlayClient:
             return
         if not self._ensure_process():
             return
-        self._visible = True
+        with self._lock:
+            self._visible = True
+            self._mode = "recording"
         if self._send({"command": "show"}):
             self._ensure_sender_thread()
 
     def hide(self) -> None:
         if not self.enabled:
             return
-        self._visible = False
+        with self._lock:
+            self._visible = False
+            self._mode = None
         self._send({"command": "hide"})
+
+    def show_transcribing(self, *, total_frames: int | None = None) -> None:
+        if not self.enabled:
+            return
+        if not self._ensure_process():
+            return
+        with self._lock:
+            self._visible = True
+            self._mode = "transcribing"
+        command: dict[str, Any] = {"command": "show_transcribing"}
+        if total_frames is not None:
+            command["total_frames"] = _nonnegative_int(total_frames)
+        self._send(command)
+
+    def update_transcription_progress(
+        self,
+        *,
+        current_frames: int | None = None,
+        total_frames: int | None = None,
+        rate: float | None = None,
+    ) -> None:
+        if not self.enabled:
+            return
+        command: dict[str, Any] = {"command": "transcription_progress"}
+        if current_frames is not None:
+            command["current_frames"] = _nonnegative_int(current_frames)
+        if total_frames is not None:
+            command["total_frames"] = _nonnegative_int(total_frames)
+        if rate is not None:
+            try:
+                numeric_rate = float(rate)
+            except (TypeError, ValueError):
+                numeric_rate = None
+            if numeric_rate is not None and math.isfinite(numeric_rate):
+                command["rate"] = max(0.0, numeric_rate)
+        self._send(command)
 
     def update_level(self, audio_or_level: Any) -> None:
         if not self.enabled:
@@ -60,7 +102,9 @@ class RecordingOverlayClient:
             self._latest_level = max(0.0, min(1.0, level))
 
     def stop(self) -> None:
-        self._visible = False
+        with self._lock:
+            self._visible = False
+            self._mode = None
         self._stop_event.set()
         self._send({"command": "stop"})
         if self._process and self._process.poll() is None:
@@ -109,9 +153,11 @@ class RecordingOverlayClient:
 
     def _send_levels(self) -> None:
         while not self._stop_event.is_set():
-            if self._visible:
-                with self._lock:
-                    level = self._latest_level
+            with self._lock:
+                visible = self._visible
+                mode = self._mode
+                level = self._latest_level
+            if visible and mode == "recording":
                 self._send({"command": "level", "level": level})
             time.sleep(self.update_interval)
 
@@ -123,8 +169,9 @@ class RecordingOverlayClient:
             self._disable("helper_exited", stage=str(command.get("command", "unknown")), returncode=returncode)
             return False
         try:
-            self._process.stdin.write(json.dumps(command, separators=(",", ":")) + "\n")
-            self._process.stdin.flush()
+            with self._send_lock:
+                self._process.stdin.write(json.dumps(command, separators=(",", ":")) + "\n")
+                self._process.stdin.flush()
             return True
         except (BrokenPipeError, OSError):
             self._disable("pipe_failed", stage=str(command.get("command", "unknown")))
@@ -141,7 +188,9 @@ class RecordingOverlayClient:
         if not self.enabled:
             return
         self.enabled = False
-        self._visible = False
+        with self._lock:
+            self._visible = False
+            self._mode = None
         self._stop_event.set()
         properties = {"reason": reason, "stage": stage}
         if returncode is not None:
@@ -159,6 +208,14 @@ def _audio_level(audio: np.ndarray) -> float:
         return 0.0
     rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float32))))
     return min(1.0, rms / 0.08)
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, numeric)
 
 
 def _draw_attributed_text(text: str, point: Any, attrs: dict[Any, Any], *, attributed_string_class=None) -> Any:
@@ -211,23 +268,44 @@ def _run_helper() -> None:
             self = objc.super(OverlayView, self).initWithFrame_(frame)
             if self is None:
                 return None
+            self.mode = None
             self.started_at = None
             self.levels = deque([0.0] * 28, maxlen=28)
+            self.current_frames = 0
+            self.total_frames = 0
+            self.rate = 0.0
             self.setWantsLayer_(True)
             return self
 
         def showRecording(self):
+            self.mode = "recording"
             self.started_at = time.monotonic()
             self.levels.clear()
             self.levels.extend([0.0] * 28)
             self.setNeedsDisplay_(True)
 
         def hideRecording(self):
+            self.mode = None
             self.started_at = None
+            self.setNeedsDisplay_(True)
+
+        def showTranscribingWithTotal_(self, total_frames):
+            self.mode = "transcribing"
+            self.started_at = time.monotonic()
+            self.current_frames = 0
+            self.total_frames = max(0, int(total_frames or 0))
+            self.rate = 0.0
             self.setNeedsDisplay_(True)
 
         def setLevel_(self, level):
             self.levels.append(float(max(0.0, min(1.0, level))))
+            self.setNeedsDisplay_(True)
+
+        def setTranscriptionProgress_total_rate_(self, current_frames, total_frames, rate):
+            self.current_frames = max(0, int(current_frames or 0))
+            if total_frames is not None:
+                self.total_frames = max(0, int(total_frames or 0))
+            self.rate = max(0.0, float(rate or 0.0))
             self.setNeedsDisplay_(True)
 
         def drawRect_(self, rect):
@@ -236,6 +314,13 @@ def _run_helper() -> None:
             path = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(bounds, 18, 18)
             path.fill()
 
+            if self.mode == "transcribing":
+                self._drawTranscribing()
+                return
+
+            self._drawRecording()
+
+        def _drawRecording(self):
             NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.22, 0.18, 1.0).setFill()
             NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(16, 18, 10, 10)).fill()
 
@@ -263,10 +348,50 @@ def _run_helper() -> None:
                     2,
                 ).fill()
 
+        def _drawTranscribing(self):
+            total = max(0, int(self.total_frames or 0))
+            current = max(0, int(self.current_frames or 0))
+            if total > 0:
+                current = min(current, total)
+                progress = min(1.0, current / total)
+            else:
+                elapsed = 0.0 if self.started_at is None else time.monotonic() - self.started_at
+                progress = (math.sin(elapsed * 4.0) + 1.0) / 2.0
+
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(0.45, 0.85, 1.0, 0.95).setFill()
+            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(16, 18, 10, 10)).fill()
+
+            percent = int(round(progress * 100)) if total > 0 else 0
+            rate = int(round(float(self.rate or 0.0)))
+            if total > 0 and rate > 0:
+                text = f"Transcribing {percent:3d}%  {current}/{total}  {rate} fps"
+            elif total > 0:
+                text = f"Transcribing {percent:3d}%  {current}/{total}"
+            else:
+                text = "Transcribing"
+            attrs = {
+                NSFontAttributeName: NSFont.monospacedDigitSystemFontOfSize_weight_(12, 0.3),
+                NSForegroundColorAttributeName: NSColor.whiteColor(),
+            }
+            _draw_attributed_text(text, NSMakePoint(36, 24), attrs)
+
+            track = NSMakeRect(36, 11, 288, 7)
+            NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.22).setFill()
+            NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(track, 3.5, 3.5).fill()
+
+            fill_width = 288 * progress if total > 0 else 56
+            fill_x = 36 if total > 0 else 36 + (288 - fill_width) * progress
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(0.45, 0.85, 1.0, 1.0).setFill()
+            NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
+                NSMakeRect(fill_x, 11, fill_width, 7),
+                3.5,
+                3.5,
+            ).fill()
+
     class OverlayController:
         def __init__(self):
             screen = NSScreen.mainScreen().visibleFrame()
-            width = 310
+            width = 360
             height = 46
             x = screen.origin.x + (screen.size.width - width) / 2
             y = screen.origin.y + screen.size.height - height - 24
@@ -293,11 +418,20 @@ def _run_helper() -> None:
             if name == "show":
                 self.view.showRecording()
                 self.panel.orderFrontRegardless()
+            elif name == "show_transcribing":
+                self.view.showTranscribingWithTotal_(command.get("total_frames", 0))
+                self.panel.orderFrontRegardless()
             elif name == "hide":
                 self.view.hideRecording()
                 self.panel.orderOut_(None)
             elif name == "level":
                 self.view.setLevel_(float(command.get("level", 0.0)))
+            elif name == "transcription_progress":
+                self.view.setTranscriptionProgress_total_rate_(
+                    command.get("current_frames", 0),
+                    command.get("total_frames"),
+                    command.get("rate", 0.0),
+                )
             elif name == "stop":
                 self.panel.orderOut_(None)
                 NSApp.terminate_(None)

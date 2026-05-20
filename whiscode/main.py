@@ -411,9 +411,30 @@ def main():
         def process(audio=audio, audio_seconds=audio_seconds):
             nonlocal state
             started = time.monotonic()
+            progress_state = {"total_frames": None}
+
+            def update_transcription_overlay(**progress) -> None:
+                total_frames = progress.get("total_frames")
+                if total_frames is not None:
+                    progress_state["total_frames"] = total_frames
+                overlay.update_transcription_progress(**progress)
+
+            overlay.show_transcribing()
             telemetry.emit("transcription.started", audio_seconds=round(audio_seconds, 3), audio_samples=len(audio))
             try:
-                text = transcribe(model, audio, language=args.language, extra_prompt=args.prompt, hotwords=hot_words)
+                text = transcribe(
+                    model,
+                    audio,
+                    language=args.language,
+                    extra_prompt=args.prompt,
+                    hotwords=hot_words,
+                    progress_callback=update_transcription_overlay,
+                )
+                if progress_state["total_frames"] is not None:
+                    overlay.update_transcription_progress(
+                        current_frames=progress_state["total_frames"],
+                        total_frames=progress_state["total_frames"],
+                    )
                 if text:
                     if args.refine:
                         processed = postprocess_for_refine(text, replacements=replacements)
@@ -450,6 +471,7 @@ def main():
                 )
                 print(f"  Error: {e}", file=sys.stderr)
             finally:
+                overlay.hide()
                 with state_lock:
                     transition_to(State.IDLE, "transcription.finally")
                     if resume_handsfree:

@@ -22,3 +22,4 @@
 - Documented the hands-free audio queue that decouples microphone capture from detector processing.
 - Documented Tab, Arrow Up, and Arrow Down trained hands-free command slots.
 - Documented overlay helper EOF shutdown to prevent orphaned floating panels.
+- Documented the transcription progress state in the floating overlay.

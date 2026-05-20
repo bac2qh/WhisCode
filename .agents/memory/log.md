@@ -36,3 +36,4 @@
 
 ## 2026-05-20
 - Updated model-loading memory after adding the processor fallback mapping for the current `mlx-community/whisper-large-v3-mlx` default.
+- Updated `recording-status-notifications.md` with the transcription progress overlay behavior and its bounded tqdm progress source.

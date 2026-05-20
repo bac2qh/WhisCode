@@ -18,3 +18,8 @@
 - Fixed an overlay helper crash that made the overlay invisible. The AppKit view was calling `drawAtPoint_withAttributes_` on a Python `str`; timer text now renders through `NSAttributedString`. Overlay helper exits now emit bounded `recording_overlay.disabled` telemetry and a stderr warning instead of failing silently.
 - Manual Right Shift recording now uses the shared `--max-recording-seconds` cap. When the cap is reached, the recorder stops appending microphone chunks, the main loop auto-finalizes the recording, and local telemetry emits `recording.timeout` with bounded duration metadata.
 - Fixed an orphan overlay helper lifecycle bug. If the parent WhisCode process disappears and the helper's stdin reaches EOF, the helper now treats EOF as a stop command and terminates its AppKit event loop; `RecordingOverlayClient.stop()` also waits briefly and force-kills if graceful shutdown fails.
+
+## 2026-05-20
+- Added a transcription state to the floating overlay. After recording stops, the same helper displays compact Whisper frame progress with percent, processed/total frames, and frames per second when MLX exposes a tqdm progress bar.
+- The transcription progress path wraps MLX Whisper's module-local `tqdm` reference during a single transcription call and restores it after success or failure. Terminal progress output remains intact; the overlay only receives bounded progress metadata.
+- The existing `--no-recording-overlay` switch now disables both recording and transcription overlay states. Existing transcription lifecycle telemetry and `recording_overlay.disabled` helper diagnostics remain the debugging surface; no transcript, prompt, hotword, or raw audio content is emitted.
