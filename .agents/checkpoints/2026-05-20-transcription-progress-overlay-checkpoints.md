@@ -11,7 +11,7 @@
 - Done: implemented a transcription mode in the existing recording overlay helper, added overlay client transcription IPC methods, serialized helper writes, and wired transcription progress from MLX Whisper's module-local `tqdm` into the overlay.
 - Done: added focused tests for transcription overlay commands, progress clamping, callback delivery, and `tqdm` restoration after success/failure.
 - Done: updated README, wiki recording-overlay documentation, wiki log, and recording-status memory to reflect the new transcription overlay behavior.
-- Commit: pending.
-- Immediate next step: commit the implementation, then update this checkpoint with the commit hash and close out.
+- Commit: `85a716a` (`Add transcription progress overlay`).
+- Immediate next step: commit this checkpoint hash update, then close out by merging the task branch to local `main`, archiving the plan, and cleaning up the task worktree/branch.
 - Key decisions: the terminal progress bar remains unchanged because the wrapper delegates to the real `tqdm` object; the overlay receives only bounded frame/rate metadata; `--no-recording-overlay` disables both recording and transcription overlay states.
 - Verification: `uv run --with pytest pytest tests/test_recording_overlay.py tests/test_transcriber.py tests/test_main_cli.py` passed with 29 tests. `uv run python -m py_compile whiscode/recording_overlay.py whiscode/transcriber.py whiscode/main.py` passed.
