@@ -18,7 +18,7 @@
 
 ### Next Step
 
-- Commit the implemented normalization, then record the implementation hash and closeout state.
+- Run closeout: merge the task branch to local `main`, archive the plan, and clean up the task worktree/branch.
 
 ### Verification
 
@@ -35,4 +35,4 @@
 
 ### Commits
 
-- Pending.
+- `6fb4556` Add bounded gain normalization for quiet mic input.
