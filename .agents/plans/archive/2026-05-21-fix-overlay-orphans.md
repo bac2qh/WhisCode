@@ -1,5 +1,15 @@
 # Fix Stuck Recording Overlay Helpers
 
+## Closeout
+
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-21-fix-overlay-orphans-checkpoints.md`.
+- Implementation commits: `b8d9f0d` (overlay helper lifecycle hardening), `d5080b3` (checkpoint hash update).
+- Merge commit: none; local `main` fast-forwarded to `d5080b3`.
+- Verification performed: `uv run --with pytest pytest tests/test_recording_overlay.py tests/test_main_cli.py`, `uv run --with pytest pytest`, `uv run python -m whiscode.recording_overlay --cleanup-orphans`, and `git diff --check`.
+- Worktree and branch cleanup: removed `.agents/worktrees/fix-overlay-orphans`; deleted local branch `fix-overlay-orphans`.
+- Summary: overlay helpers now monitor their parent PID, WhisCode cleans stale PPID `1` helpers before launch, and a manual orphan-cleanup CLI is available.
+
 ## Goal
 
 Prevent AppKit recording overlay helper processes from remaining visible or orphaned when WhisCode is interrupted during recording, especially via Ctrl-C.

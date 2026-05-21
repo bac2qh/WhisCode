@@ -17,7 +17,7 @@
 
 ### Next Step
 
-- Close out to local `main`.
+- None. Closeout completed on local `main`.
 
 ### Verification
 
@@ -40,3 +40,11 @@
 ### Commits
 
 - `b8d9f0d` Harden recording overlay helper cleanup.
+- `d5080b3` Record overlay orphan cleanup checkpoint.
+
+### Closeout
+
+- Local `main` fast-forwarded to `d5080b3`; no merge commit was created.
+- Removed task worktree `.agents/worktrees/fix-overlay-orphans`.
+- Deleted local branch `fix-overlay-orphans`.
+- Archived the plan to `.agents/plans/archive/2026-05-21-fix-overlay-orphans.md`.
