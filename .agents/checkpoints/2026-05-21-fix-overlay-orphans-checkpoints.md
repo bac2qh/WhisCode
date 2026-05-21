@@ -17,7 +17,7 @@
 
 ### Next Step
 
-- Commit the implemented overlay lifecycle changes, then close out to local `main`.
+- Close out to local `main`.
 
 ### Verification
 
@@ -39,4 +39,4 @@
 
 ### Commits
 
-- Pending.
+- `b8d9f0d` Harden recording overlay helper cleanup.
