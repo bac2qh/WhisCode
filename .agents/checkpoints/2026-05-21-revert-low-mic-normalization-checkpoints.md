@@ -16,7 +16,7 @@
 
 ### Next Step
 
-- Commit the rollback, then close out to local `main`.
+- Close out to local `main`.
 
 ### Verification
 
@@ -33,4 +33,4 @@
 
 ### Commits
 
-- Pending.
+- `129643a` Revert pre-transcription mic gain normalization.
