@@ -26,3 +26,4 @@
 
 ## 2026-05-21
 - Documented bounded pre-transcription gain normalization for quiet microphone recordings and its telemetry.
+- Removed bounded pre-transcription gain normalization documentation after reverting the feature; flat overlay bars point to raw input capture or device configuration instead.
