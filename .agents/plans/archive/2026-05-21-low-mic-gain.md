@@ -1,5 +1,15 @@
 # Low Mic Gain Handling
 
+## Closeout
+
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-21-low-mic-gain-checkpoints.md`.
+- Implementation commits: `6fb4556` (normalization implementation, tests, docs, memory), `c9f826d` (checkpoint hash update).
+- Merge commit: none; local `main` fast-forwarded to `c9f826d`.
+- Verification performed: `uv run --with pytest pytest tests/test_recorder.py tests/test_main_cli.py tests/test_handsfree.py`, `uv run --with pytest pytest`, and `git diff --check`.
+- Worktree and branch cleanup: removed `.agents/worktrees/fix-low-mic-gain`; deleted local branch `fix-low-mic-gain`.
+- Summary: quiet hotkey and hands-free recordings now receive bounded pre-transcription gain normalization without changing raw hands-free detector audio. Telemetry emits bounded before/after level metadata only when gain is applied.
+
 ## Goal
 
 Investigate why microphone input sounds/appears very low and add a conservative app-side gain correction so quiet captures are easier for transcription without changing wake/end detector calibration.

@@ -18,7 +18,7 @@
 
 ### Next Step
 
-- Run closeout: merge the task branch to local `main`, archive the plan, and clean up the task worktree/branch.
+- None. Closeout completed on local `main`.
 
 ### Verification
 
@@ -36,3 +36,11 @@
 ### Commits
 
 - `6fb4556` Add bounded gain normalization for quiet mic input.
+- `c9f826d` Record low mic gain checkpoint.
+
+### Closeout
+
+- Local `main` fast-forwarded to `c9f826d`; no merge commit was created.
+- Removed task worktree `.agents/worktrees/fix-low-mic-gain`.
+- Deleted local branch `fix-low-mic-gain`.
+- Archived the plan to `.agents/plans/archive/2026-05-21-low-mic-gain.md`.
