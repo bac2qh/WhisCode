@@ -12,9 +12,11 @@ During transcription, the same overlay switches to a compact progress view that 
 - processed and total Whisper frames.
 - frames per second when available from the local progress source.
 
-The overlay is implemented as a separate AppKit helper process controlled by the main WhisCode process through newline-delimited JSON commands. If the helper cannot start, recording and transcription continue without the overlay. If the parent command stream closes, the helper treats EOF as a stop command so orphaned panels do not remain on screen.
+The overlay is implemented as a separate AppKit helper process controlled by the main WhisCode process through newline-delimited JSON commands. If the helper cannot start, recording and transcription continue without the overlay. If the parent command stream closes, the helper treats EOF as a stop command so orphaned panels do not remain on screen. The helper also monitors its parent PID and exits if the parent process disappears before stdin reaches EOF.
 
-If the helper exits unexpectedly after startup, WhisCode disables the overlay for the current process and reports bounded diagnostic metadata through `recording_overlay.disabled` telemetry and stderr. Diagnostics include lifecycle stage and return code only; they do not include audio or transcribed text.
+Before launching a new helper, WhisCode removes stale orphan helpers whose parent process is already gone. Manual cleanup is available with `python -m whiscode.recording_overlay --cleanup-orphans`.
+
+If the helper exits unexpectedly after startup, WhisCode disables the overlay for the current process and reports bounded diagnostic metadata through `recording_overlay.disabled` telemetry and stderr. Orphan cleanup emits `recording_overlay.orphan_cleanup` with helper counts only. Diagnostics include lifecycle stage, return code, and counts only; they do not include audio or transcribed text.
 
 Use `--no-recording-overlay` to disable both recording and transcription overlay states. Use `--recording-notifications` with `whiscode` to keep macOS start/end notification banners in addition to the overlay during normal recording.
 

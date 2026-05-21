@@ -699,26 +699,27 @@ def main():
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
 
-    while listener.is_alive() and not shutdown_event.is_set():
-        listener.join(timeout=0.5)
+    try:
+        while listener.is_alive() and not shutdown_event.is_set():
+            listener.join(timeout=0.5)
+    finally:
+        if last_signal is not None:
+            telemetry.emit("app.signal_received", signal=last_signal, count=ctrl_c_count)
 
-    if last_signal is not None:
-        telemetry.emit("app.signal_received", signal=last_signal, count=ctrl_c_count)
+        listener.stop()
 
-    listener.stop()
+        if handsfree_loop:
+            handsfree_loop.join(timeout=1.0)
 
-    if handsfree_loop:
-        handsfree_loop.join(timeout=1.0)
+        overlay.stop()
 
-    overlay.stop()
+        with state_lock:
+            if not args.hands_free and state == State.RECORDING:
+                recorder.stop()
 
-    with state_lock:
-        if not args.hands_free and state == State.RECORDING:
-            recorder.stop()
-
-    print(f"\nSession stats: {stats.summary()}")
-    telemetry.emit("app.exiting", stats=stats.summary())
-    print("Exiting.")
+        print(f"\nSession stats: {stats.summary()}")
+        telemetry.emit("app.exiting", stats=stats.summary())
+        print("Exiting.")
 
 
 if __name__ == "__main__":

@@ -23,3 +23,9 @@
 - Added a transcription state to the floating overlay. After recording stops, the same helper displays compact Whisper frame progress with percent, processed/total frames, and frames per second when MLX exposes a tqdm progress bar.
 - The transcription progress path wraps MLX Whisper's module-local `tqdm` reference during a single transcription call and restores it after success or failure. Terminal progress output remains intact; the overlay only receives bounded progress metadata.
 - The existing `--no-recording-overlay` switch now disables both recording and transcription overlay states. Existing transcription lifecycle telemetry and `recording_overlay.disabled` helper diagnostics remain the debugging surface; no transcript, prompt, hotword, or raw audio content is emitted.
+
+## 2026-05-21
+- Hardened overlay helper lifecycle after observing orphaned `whiscode.recording_overlay --helper` processes with PPID `1` following Ctrl-C during recording.
+- Helpers now receive the parent WhisCode PID and schedule their normal stop path if the parent disappears before stdin EOF is delivered.
+- WhisCode also performs startup cleanup of stale orphan helpers only when their PPID is `1`, leaving helpers with a live WhisCode parent alone.
+- Added `python -m whiscode.recording_overlay --cleanup-orphans` for manual cleanup and bounded `recording_overlay.orphan_cleanup` telemetry that reports only found/terminated/failed counts.

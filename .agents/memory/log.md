@@ -41,3 +41,4 @@
 ## 2026-05-21
 - Added audio capture and normalization memory after implementing bounded pre-transcription gain correction for quiet microphone input.
 - Updated audio capture memory after reverting pre-transcription normalization; flat overlay bars indicate the issue is upstream of transcription.
+- Updated recording status notification memory after adding overlay helper parent monitoring and orphan cleanup.

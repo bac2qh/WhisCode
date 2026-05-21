@@ -1,11 +1,23 @@
 import io
 import json
+import os
+import signal
 import subprocess
 from unittest.mock import Mock, patch
 
 import numpy as np
 
-from whiscode.recording_overlay import RecordingOverlayClient, _draw_attributed_text, _read_helper_commands
+from whiscode.recording_overlay import (
+    OverlayCleanupResult,
+    OverlayHelperProcess,
+    RecordingOverlayClient,
+    _draw_attributed_text,
+    _parse_overlay_helper_processes,
+    _read_helper_commands,
+    _watch_parent,
+    cleanup_orphan_helpers,
+    main,
+)
 
 
 def make_process():
@@ -24,6 +36,10 @@ def test_overlay_client_sends_show_hide_stop_commands():
 
     with (
         patch("subprocess.Popen", return_value=process) as popen,
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
         patch.object(RecordingOverlayClient, "_ensure_sender_thread"),
     ):
         client = RecordingOverlayClient(update_interval=999)
@@ -31,7 +47,13 @@ def test_overlay_client_sends_show_hide_stop_commands():
         client.hide()
         client.stop()
 
-    assert popen.call_args.args[0][1:] == ["-m", "whiscode.recording_overlay", "--helper"]
+    assert popen.call_args.args[0][1:] == [
+        "-m",
+        "whiscode.recording_overlay",
+        "--helper",
+        "--parent-pid",
+        str(os.getpid()),
+    ]
     assert sent_commands(process) == [
         {"command": "show"},
         {"command": "hide"},
@@ -44,7 +66,13 @@ def test_overlay_client_sends_show_hide_stop_commands():
 def test_overlay_client_sends_transcription_commands():
     process = make_process()
 
-    with patch("subprocess.Popen", return_value=process):
+    with (
+        patch("subprocess.Popen", return_value=process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+    ):
         client = RecordingOverlayClient(update_interval=999)
         client.show_transcribing(total_frames=10)
         client.update_transcription_progress(current_frames=5, total_frames=10, rate=123.4)
@@ -62,7 +90,13 @@ def test_overlay_client_sends_transcription_commands():
 def test_overlay_client_clamps_transcription_progress():
     process = make_process()
 
-    with patch("subprocess.Popen", return_value=process):
+    with (
+        patch("subprocess.Popen", return_value=process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+    ):
         client = RecordingOverlayClient(update_interval=999)
         client.show_transcribing(total_frames=-10)
         client.update_transcription_progress(current_frames=-5, total_frames=-10, rate=-3.0)
@@ -77,7 +111,13 @@ def test_overlay_client_stop_kills_helper_when_terminate_times_out():
     process = make_process()
     process.wait.side_effect = [subprocess.TimeoutExpired("overlay", 0.01), None]
 
-    with patch("subprocess.Popen", return_value=process):
+    with (
+        patch("subprocess.Popen", return_value=process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+    ):
         client = RecordingOverlayClient(stop_timeout=0.01)
         client.show()
         client.stop()
@@ -96,7 +136,13 @@ def test_overlay_client_update_level_clamps_audio_level():
 
 
 def test_overlay_client_disables_when_helper_fails_to_start():
-    with patch("subprocess.Popen", side_effect=OSError("missing appkit")):
+    with (
+        patch("subprocess.Popen", side_effect=OSError("missing appkit")),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+    ):
         client = RecordingOverlayClient()
         client.show()
 
@@ -116,7 +162,13 @@ def test_overlay_client_reports_helper_exit(capsys):
     process.poll.return_value = -5
     telemetry = FakeTelemetry()
 
-    with patch("subprocess.Popen", return_value=process):
+    with (
+        patch("subprocess.Popen", return_value=process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+    ):
         client = RecordingOverlayClient(telemetry=telemetry)
         client.show()
 
@@ -203,3 +255,113 @@ def test_read_helper_commands_ignores_bad_json_but_stops_on_eof():
         (controller.handle, {"command": "level", "level": 0.4}),
         (controller.handle, {"command": "stop"}),
     ]
+
+
+def test_overlay_client_launch_cleans_orphans_once():
+    process = make_process()
+    telemetry = FakeTelemetry()
+
+    with (
+        patch("subprocess.Popen", return_value=process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(found_count=2, terminated_count=2, failed_count=0),
+        ) as cleanup,
+    ):
+        client = RecordingOverlayClient(telemetry=telemetry)
+        client.show()
+        client.hide()
+        client.show()
+
+    cleanup.assert_called_once()
+    assert (
+        "recording_overlay.orphan_cleanup",
+        {"found_count": 2, "terminated_count": 2, "failed_count": 0},
+    ) in telemetry.events
+
+
+def test_watch_parent_schedules_stop_when_parent_disappears():
+    controller = Mock()
+    calls = []
+
+    _watch_parent(
+        123,
+        controller,
+        lambda fn, command: calls.append((fn, command)),
+        process_exists=lambda pid: False,
+        sleep=lambda interval: (_ for _ in ()).throw(AssertionError("slept")),
+    )
+
+    assert calls == [(controller.handle, {"command": "stop"})]
+
+
+def test_parse_overlay_helper_processes_finds_helper_commands():
+    output = """
+      111     1 /usr/bin/python -m whiscode.recording_overlay --helper --parent-pid 10
+      222    10 /usr/bin/python -m whiscode.recording_overlay --helper --parent-pid 10
+      333     1 /usr/bin/python -m whiscode.recording_overlay --cleanup-orphans
+      444     1 /usr/bin/python other.py
+    """
+
+    processes = _parse_overlay_helper_processes(output)
+
+    assert processes == [
+        OverlayHelperProcess(
+            111,
+            1,
+            "/usr/bin/python -m whiscode.recording_overlay --helper --parent-pid 10",
+        ),
+        OverlayHelperProcess(
+            222,
+            10,
+            "/usr/bin/python -m whiscode.recording_overlay --helper --parent-pid 10",
+        ),
+    ]
+
+
+def test_cleanup_orphan_helpers_skips_active_helpers():
+    processes = [
+        OverlayHelperProcess(111, 1, "python -m whiscode.recording_overlay --helper"),
+        OverlayHelperProcess(222, 123, "python -m whiscode.recording_overlay --helper"),
+    ]
+
+    with patch("whiscode.recording_overlay.os.kill") as kill:
+        kill.side_effect = [None, ProcessLookupError()]
+        result = cleanup_orphan_helpers(processes=processes)
+
+    assert result == OverlayCleanupResult(found_count=1, terminated_count=1, failed_count=0)
+    assert kill.call_args_list == [
+        ((111, signal.SIGTERM),),
+        ((111, 0),),
+    ]
+
+
+def test_cleanup_orphan_helpers_counts_permission_failures():
+    processes = [OverlayHelperProcess(111, 1, "python -m whiscode.recording_overlay --helper")]
+
+    with patch("whiscode.recording_overlay.os.kill", side_effect=PermissionError):
+        result = cleanup_orphan_helpers(processes=processes)
+
+    assert result == OverlayCleanupResult(found_count=1, terminated_count=0, failed_count=1)
+
+
+def test_cleanup_orphan_helpers_reports_process_listing_failure():
+    with patch("whiscode.recording_overlay.overlay_helper_processes", side_effect=OSError):
+        result = cleanup_orphan_helpers()
+
+    assert result == OverlayCleanupResult(found_count=0, terminated_count=0, failed_count=1)
+
+
+def test_cleanup_orphans_cli_prints_counts(capsys):
+    with patch(
+        "whiscode.recording_overlay.cleanup_orphan_helpers",
+        return_value=OverlayCleanupResult(found_count=1, terminated_count=1, failed_count=0),
+    ):
+        result = main(["--cleanup-orphans"])
+
+    assert result == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "found_count": 1,
+        "terminated_count": 1,
+        "failed_count": 0,
+    }

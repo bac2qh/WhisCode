@@ -3,14 +3,31 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import signal
 import subprocess
 import sys
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+
+
+@dataclass(frozen=True)
+class OverlayHelperProcess:
+    pid: int
+    ppid: int
+    command: str
+
+
+@dataclass(frozen=True)
+class OverlayCleanupResult:
+    found_count: int
+    terminated_count: int
+    failed_count: int
 
 
 class RecordingOverlayClient:
@@ -29,6 +46,7 @@ class RecordingOverlayClient:
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
         self._send_lock = threading.Lock()
+        self._cleanup_ran = False
         self._latest_level = 0.0
         self._visible = False
         self._mode: str | None = None
@@ -130,9 +148,17 @@ class RecordingOverlayClient:
     def _ensure_process(self) -> bool:
         if self._process and self._process.poll() is None:
             return True
+        self._cleanup_orphan_helpers()
         try:
             self._process = subprocess.Popen(
-                [sys.executable, "-m", "whiscode.recording_overlay", "--helper"],
+                [
+                    sys.executable,
+                    "-m",
+                    "whiscode.recording_overlay",
+                    "--helper",
+                    "--parent-pid",
+                    str(os.getpid()),
+                ],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -143,6 +169,19 @@ class RecordingOverlayClient:
         except OSError as e:
             self._disable("launch_failed", stage="start", error_type=type(e).__name__)
             return False
+
+    def _cleanup_orphan_helpers(self) -> None:
+        if self._cleanup_ran:
+            return
+        self._cleanup_ran = True
+        result = cleanup_orphan_helpers()
+        if result.found_count and self.telemetry:
+            self.telemetry.emit(
+                "recording_overlay.orphan_cleanup",
+                found_count=result.found_count,
+                terminated_count=result.terminated_count,
+                failed_count=result.failed_count,
+            )
 
     def _ensure_sender_thread(self) -> None:
         if self._sender_thread and self._sender_thread.is_alive():
@@ -238,7 +277,140 @@ def _read_helper_commands(input_stream: Any, controller: Any, call_after: Any) -
     call_after(controller.handle, {"command": "stop"})
 
 
-def _run_helper() -> None:
+def _process_exists(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def _watch_parent(
+    parent_pid: int,
+    controller: Any,
+    call_after: Any,
+    *,
+    interval: float = 0.5,
+    process_exists=_process_exists,
+    sleep=time.sleep,
+) -> None:
+    while True:
+        if not process_exists(parent_pid):
+            call_after(controller.handle, {"command": "stop"})
+            return
+        sleep(interval)
+
+
+def _start_parent_watchdog(parent_pid: int | None, controller: Any, call_after: Any) -> threading.Thread | None:
+    if parent_pid is None or parent_pid <= 0:
+        return None
+    thread = threading.Thread(
+        target=_watch_parent,
+        args=(parent_pid, controller, call_after),
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
+def _is_overlay_helper_command(command: str) -> bool:
+    return (
+        "whiscode.recording_overlay" in command
+        and "--helper" in command
+        and "--cleanup-orphans" not in command
+    )
+
+
+def _parse_overlay_helper_processes(ps_output: str) -> list[OverlayHelperProcess]:
+    processes = []
+    for line in ps_output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(None, 2)
+        if len(parts) != 3:
+            continue
+        try:
+            pid = int(parts[0])
+            ppid = int(parts[1])
+        except ValueError:
+            continue
+        command = parts[2]
+        if _is_overlay_helper_command(command):
+            processes.append(OverlayHelperProcess(pid, ppid, command))
+    return processes
+
+
+def overlay_helper_processes(*, ps_output: str | None = None) -> list[OverlayHelperProcess]:
+    if ps_output is None:
+        ps_output = subprocess.check_output(
+            ["ps", "-axo", "pid=,ppid=,command="],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    return _parse_overlay_helper_processes(ps_output)
+
+
+def cleanup_orphan_helpers(
+    *,
+    processes: list[OverlayHelperProcess] | None = None,
+    terminate_timeout: float = 0.5,
+    kill_timeout: float = 0.5,
+) -> OverlayCleanupResult:
+    if processes is None:
+        try:
+            processes = overlay_helper_processes()
+        except (OSError, subprocess.SubprocessError):
+            return OverlayCleanupResult(found_count=0, terminated_count=0, failed_count=1)
+
+    orphans = [process for process in processes if process.ppid == 1 and process.pid != os.getpid()]
+    terminated = 0
+    failed = 0
+    for process in orphans:
+        try:
+            os.kill(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            terminated += 1
+            continue
+        except PermissionError:
+            failed += 1
+            continue
+
+        deadline = time.monotonic() + terminate_timeout
+        while time.monotonic() < deadline:
+            if not _process_exists(process.pid):
+                terminated += 1
+                break
+            time.sleep(0.05)
+        else:
+            try:
+                os.kill(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                terminated += 1
+                continue
+            except PermissionError:
+                failed += 1
+                continue
+            kill_deadline = time.monotonic() + kill_timeout
+            while time.monotonic() < kill_deadline:
+                if not _process_exists(process.pid):
+                    terminated += 1
+                    break
+                time.sleep(0.05)
+            else:
+                failed += 1
+    return OverlayCleanupResult(
+        found_count=len(orphans),
+        terminated_count=terminated,
+        failed_count=failed,
+    )
+
+
+def _run_helper(parent_pid: int | None = None) -> None:
     from AppKit import (
         NSApp,
         NSApplication,
@@ -439,6 +611,7 @@ def _run_helper() -> None:
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     controller = OverlayController()
+    _start_parent_watchdog(parent_pid, controller, AppHelper.callAfter)
     threading.Thread(
         target=_read_helper_commands,
         args=(sys.stdin, controller, AppHelper.callAfter),
@@ -450,9 +623,25 @@ def _run_helper() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--helper", action="store_true")
+    parser.add_argument("--parent-pid", type=int, default=None)
+    parser.add_argument("--cleanup-orphans", action="store_true")
     args = parser.parse_args(argv)
+    if args.cleanup_orphans:
+        result = cleanup_orphan_helpers()
+        print(
+            json.dumps(
+                {
+                    "found_count": result.found_count,
+                    "terminated_count": result.terminated_count,
+                    "failed_count": result.failed_count,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+        return 0 if result.failed_count == 0 else 1
     if args.helper:
-        _run_helper()
+        _run_helper(parent_pid=args.parent_pid)
         return 0
     return 1
 
