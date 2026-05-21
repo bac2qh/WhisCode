@@ -44,7 +44,7 @@ from whiscode.hotwords import load_hotwords
 from whiscode.injector import press_key_command, type_text
 from whiscode.postprocess import postprocess, postprocess_for_refine
 from whiscode.refiner import refine
-from whiscode.recorder import Recorder, SAMPLE_RATE
+from whiscode.recorder import Recorder, SAMPLE_RATE, normalize_for_transcription
 from whiscode.recording_overlay import RecordingOverlayClient
 from whiscode.reminders import start_reminders
 from whiscode.stats import Stats
@@ -287,6 +287,23 @@ def ensure_hands_free_references(
     return True
 
 
+def prepare_transcription_audio(audio, *, telemetry=None, source: str = "unknown"):
+    normalized = normalize_for_transcription(audio)
+    if telemetry and normalized.applied:
+        telemetry.emit(
+            "audio.normalization_applied",
+            source=source,
+            gain=round(normalized.gain, 3),
+            input_rms=round(normalized.input_rms, 6),
+            output_rms=round(normalized.output_rms, 6),
+            input_peak=round(normalized.input_peak, 6),
+            output_peak=round(normalized.output_peak, 6),
+            audio_samples=len(normalized.audio),
+            audio_seconds=round(len(normalized.audio) / SAMPLE_RATE, 3),
+        )
+    return normalized.audio
+
+
 def main():
     args = parse_args()
     telemetry = telemetry_from_args(args, default_enabled=args.hands_free or args.telemetry_path is not None)
@@ -407,7 +424,9 @@ def main():
         if args.recording_notifications:
             notify_recording_completed()
 
-    def start_transcription(audio, audio_seconds, resume_handsfree=None):
+    def start_transcription(audio, audio_seconds, resume_handsfree=None, source="unknown"):
+        audio = prepare_transcription_audio(audio, telemetry=telemetry, source=source)
+
         def process(audio=audio, audio_seconds=audio_seconds):
             nonlocal state
             started = time.monotonic()
@@ -519,7 +538,7 @@ def main():
                             audio_seconds=round(audio_seconds, 3),
                         )
                     print("Transcribing...")
-                    start_transcription(audio, audio_seconds)
+                    start_transcription(audio, audio_seconds, source=source)
 
     def handsfree_worker():
         while not shutdown_event.is_set():
@@ -560,7 +579,12 @@ def main():
                 handsfree_session.suspend()
                 hide_recording_status()
                 print("Transcribing... (manual)")
-                start_transcription(event.audio, event.duration_seconds, handsfree_session.resume)
+                start_transcription(
+                    event.audio,
+                    event.duration_seconds,
+                    handsfree_session.resume,
+                    source="manual_handsfree_hotkey",
+                )
 
     def handle_handsfree_event(event):
         nonlocal state
@@ -625,7 +649,12 @@ def main():
                         )
                     record_handsfree_cycle(event.kind, event.duration_seconds)
                     print("Transcribing...")
-                    start_transcription(event.audio, event.duration_seconds, handsfree_session.resume)
+                    start_transcription(
+                        event.audio,
+                        event.duration_seconds,
+                        handsfree_session.resume,
+                        source=f"handsfree_{event.kind}",
+                    )
                 return
 
             if event.kind == "detector.error":

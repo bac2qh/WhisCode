@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
@@ -5,6 +6,24 @@ import sounddevice as sd
 
 SAMPLE_RATE = 16000
 _FALLBACK_RATES = [16000, 44100, 48000, 8000, 22050, 32000, 96000]
+DEFAULT_TRANSCRIPTION_TARGET_RMS = 0.08
+DEFAULT_TRANSCRIPTION_MIN_RMS = 0.001
+DEFAULT_TRANSCRIPTION_MAX_GAIN = 8.0
+DEFAULT_TRANSCRIPTION_PEAK_LIMIT = 0.95
+
+
+@dataclass(frozen=True)
+class AudioNormalization:
+    audio: np.ndarray
+    gain: float
+    input_rms: float
+    output_rms: float
+    input_peak: float
+    output_peak: float
+
+    @property
+    def applied(self) -> bool:
+        return self.gain > 1.0001
 
 
 def _get_native_samplerate() -> int:
@@ -126,3 +145,62 @@ def _audio_level(audio: np.ndarray) -> float:
         return 0.0
     rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float32))))
     return min(1.0, rms / 0.08)
+
+
+def normalize_for_transcription(
+    audio: np.ndarray,
+    *,
+    target_rms: float = DEFAULT_TRANSCRIPTION_TARGET_RMS,
+    min_rms: float = DEFAULT_TRANSCRIPTION_MIN_RMS,
+    max_gain: float = DEFAULT_TRANSCRIPTION_MAX_GAIN,
+    peak_limit: float = DEFAULT_TRANSCRIPTION_PEAK_LIMIT,
+) -> AudioNormalization:
+    audio = np.asarray(audio, dtype=np.float32).flatten()
+    input_rms, input_peak = _audio_rms_peak(audio)
+    gain = _transcription_gain(
+        input_rms=input_rms,
+        input_peak=input_peak,
+        target_rms=target_rms,
+        min_rms=min_rms,
+        max_gain=max_gain,
+        peak_limit=peak_limit,
+    )
+    if gain > 1.0:
+        output = np.clip(audio * gain, -peak_limit, peak_limit).astype(np.float32)
+    else:
+        output = audio.astype(np.float32, copy=True)
+    output_rms, output_peak = _audio_rms_peak(output)
+    return AudioNormalization(
+        audio=output,
+        gain=gain,
+        input_rms=input_rms,
+        output_rms=output_rms,
+        input_peak=input_peak,
+        output_peak=output_peak,
+    )
+
+
+def _transcription_gain(
+    *,
+    input_rms: float,
+    input_peak: float,
+    target_rms: float,
+    min_rms: float,
+    max_gain: float,
+    peak_limit: float,
+) -> float:
+    if input_rms <= 0.0 or input_peak <= 0.0:
+        return 1.0
+    if input_rms < min_rms or input_rms >= target_rms:
+        return 1.0
+    if target_rms <= 0.0 or max_gain <= 1.0 or peak_limit <= 0.0:
+        return 1.0
+    return max(1.0, min(max_gain, target_rms / input_rms, peak_limit / input_peak))
+
+
+def _audio_rms_peak(audio: np.ndarray) -> tuple[float, float]:
+    if len(audio) == 0:
+        return 0.0, 0.0
+    rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float32))))
+    peak = float(np.max(np.abs(audio)))
+    return rms, peak

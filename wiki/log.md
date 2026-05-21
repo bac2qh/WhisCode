@@ -23,3 +23,6 @@
 - Documented Tab, Arrow Up, and Arrow Down trained hands-free command slots.
 - Documented overlay helper EOF shutdown to prevent orphaned floating panels.
 - Documented the transcription progress state in the floating overlay.
+
+## 2026-05-21
+- Documented bounded pre-transcription gain normalization for quiet microphone recordings and its telemetry.

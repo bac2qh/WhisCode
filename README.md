@@ -75,6 +75,8 @@ uv run whiscode --hands-free
 
 WhisCode shows a small floating macOS overlay while recording and transcribing. During recording it shows an elapsed stopwatch and live microphone levels as waveform bars. During transcription it shows a compact frame progress bar with percentage, processed/total frames, and frames per second when available. Guided enrollment uses the same overlay while each sample is being recorded.
 
+Before transcription, WhisCode applies bounded gain normalization to quiet recordings so low microphone input is easier for Whisper to recognize. This boost is capped and peak-limited; hands-free wake/end/command detection still uses raw microphone audio so existing detector calibration remains stable.
+
 Use `--no-recording-overlay` to disable it. Use `--recording-notifications` with `whiscode` if you also want the older macOS start/end notification banners during normal recording.
 
 ## Hands-Free Mode
@@ -148,7 +150,7 @@ Hands-free mode and guided enrollment write local JSONL telemetry to:
 ~/.config/whiscode/telemetry/events.jsonl
 ```
 
-Use it to inspect wake/end/command detections, detector distances, recording durations, key-command injection outcomes, transcription outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes these distances alongside reference-sample distances. Telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, or typed text. Disable it with `--no-telemetry` or write to another file with `--telemetry-path`.
+Use it to inspect wake/end/command detections, detector distances, recording durations, audio normalization, key-command injection outcomes, transcription outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes these distances alongside reference-sample distances. Telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, or typed text. Disable it with `--no-telemetry` or write to another file with `--telemetry-path`.
 
 `handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. WhisCode keeps microphone capture lightweight and uses a bounded detector queue to reduce this. If detector processing still falls behind, `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` show how much queued audio was dropped and how long detection took. These diagnostics do not include raw audio or transcript text.
 

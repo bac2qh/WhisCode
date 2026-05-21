@@ -1,11 +1,14 @@
 from pathlib import Path
 
+import numpy as np
+
 from whiscode.handsfree import command_reference_dirs
 from whiscode.main import (
     _default_whisper_processor_source,
     ensure_hands_free_references,
     ensure_whisper_processor,
     parse_args,
+    prepare_transcription_audio,
 )
 
 
@@ -136,6 +139,30 @@ def test_parse_args_zero_disables_shared_max_recording_seconds():
 
     assert args.max_recording_seconds == 0
     assert args.hands_free_max_seconds == 0
+
+
+def test_prepare_transcription_audio_emits_gain_telemetry():
+    telemetry = FakeTelemetry()
+    audio = np.array([0.005, -0.005], dtype=np.float32)
+
+    prepared = prepare_transcription_audio(audio, telemetry=telemetry, source="hotkey")
+
+    np.testing.assert_allclose(prepared, [0.04, -0.04])
+    assert telemetry.events == [
+        (
+            "audio.normalization_applied",
+            {
+                "source": "hotkey",
+                "gain": 8.0,
+                "input_rms": 0.005,
+                "output_rms": 0.04,
+                "input_peak": 0.005,
+                "output_peak": 0.04,
+                "audio_samples": 2,
+                "audio_seconds": 0.0,
+            },
+        )
+    ]
 
 
 def test_default_whisper_processor_source_maps_mlx_default_to_openai_model():
