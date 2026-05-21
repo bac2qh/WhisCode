@@ -16,7 +16,7 @@
 
 ### Next Step
 
-- Close out to local `main`.
+- None. Closeout completed on local `main`.
 
 ### Verification
 
@@ -34,3 +34,11 @@
 ### Commits
 
 - `129643a` Revert pre-transcription mic gain normalization.
+- `ab4fb21` Record mic gain rollback checkpoint.
+
+### Closeout
+
+- Local `main` fast-forwarded to `ab4fb21`; no merge commit was created.
+- Removed task worktree `.agents/worktrees/revert-low-mic-normalization`.
+- Deleted local branch `revert-low-mic-normalization`.
+- Archived the plan to `.agents/plans/archive/2026-05-21-revert-low-mic-normalization.md`.
