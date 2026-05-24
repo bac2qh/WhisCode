@@ -34,10 +34,10 @@ Done:
 - Confirmed the Qwen3-ASR LM Studio files are present and used for the smoke path.
 
 Implementation commit:
-- Pending.
+- `ab3e2fe` (`Add optional llama.cpp ASR backend`).
 
 Immediate next step:
-- Commit the implementation, then update this checkpoint with the commit hash and closeout outcome.
+- Commit this checkpoint hash update, then run closeout into local `main`.
 
 Key decisions and reasoning:
 - Default install and `uv run whiscode` stay MLX Whisper to avoid imposing llama.cpp or Qwen3-ASR on existing users.
