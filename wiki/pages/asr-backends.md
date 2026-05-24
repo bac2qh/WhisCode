@@ -33,3 +33,27 @@ The default local configuration expects:
 The backend starts the server only when selected, keeps it warm while WhisCode runs, and terminates only the child process it started. Existing external servers are reused and left running.
 
 Telemetry for this backend is limited to bounded operational status such as backend selection, health-check outcomes, startup duration, child PID, audio duration, output length, HTTP status class, and error type. It does not record raw audio, transcript text, prompts, full request payloads, secrets, or model output content.
+
+## Optional CrispASR Backend
+
+`crispasr` is an opt-in backend for local VibeVoice ASR GGUF experiments:
+
+```bash
+WHISCODE_CRISPASR_MODEL=~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-f16.gguf \
+  uv run whiscode --asr-backend crispasr --language en
+```
+
+WhisCode expects a source-built sibling CrispASR checkout by default:
+
+```text
+~/Documents/repos/CrispASR/build/bin/crispasr
+~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-f16.gguf
+```
+
+Build the executable target with `cmake --build build --target crispasr-cli`.
+
+Override those defaults with `WHISCODE_CRISPASR_BIN`, `WHISCODE_CRISPASR_MODEL`, `--crispasr-bin`, or `--crispasr-model`.
+
+The backend starts `crispasr --server --backend vibevoice`, keeps the model warm while WhisCode runs, sends final recordings as multipart WAV requests to `/v1/audio/transcriptions`, and returns plain transcript text to the existing WhisCode postprocessing pipeline. It reuses existing healthy servers and terminates only the child process it started.
+
+Telemetry for this backend is limited to bounded operational status such as health-check outcomes, startup duration, child PID, backend name, model basename, audio duration, output length, HTTP status class, and error type. It does not record raw audio, transcript text, prompts, hotwords, full request payloads, secrets, or full model paths.

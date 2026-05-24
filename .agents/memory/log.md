@@ -45,3 +45,4 @@
 
 ## 2026-05-24
 - Added optional llama.cpp/Qwen3-ASR ASR backend memory: `mlx-whisper` remains the default, while `--asr-backend llama-cpp` uses a warm local source-built `llama-server` and preserves the surrounding WhisCode app flow.
+- Added optional CrispASR/VibeVoice ASR backend memory: `mlx-whisper` remains the default, while `--asr-backend crispasr` uses a warm source-built CrispASR server and the benchmark command compares backend latency on WAV files.

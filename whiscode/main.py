@@ -42,6 +42,12 @@ from whiscode.handsfree import (
 from whiscode.enroll import DEFAULT_ENROLL_SECONDS, record_guided_samples
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import press_key_command, type_text
+from whiscode.crispasr_asr import (
+    CrispAsrBackend,
+    CrispAsrServerConfig,
+    default_crispasr_bin,
+    default_crispasr_model_path,
+)
 from whiscode.llama_cpp_asr import (
     LlamaCppAsrBackend,
     LlamaCppServerConfig,
@@ -75,7 +81,7 @@ def parse_args(argv: list[str] | None = None):
     raw_argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
-    parser.add_argument("--asr-backend", choices=("mlx-whisper", "llama-cpp"), default="mlx-whisper", help="ASR backend to use (default: mlx-whisper)")
+    parser.add_argument("--asr-backend", choices=("mlx-whisper", "llama-cpp", "crispasr"), default="mlx-whisper", help="ASR backend to use (default: mlx-whisper)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
     parser.add_argument("--language", default="auto", help="Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.")
     parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
@@ -116,6 +122,17 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--llama-ngl", type=int, default=99, help="llama.cpp GPU layers for ASR server (default: 99)")
     parser.set_defaults(llama_autostart=True)
     parser.add_argument("--no-llama-autostart", dest="llama_autostart", action="store_false", help="Require an existing llama.cpp ASR server instead of starting one")
+    parser.add_argument("--crispasr-bin", type=Path, default=default_crispasr_bin(), help="Source-built crispasr binary for --asr-backend crispasr")
+    parser.add_argument("--crispasr-model", type=Path, default=default_crispasr_model_path(), help="VibeVoice ASR GGUF model path for --asr-backend crispasr")
+    parser.add_argument("--crispasr-backend", default="vibevoice", help="CrispASR backend name (default: vibevoice)")
+    parser.add_argument("--crispasr-host", default="127.0.0.1", help="CrispASR server host (default: 127.0.0.1)")
+    parser.add_argument("--crispasr-port", type=int, default=8092, help="CrispASR server port (default: 8092)")
+    parser.add_argument("--crispasr-max-tokens", type=int, default=2048, help="CrispASR generated-token cap (default: 2048)")
+    parser.add_argument("--crispasr-temperature", type=float, default=0.0, help="CrispASR sampling temperature (default: 0.0)")
+    parser.add_argument("--crispasr-request-timeout", type=float, default=300.0, help="CrispASR transcription request timeout in seconds (default: 300)")
+    parser.add_argument("--crispasr-startup-timeout", type=float, default=180.0, help="CrispASR server startup timeout in seconds (default: 180)")
+    parser.set_defaults(crispasr_autostart=True)
+    parser.add_argument("--no-crispasr-autostart", dest="crispasr_autostart", action="store_false", help="Require an existing CrispASR server instead of starting one")
     parser.set_defaults(recording_overlay=True)
     parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay (default)")
     parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay")
@@ -395,6 +412,36 @@ def main():
             )
 
         print(f"llama.cpp ASR ready at {args.llama_host}:{args.llama_port}. Press {args.hotkey} to start/stop recording.")
+    elif args.asr_backend == "crispasr":
+        config = CrispAsrServerConfig(
+            server_bin=args.crispasr_bin.expanduser(),
+            model=args.crispasr_model.expanduser(),
+            backend=args.crispasr_backend,
+            host=args.crispasr_host,
+            port=args.crispasr_port,
+            autostart=args.crispasr_autostart,
+            max_tokens=args.crispasr_max_tokens,
+            temperature=args.crispasr_temperature,
+            startup_timeout_seconds=args.crispasr_startup_timeout,
+            request_timeout_seconds=args.crispasr_request_timeout,
+        )
+        asr_backend = CrispAsrBackend(config, telemetry=telemetry)
+        try:
+            asr_backend.start()
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        def transcribe_audio(audio, progress_callback=None):
+            return asr_backend.transcribe(
+                audio,
+                language=args.language,
+                extra_prompt=args.prompt,
+                hotwords=hot_words,
+                progress_callback=progress_callback,
+            )
+
+        print(f"CrispASR ready at {args.crispasr_host}:{args.crispasr_port}. Press {args.hotkey} to start/stop recording.")
     else:
         print(f"Error: Unknown ASR backend '{args.asr_backend}'.", file=sys.stderr)
         sys.exit(1)

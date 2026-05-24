@@ -36,6 +36,9 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.model == "mlx-community/whisper-large-v3-mlx"
     assert args.llama_port == 8091
     assert args.llama_autostart is True
+    assert args.crispasr_port == 8092
+    assert args.crispasr_backend == "vibevoice"
+    assert args.crispasr_autostart is True
 
 
 def test_parse_args_llama_cpp_options():
@@ -68,6 +71,44 @@ def test_parse_args_llama_cpp_options():
     assert args.llama_ctx == 8192
     assert args.llama_ngl == 42
     assert args.llama_autostart is False
+
+
+def test_parse_args_crispasr_options():
+    args = parse_args([
+        "--asr-backend",
+        "crispasr",
+        "--crispasr-bin",
+        "/tmp/crispasr",
+        "--crispasr-model",
+        "/tmp/vibevoice.gguf",
+        "--crispasr-backend",
+        "vibevoice",
+        "--crispasr-host",
+        "127.0.0.3",
+        "--crispasr-port",
+        "8098",
+        "--crispasr-max-tokens",
+        "1024",
+        "--crispasr-temperature",
+        "0.1",
+        "--crispasr-request-timeout",
+        "12",
+        "--crispasr-startup-timeout",
+        "34",
+        "--no-crispasr-autostart",
+    ])
+
+    assert args.asr_backend == "crispasr"
+    assert args.crispasr_bin == Path("/tmp/crispasr")
+    assert args.crispasr_model == Path("/tmp/vibevoice.gguf")
+    assert args.crispasr_backend == "vibevoice"
+    assert args.crispasr_host == "127.0.0.3"
+    assert args.crispasr_port == 8098
+    assert args.crispasr_max_tokens == 1024
+    assert args.crispasr_temperature == 0.1
+    assert args.crispasr_request_timeout == 12
+    assert args.crispasr_startup_timeout == 34
+    assert args.crispasr_autostart is False
 
 
 def test_parse_args_hands_free_options():

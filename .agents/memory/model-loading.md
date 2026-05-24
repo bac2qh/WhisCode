@@ -17,3 +17,7 @@
 - The llama.cpp backend uses a warm local `llama-server` process only when `--asr-backend llama-cpp` is selected. It reuses an existing server when reachable, auto-starts the configured source-built server otherwise, and terminates only the child process it owns.
 - The default local Qwen3-ASR paths target LM Studio's `ggml-org/Qwen3-ASR-1.7B-GGUF` cache: `Qwen3-ASR-1.7B-Q8_0.gguf` with the available `mmproj-Qwen3-ASR-1.7B-bf16.gguf`.
 - Hands-free detection, hotkey recording, overlays, postprocessing, replacements, optional refinement, stats, and text injection remain independent from the ASR backend.
+- WhisCode added an optional `crispasr` ASR backend for VibeVoice ASR GGUF while keeping `mlx-whisper` as the default compatibility backend and leaving the llama.cpp/Qwen path unchanged.
+- The CrispASR backend uses a warm source-built `crispasr` server only when `--asr-backend crispasr` is selected. It reuses a reachable server, auto-starts the configured sibling executable otherwise, sends final recordings to `/v1/audio/transcriptions`, and terminates only the child process it owns.
+- CrispASR defaults can be set with `WHISCODE_CRISPASR_BIN` and `WHISCODE_CRISPASR_MODEL`; the recommended VibeVoice F16 GGUF path is `~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-f16.gguf`.
+- The current CrispASR checkout builds the executable with `cmake --build build --target crispasr-cli`; the `crispasr` target itself builds the library.

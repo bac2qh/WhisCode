@@ -16,6 +16,7 @@ dependencies = [
 whiscode = "whiscode.main:main"
 whiscode-enroll = "whiscode.enroll:main"
 whiscode-calibrate = "whiscode.calibrate:main"
+whiscode-benchmark-asr = "whiscode.benchmark_asr:main"
 
 [build-system]
 requires = ["hatchling"]

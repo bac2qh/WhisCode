@@ -1,6 +1,6 @@
 # WhisCode
 
-Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your words are typed into any text field. Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples) by default, with an optional llama.cpp ASR backend for local Qwen3-ASR experiments.
+Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your words are typed into any text field. Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples) by default, with optional llama.cpp/Qwen3-ASR and CrispASR/VibeVoice ASR backends for local experiments.
 
 ## Version Status
 
@@ -45,7 +45,7 @@ uv run whiscode --hands-free
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--hotkey HOTKEY` | `shift_r` | Toggle key for recording |
-| `--asr-backend BACKEND` | `mlx-whisper` | ASR backend: `mlx-whisper` or optional `llama-cpp` |
+| `--asr-backend BACKEND` | `mlx-whisper` | ASR backend: `mlx-whisper`, optional `llama-cpp`, or optional `crispasr` |
 | `--language LANG` | `auto` | Language code (e.g. `en`, `zh`, `ja`) or `auto` to detect from audio |
 | `--prompt TEXT` | — | Additional context to improve transcription accuracy |
 | `--hotwords-file PATH` | `~/.config/whiscode/hotwords.txt` | Path to hotwords/replacements config file |
@@ -114,6 +114,39 @@ uv run whiscode --asr-backend llama-cpp \
 ```
 
 By default WhisCode starts a warm llama.cpp server on `127.0.0.1:8091` and stops only the child process it started when WhisCode exits. Use `--no-llama-autostart` to connect to an already running server.
+
+### Optional CrispASR VibeVoice ASR
+
+`crispasr` is an opt-in backend for VibeVoice ASR GGUF experiments. It is useful when you want a slower but higher-context local ASR model for technical jargon and multilingual dictation:
+
+```bash
+WHISCODE_CRISPASR_MODEL=~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-f16.gguf \
+  uv run whiscode --asr-backend crispasr --language en
+```
+
+WhisCode does not install CrispASR or VibeVoice for default users. Build a sibling CrispASR checkout from source:
+
+```bash
+cd ~/Documents/repos/CrispASR
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON
+cmake --build build --target crispasr-cli
+```
+
+Download `vibevoice-asr-f16.gguf` from `cstr/vibevoice-asr-GGUF` and place it at the path in `WHISCODE_CRISPASR_MODEL`, or pass paths explicitly:
+
+```bash
+uv run whiscode --asr-backend crispasr \
+  --crispasr-bin ~/Documents/repos/CrispASR/build/bin/crispasr \
+  --crispasr-model ~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-f16.gguf
+```
+
+By default WhisCode starts a warm CrispASR server on `127.0.0.1:8092`, sends final recordings to `/v1/audio/transcriptions`, and stops only the child process it started when WhisCode exits. Use `--no-crispasr-autostart` to connect to an already running server.
+
+Benchmark backend latency on a WAV file:
+
+```bash
+uv run whiscode-benchmark-asr --audio sample.wav --asr-backend crispasr --language en
+```
 
 ## Recording Overlay
 
