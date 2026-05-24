@@ -1,3 +1,11 @@
+> Closeout 2026-05-24: final status `implemented`.
+> Related checkpoint: `.agents/checkpoints/2026-05-24-crispasr-vibevoice-backend-checkpoints.md`.
+> Implementation commits: `002d070` and `047c7f4`; merged into local `main` by fast-forward with no merge commit.
+> Verification: focused CrispASR/main CLI tests passed, full suite passed, compileall passed, help output checked, CrispASR source build passed with `crispasr-cli`, and `crispasr --list-backends` lists `vibevoice`.
+> Live VibeVoice transcription smoke remains pending until `vibevoice-asr-f16.gguf` is downloaded.
+> Cleanup: task worktree `.agents/worktrees/crispasr-vibevoice` removed and branch `feature/crispasr-vibevoice` deleted; unrelated existing worktrees were left untouched.
+> Shipped: optional warm-server CrispASR/VibeVoice backend, backend benchmark command, docs, tests, telemetry, and project memory.
+
 # CrispASR VibeVoice GGUF Backend
 
 ## Summary

@@ -22,4 +22,10 @@
   - CrispASR source build passed in `/Users/xin/Documents/repos/CrispASR`: `cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON` and `cmake --build build --target crispasr-cli`.
   - `/Users/xin/Documents/repos/CrispASR/build/bin/crispasr --list-backends` passed and lists `vibevoice`.
   - Live VibeVoice transcription smoke was not run because `vibevoice-asr-f16.gguf` was not found under `/Users/xin/Documents`.
-- Immediate next step: commit this checkpoint update, then close out by merging into local `main`, archiving the plan, and cleaning the task worktree/branch.
+- Closeout:
+  - Merged into local `main` by fast-forward at `047c7f4`; no merge commit was created.
+  - Removed task worktree `.agents/worktrees/crispasr-vibevoice`.
+  - Deleted local branch `feature/crispasr-vibevoice`.
+  - Archived the plan to `.agents/plans/archive/2026-05-24-crispasr-vibevoice-backend.md`.
+  - Left unrelated worktree `.agents/worktrees/env-llama-paths` untouched.
+- Immediate next step: none for this plan; live VibeVoice smoke can be run after the F16 GGUF model is downloaded.
