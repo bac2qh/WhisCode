@@ -11,3 +11,9 @@
 - The current default `mlx-community/whisper-large-v3-mlx` also ships without Hugging Face processor/tokenizer files in the local MLX repo, so startup failed with WhisCode's missing-processor compatibility error.
 - WhisCode now maps the default large-v3 MLX repo to `openai/whisper-large-v3` while retaining the turbo repo mapping to `openai/whisper-large-v3-turbo`.
 - The fallback remains exact and fail-fast for unknown Whisper repos to avoid silently pairing a model with the wrong tokenizer.
+
+## 2026-05-24
+- WhisCode added an optional `llama-cpp` ASR backend while keeping `mlx-whisper` as the default compatibility backend.
+- The llama.cpp backend uses a warm local `llama-server` process only when `--asr-backend llama-cpp` is selected. It reuses an existing server when reachable, auto-starts the configured source-built server otherwise, and terminates only the child process it owns.
+- The default local Qwen3-ASR paths target LM Studio's `ggml-org/Qwen3-ASR-1.7B-GGUF` cache: `Qwen3-ASR-1.7B-Q8_0.gguf` with the available `mmproj-Qwen3-ASR-1.7B-bf16.gguf`.
+- Hands-free detection, hotkey recording, overlays, postprocessing, replacements, optional refinement, stats, and text injection remain independent from the ASR backend.

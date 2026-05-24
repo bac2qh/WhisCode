@@ -28,3 +28,6 @@
 - Documented bounded pre-transcription gain normalization for quiet microphone recordings and its telemetry.
 - Removed bounded pre-transcription gain normalization documentation after reverting the feature; flat overlay bars point to raw input capture or device configuration instead.
 - Documented overlay helper parent monitoring and orphan cleanup.
+
+## 2026-05-24
+- Documented the optional llama.cpp/Qwen3-ASR backend and clarified that MLX Whisper remains the default compatibility backend.

@@ -42,6 +42,13 @@ from whiscode.handsfree import (
 from whiscode.enroll import DEFAULT_ENROLL_SECONDS, record_guided_samples
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import press_key_command, type_text
+from whiscode.llama_cpp_asr import (
+    LlamaCppAsrBackend,
+    LlamaCppServerConfig,
+    default_llama_mmproj_path,
+    default_llama_model_path,
+    default_llama_server_bin,
+)
 from whiscode.postprocess import postprocess, postprocess_for_refine
 from whiscode.refiner import refine
 from whiscode.recorder import Recorder, SAMPLE_RATE
@@ -68,6 +75,7 @@ def parse_args(argv: list[str] | None = None):
     raw_argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
+    parser.add_argument("--asr-backend", choices=("mlx-whisper", "llama-cpp"), default="mlx-whisper", help="ASR backend to use (default: mlx-whisper)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
     parser.add_argument("--language", default="auto", help="Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.")
     parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
@@ -99,6 +107,15 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--enroll-seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds per guided enrollment sample (default: {DEFAULT_ENROLL_SECONDS})")
     parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
     parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry")
+    parser.add_argument("--llama-server-bin", type=Path, default=default_llama_server_bin(), help="Source-built llama-server binary for --asr-backend llama-cpp")
+    parser.add_argument("--llama-model", type=Path, default=default_llama_model_path(), help="Qwen3-ASR GGUF model path for --asr-backend llama-cpp")
+    parser.add_argument("--llama-mmproj", type=Path, default=default_llama_mmproj_path(), help="Qwen3-ASR mmproj GGUF path for --asr-backend llama-cpp")
+    parser.add_argument("--llama-host", default="127.0.0.1", help="llama.cpp ASR server host (default: 127.0.0.1)")
+    parser.add_argument("--llama-port", type=int, default=8091, help="llama.cpp ASR server port (default: 8091)")
+    parser.add_argument("--llama-ctx", type=int, default=4096, help="llama.cpp context size for ASR server (default: 4096)")
+    parser.add_argument("--llama-ngl", type=int, default=99, help="llama.cpp GPU layers for ASR server (default: 99)")
+    parser.set_defaults(llama_autostart=True)
+    parser.add_argument("--no-llama-autostart", dest="llama_autostart", action="store_false", help="Require an existing llama.cpp ASR server instead of starting one")
     parser.set_defaults(recording_overlay=True)
     parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay (default)")
     parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay")
@@ -291,6 +308,7 @@ def main():
     args = parse_args()
     telemetry = telemetry_from_args(args, default_enabled=args.hands_free or args.telemetry_path is not None)
     telemetry.emit("app.started", mode="hands_free" if args.hands_free else "hotkey")
+    telemetry.emit("asr.backend_selected", backend=args.asr_backend)
 
     hotkey = getattr(keyboard.Key, args.hotkey, None)
     if hotkey is None:
@@ -316,26 +334,70 @@ def main():
     if hot_words or replacements:
         print(f"Loaded {len(hot_words)} hot word(s) and {len(replacements)} replacement(s).")
 
-    model_path = _resolve_model_path(args.model)
-    telemetry.emit("model.load_started")
-    print(f"Loading model: {model_path} ...")
-    from mlx_audio.stt.utils import load_model
-    try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message=r"Could not load WhisperProcessor:.*",
-                category=UserWarning,
-                module="mlx_audio.stt.models.whisper.whisper",
+    asr_backend = None
+    if args.asr_backend == "mlx-whisper":
+        model_path = _resolve_model_path(args.model)
+        telemetry.emit("model.load_started")
+        print(f"Loading model: {model_path} ...")
+        from mlx_audio.stt.utils import load_model
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"Could not load WhisperProcessor:.*",
+                    category=UserWarning,
+                    module="mlx_audio.stt.models.whisper.whisper",
+                )
+                model = load_model(model_path)
+            ensure_whisper_processor(model, args.model, telemetry=telemetry)
+        except Exception as e:
+            telemetry.emit("model.load_failed", error_type=type(e).__name__)
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        telemetry.emit("model.load_completed")
+
+        def transcribe_audio(audio, progress_callback=None):
+            return transcribe(
+                model,
+                audio,
+                language=args.language,
+                extra_prompt=args.prompt,
+                hotwords=hot_words,
+                progress_callback=progress_callback,
             )
-            model = load_model(model_path)
-        ensure_whisper_processor(model, args.model, telemetry=telemetry)
-    except Exception as e:
-        telemetry.emit("model.load_failed", error_type=type(e).__name__)
-        print(f"Error: {e}", file=sys.stderr)
+
+        print(f"Model loaded. Press {args.hotkey} to start/stop recording.")
+    elif args.asr_backend == "llama-cpp":
+        config = LlamaCppServerConfig(
+            server_bin=args.llama_server_bin.expanduser(),
+            model=args.llama_model.expanduser(),
+            mmproj=args.llama_mmproj.expanduser(),
+            host=args.llama_host,
+            port=args.llama_port,
+            ctx=args.llama_ctx,
+            ngl=args.llama_ngl,
+            autostart=args.llama_autostart,
+        )
+        asr_backend = LlamaCppAsrBackend(config, telemetry=telemetry)
+        try:
+            asr_backend.start()
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        def transcribe_audio(audio, progress_callback=None):
+            return asr_backend.transcribe(
+                audio,
+                language=args.language,
+                extra_prompt=args.prompt,
+                hotwords=hot_words,
+                progress_callback=progress_callback,
+            )
+
+        print(f"llama.cpp ASR ready at {args.llama_host}:{args.llama_port}. Press {args.hotkey} to start/stop recording.")
+    else:
+        print(f"Error: Unknown ASR backend '{args.asr_backend}'.", file=sys.stderr)
         sys.exit(1)
-    telemetry.emit("model.load_completed")
-    print(f"Model loaded. Press {args.hotkey} to start/stop recording.")
     if args.refine:
         print(f"Refine mode: ON (model: {args.refine_model})")
 
@@ -422,14 +484,7 @@ def main():
             overlay.show_transcribing()
             telemetry.emit("transcription.started", audio_seconds=round(audio_seconds, 3), audio_samples=len(audio))
             try:
-                text = transcribe(
-                    model,
-                    audio,
-                    language=args.language,
-                    extra_prompt=args.prompt,
-                    hotwords=hot_words,
-                    progress_callback=update_transcription_overlay,
-                )
+                text = transcribe_audio(audio, progress_callback=update_transcription_overlay)
                 if progress_state["total_frames"] is not None:
                     overlay.update_transcription_progress(
                         current_frames=progress_state["total_frames"],
@@ -712,6 +767,8 @@ def main():
             handsfree_loop.join(timeout=1.0)
 
         overlay.stop()
+        if asr_backend is not None:
+            asr_backend.close()
 
         with state_lock:
             if not args.hands_free and state == State.RECORDING:

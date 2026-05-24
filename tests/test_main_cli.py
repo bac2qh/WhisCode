@@ -23,6 +23,7 @@ def test_parse_args_defaults_to_hotkey_mode():
 
     assert args.hands_free is False
     assert args.hotkey == "shift_r"
+    assert args.asr_backend == "mlx-whisper"
     assert args.hands_free_threshold == 0.055
     assert args.hands_free_end_threshold == 0.055
     assert args.hands_free_wake_confirmations == 2
@@ -33,6 +34,40 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.hands_free_max_seconds == 600.0
     assert args.hands_free_audio_queue_seconds == 10.0
     assert args.model == "mlx-community/whisper-large-v3-mlx"
+    assert args.llama_port == 8091
+    assert args.llama_autostart is True
+
+
+def test_parse_args_llama_cpp_options():
+    args = parse_args([
+        "--asr-backend",
+        "llama-cpp",
+        "--llama-server-bin",
+        "/tmp/llama-server",
+        "--llama-model",
+        "/tmp/qwen-asr.gguf",
+        "--llama-mmproj",
+        "/tmp/mmproj.gguf",
+        "--llama-host",
+        "127.0.0.2",
+        "--llama-port",
+        "8099",
+        "--llama-ctx",
+        "8192",
+        "--llama-ngl",
+        "42",
+        "--no-llama-autostart",
+    ])
+
+    assert args.asr_backend == "llama-cpp"
+    assert args.llama_server_bin == Path("/tmp/llama-server")
+    assert args.llama_model == Path("/tmp/qwen-asr.gguf")
+    assert args.llama_mmproj == Path("/tmp/mmproj.gguf")
+    assert args.llama_host == "127.0.0.2"
+    assert args.llama_port == 8099
+    assert args.llama_ctx == 8192
+    assert args.llama_ngl == 42
+    assert args.llama_autostart is False
 
 
 def test_parse_args_hands_free_options():

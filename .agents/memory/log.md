@@ -42,3 +42,6 @@
 - Added audio capture and normalization memory after implementing bounded pre-transcription gain correction for quiet microphone input.
 - Updated audio capture memory after reverting pre-transcription normalization; flat overlay bars indicate the issue is upstream of transcription.
 - Updated recording status notification memory after adding overlay helper parent monitoring and orphan cleanup.
+
+## 2026-05-24
+- Added optional llama.cpp/Qwen3-ASR ASR backend memory: `mlx-whisper` remains the default, while `--asr-backend llama-cpp` uses a warm local source-built `llama-server` and preserves the surrounding WhisCode app flow.

@@ -1,6 +1,6 @@
 # WhisCode
 
-Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your words are typed into any text field. Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples) for fast on-device transcription on Apple Silicon.
+Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your words are typed into any text field. Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples) by default, with an optional llama.cpp ASR backend for local Qwen3-ASR experiments.
 
 ## Version Status
 
@@ -45,6 +45,7 @@ uv run whiscode --hands-free
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--hotkey HOTKEY` | `shift_r` | Toggle key for recording |
+| `--asr-backend BACKEND` | `mlx-whisper` | ASR backend: `mlx-whisper` or optional `llama-cpp` |
 | `--language LANG` | `auto` | Language code (e.g. `en`, `zh`, `ja`) or `auto` to detect from audio |
 | `--prompt TEXT` | — | Additional context to improve transcription accuracy |
 | `--hotwords-file PATH` | `~/.config/whiscode/hotwords.txt` | Path to hotwords/replacements config file |
@@ -71,6 +72,49 @@ uv run whiscode --hands-free
 | `--no-recording-overlay` | off | Disable floating recording and transcription overlay |
 | `--recording-notifications` | off | Keep macOS start/end notification banners in addition to overlay |
 
+### Optional llama.cpp ASR
+
+The default command remains MLX Whisper:
+
+```bash
+uv run whiscode
+```
+
+Users who maintain a source-built llama.cpp checkout can opt into Qwen3-ASR transcription:
+
+```bash
+uv run whiscode --asr-backend llama-cpp
+```
+
+This mode keeps WhisCode's hotkeys, hands-free detection, overlay, terminal output, text injection, replacements, and optional `--refine` behavior. Only the final transcription backend changes.
+
+WhisCode does not install llama.cpp or Qwen3-ASR for default users. Build llama.cpp from source and provide local GGUF files:
+
+```bash
+cd /Users/xin/Documents/repos/llama.cpp
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j 8
+```
+
+Default llama.cpp paths target a sibling source checkout and LM Studio's Qwen3-ASR cache:
+
+```text
+/Users/xin/Documents/repos/llama.cpp/build/bin/llama-server
+/Users/xin/.lmstudio/models/ggml-org/Qwen3-ASR-1.7B-GGUF/Qwen3-ASR-1.7B-Q8_0.gguf
+/Users/xin/.lmstudio/models/ggml-org/Qwen3-ASR-1.7B-GGUF/mmproj-Qwen3-ASR-1.7B-bf16.gguf
+```
+
+Override them when needed:
+
+```bash
+uv run whiscode --asr-backend llama-cpp \
+  --llama-server-bin /path/to/llama-server \
+  --llama-model /path/to/Qwen3-ASR-1.7B-Q8_0.gguf \
+  --llama-mmproj /path/to/mmproj-Qwen3-ASR-1.7B-bf16.gguf
+```
+
+By default WhisCode starts a warm llama.cpp server on `127.0.0.1:8091` and stops only the child process it started when WhisCode exits. Use `--no-llama-autostart` to connect to an already running server.
+
 ## Recording Overlay
 
 WhisCode shows a small floating macOS overlay while recording and transcribing. During recording it shows an elapsed stopwatch and live microphone levels as waveform bars. During transcription it shows a compact frame progress bar with percentage, processed/total frames, and frames per second when available. Guided enrollment uses the same overlay while each sample is being recorded.
@@ -79,7 +123,7 @@ Use `--no-recording-overlay` to disable it. Use `--recording-notifications` with
 
 ## Hands-Free Mode
 
-Hands-free mode keeps the microphone open and uses local keyword matching for your recorded start and end phrases. The microphone capture loop continuously drains audio into a bounded queue, and a separate detector worker runs wake/end/command matching so detector work does not block microphone reads. Whisper only receives the captured audio between the start and end phrases.
+Hands-free mode keeps the microphone open and uses local keyword matching for your recorded start and end phrases. The microphone capture loop continuously drains audio into a bounded queue, and a separate detector worker runs wake/end/command matching so detector work does not block microphone reads. The selected ASR backend only receives the captured audio between the start and end phrases.
 
 Recordings auto-finalize after `--max-recording-seconds` seconds, which defaults to 10 minutes. This cap applies to both Right Shift recording and hands-free recording, and bounds buffered audio if a wake phrase fires accidentally. The older `--hands-free-max-seconds` flag is still accepted as a hands-free-only override.
 
@@ -189,5 +233,5 @@ uv run whiscode --hands-free
 
 ## Known Issues
 
-- **Single-language per recording:** Whisper v3 applies one language to the entire audio clip. Mixed-language speech (e.g., Chinese with English terms) will be forced into whichever language is set, which may cause misrecognition of the other language.
-- **Auto-detect picks dominant language:** With `--language auto`, Whisper analyzes the first ~2 seconds of audio to detect the language. If your speech starts in a different language than the main content, detection may be wrong.
+- **Whisper single-language behavior:** In the default MLX Whisper backend, Whisper v3 applies one language to the entire audio clip. Mixed-language speech (e.g., Chinese with English terms) will be forced into whichever language is set, which may cause misrecognition of the other language.
+- **Whisper auto-detect picks dominant language:** With `--language auto` in the default MLX Whisper backend, Whisper analyzes the first ~2 seconds of audio to detect the language. If your speech starts in a different language than the main content, detection may be wrong.
