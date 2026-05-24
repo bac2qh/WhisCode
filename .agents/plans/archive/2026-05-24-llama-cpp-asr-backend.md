@@ -1,5 +1,15 @@
 # Optional llama.cpp ASR Backend For WhisCode
 
+## Closeout Note
+
+- Final status: implemented.
+- Related checkpoint: `.agents/checkpoints/2026-05-24-llama-cpp-asr-backend-checkpoints.md`.
+- Implementation commits: `ab3e2fe` (`Add optional llama.cpp ASR backend`) and `1ccde1a` (`Record llama.cpp ASR implementation checkpoint`).
+- Merge commit: none; local `main` fast-forwarded to `1ccde1a`.
+- Verification performed: focused pytest selection, full pytest suite, compileall, source-built llama.cpp build, `llama-server --version`, option check, live silence smoke through Qwen3-ASR, and no lingering server on port `8091`.
+- Worktree and branch cleanup: removed `.agents/worktrees/llama-cpp-asr-backend`; deleted local branch `feature/llama-cpp-asr-backend`.
+- Summary: shipped optional `--asr-backend llama-cpp` mode while preserving `mlx-whisper` as the default command and keeping the hotkey/hands-free app flow unchanged outside the transcription backend.
+
 ## Summary
 
 Add llama.cpp/Qwen3-ASR as an opt-in transcription backend while preserving WhisCode's current app behavior. The only user-visible workflow difference is where transcription happens after audio is recorded.

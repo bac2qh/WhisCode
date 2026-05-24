@@ -58,3 +58,32 @@ Verification:
 
 Backtracks:
 - None after implementation began.
+
+## 2026-05-24 - Closeout checkpoint
+
+Done:
+- Fast-forward merged `feature/llama-cpp-asr-backend` into local `main`.
+- Removed task worktree `.agents/worktrees/llama-cpp-asr-backend`.
+- Deleted local branch `feature/llama-cpp-asr-backend`.
+- Added the closeout note to the plan and archived it under `.agents/plans/archive/`.
+
+Implementation commits:
+- `ab3e2fe` (`Add optional llama.cpp ASR backend`).
+- `1ccde1a` (`Record llama.cpp ASR implementation checkpoint`).
+
+Merge:
+- Fast-forward to `1ccde1a`; no merge commit was created.
+
+Immediate next step:
+- None. Work is implemented and closed out.
+
+Key decisions and reasoning:
+- Closed out with a fast-forward merge because local `main` had not advanced independently.
+- No repo main-branch lock helper exists; closeout was performed directly because no concurrent local closeout activity was observed.
+
+Verification:
+- Reused implementation verification recorded above.
+- Confirmed worktree and branch cleanup completed.
+
+Backtracks:
+- None.
