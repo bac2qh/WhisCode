@@ -14,4 +14,8 @@
   - Added focused unit tests for plain text, stringified chunks, native chunks, mixed English/Chinese chunks, and empty/malformed chunk failures.
 - Verification:
   - `uv run --with pytest pytest tests/test_crispasr_asr.py` passed: 20 tests.
-- Immediate next step: create the implementation commit, then record its hash and run closeout.
+- Implementation commit: `3c88b43` (`Normalize CrispASR VibeVoice chunk text`).
+- Closeout preparation:
+  - The repo did not have `.agents/scripts/main-branch-lock.sh`, so added the standard main-branch lock helper before running local `main` closeout.
+  - `bash -n .agents/scripts/main-branch-lock.sh` passed.
+- Immediate next step: commit the lock-helper/checkpoint bookkeeping, then run main closeout under the helper.
