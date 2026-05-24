@@ -1,3 +1,13 @@
+# Closeout 2026-05-24
+- Final status: `implemented`.
+- Related checkpoint: `.agents/checkpoints/2026-05-24-normalize-vibevoice-chunks-checkpoints.md`.
+- Implementation commit: `3c88b43` (`Normalize CrispASR VibeVoice chunk text`).
+- Closeout prerequisite commit: `b749fe4` (`Add main branch closeout lock helper`).
+- Merge result: fast-forwarded local `main` to `b749fe4`; no merge commit was created.
+- Verification: `uv run --with pytest pytest tests/test_crispasr_asr.py` passed; `bash -n .agents/scripts/main-branch-lock.sh` passed.
+- Cleanup: removed task worktree `.agents/worktrees/normalize-vibevoice-chunks` and deleted local branch `normalize-vibevoice-chunks`; unrelated worktree `.agents/worktrees/env-llama-paths` was left untouched.
+- Shipped: CrispASR/VibeVoice chunk lists are normalized into a single transcript by joining non-empty `Content` fields and dropping chunk metadata before user-visible handling.
+
 # Normalize VibeVoice Chunk Output
 
 ## Summary

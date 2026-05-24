@@ -18,4 +18,11 @@
 - Closeout preparation:
   - The repo did not have `.agents/scripts/main-branch-lock.sh`, so added the standard main-branch lock helper before running local `main` closeout.
   - `bash -n .agents/scripts/main-branch-lock.sh` passed.
-- Immediate next step: commit the lock-helper/checkpoint bookkeeping, then run main closeout under the helper.
+- Closeout prerequisite commit: `b749fe4` (`Add main branch closeout lock helper`).
+- Closeout:
+  - Merged into local `main` by fast-forward at `b749fe4`; no merge commit was created.
+  - Removed task worktree `.agents/worktrees/normalize-vibevoice-chunks`.
+  - Deleted local branch `normalize-vibevoice-chunks`.
+  - Left unrelated worktree `.agents/worktrees/env-llama-paths` untouched.
+  - Archived the plan to `.agents/plans/archive/2026-05-24-normalize-vibevoice-chunks.md`.
+- Immediate next step: none for this plan.
