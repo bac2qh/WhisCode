@@ -1,4 +1,5 @@
 import io
+import json
 import wave
 from pathlib import Path
 from unittest.mock import patch
@@ -96,6 +97,48 @@ def test_build_multipart_form_includes_fields_and_audio_file():
 
 def test_extract_crispasr_text_reads_text_field():
     assert extract_crispasr_text({"text": " hello "}) == "hello"
+
+
+def test_extract_crispasr_text_joins_stringified_vibevoice_chunks():
+    chunks = [
+        {"Start": 0.0, "End": 0.4, "Speaker": "SPEAKER_00", "Content": "open the repo"},
+        {"Start": 0.4, "End": 0.9, "Speaker": "SPEAKER_00", "Content": "run pytest"},
+    ]
+
+    assert extract_crispasr_text({"text": json.dumps(chunks)}) == "open the repo run pytest"
+
+
+def test_extract_crispasr_text_joins_native_vibevoice_chunks():
+    chunks = [
+        {"Start": 0.0, "End": 0.4, "Speaker": "SPEAKER_00", "Content": "switch to the worktree"},
+        {"Start": 0.4, "End": 0.9, "Speaker": "SPEAKER_00", "Content": "inspect the README"},
+    ]
+
+    assert extract_crispasr_text({"text": chunks}) == "switch to the worktree inspect the README"
+
+
+def test_extract_crispasr_text_joins_mixed_english_chinese_chunks():
+    chunks = [
+        {"Start": 0.0, "End": 0.4, "Speaker": "SPEAKER_00", "Content": "打开 repo"},
+        {"Start": 0.4, "End": 0.9, "Speaker": "SPEAKER_00", "Content": "然后 run pytest"},
+    ]
+
+    assert extract_crispasr_text({"text": json.dumps(chunks, ensure_ascii=False)}) == "打开 repo 然后 run pytest"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        [],
+        [{"Content": ""}, {"Content": "   "}],
+        [{"Start": 0.0, "End": 0.4, "Speaker": "SPEAKER_00"}],
+        [{"Content": "valid"}, "invalid"],
+        '[{"Content": "unterminated"',
+    ],
+)
+def test_extract_crispasr_text_rejects_empty_or_malformed_vibevoice_chunks(text):
+    with pytest.raises(CrispAsrError, match="VibeVoice chunks"):
+        extract_crispasr_text({"text": text})
 
 
 def test_extract_crispasr_text_rejects_missing_text():

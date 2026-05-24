@@ -356,7 +356,7 @@ class CrispAsrBackend:
             return {"text": text}
         if isinstance(parsed, dict):
             return parsed
-        return {"text": str(parsed)}
+        return {"text": parsed}
 
     def _emit(self, event: str, **properties: Any) -> None:
         if self.telemetry is not None:
@@ -433,4 +433,43 @@ def extract_crispasr_text(response: dict[str, Any]) -> str:
         text = response["text"]
     except (KeyError, TypeError) as e:
         raise CrispAsrError("CrispASR response did not include text") from e
+    if isinstance(text, list):
+        return _join_vibevoice_chunks(text)
+    if isinstance(text, str):
+        stripped = text.strip()
+        if _looks_like_vibevoice_chunk_list_string(stripped):
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError as e:
+                raise CrispAsrError("CrispASR VibeVoice chunks were malformed") from e
+            if isinstance(parsed, list):
+                return _join_vibevoice_chunks(parsed)
+        return stripped
     return str(text or "").strip()
+
+
+def _looks_like_vibevoice_chunk_list_string(text: str) -> bool:
+    if not text.startswith("["):
+        return False
+    remainder = text[1:].lstrip()
+    return not remainder or remainder.startswith("{") or remainder.startswith("]")
+
+
+def _join_vibevoice_chunks(chunks: list[Any]) -> str:
+    if not chunks:
+        raise CrispAsrError("CrispASR VibeVoice chunks were empty")
+
+    contents = []
+    for chunk in chunks:
+        if not isinstance(chunk, dict) or "Content" not in chunk:
+            raise CrispAsrError("CrispASR VibeVoice chunks were malformed")
+        content = chunk["Content"]
+        if not isinstance(content, str):
+            raise CrispAsrError("CrispASR VibeVoice chunks were malformed")
+        stripped = content.strip()
+        if stripped:
+            contents.append(stripped)
+
+    if not contents:
+        raise CrispAsrError("CrispASR VibeVoice chunks were empty")
+    return " ".join(contents)
