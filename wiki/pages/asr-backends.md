@@ -12,6 +12,31 @@ uv run whiscode
 
 This path remains the compatibility default and is the backend installed by the base installer.
 
+## Optional MLX VibeVoice Backend
+
+`mlx-vibevoice` is an opt-in in-process backend that uses MLX-Audio's VibeVoice ASR implementation:
+
+```bash
+uv run whiscode --asr-backend mlx-vibevoice
+```
+
+The default model path is:
+
+```text
+~/Documents/models/mlx-community/VibeVoice-ASR-8bit
+```
+
+Override it with `WHISCODE_MLX_VIBEVOICE_MODEL` or `--mlx-vibevoice-model`, for example:
+
+```bash
+uv run whiscode --asr-backend mlx-vibevoice \
+  --mlx-vibevoice-model ~/Documents/models/mlx-community/VibeVoice-ASR-bf16
+```
+
+This backend passes WhisCode hotwords and `--prompt` through VibeVoice's MLX-Audio `context` parameter, then joins VibeVoice segment text into a plain transcript before the existing postprocessing, replacement, optional refinement, and text-injection flow. It is the preferred VibeVoice path when hotword/context conditioning matters. The local MLX model snapshots may rely on MLX-Audio to fetch/cache the intended `Qwen/Qwen2.5-7B` tokenizer on first load.
+
+Telemetry for this backend is limited to bounded operational status such as model label, load duration, audio duration, hotword count, prompt presence, context length, output length, transcription duration, and error type. It does not record raw audio, transcript text, prompts, hotword contents, full model paths, tokenizer payloads, or model output content.
+
 ## Optional llama.cpp Backend
 
 `llama-cpp` is an opt-in backend for local Qwen3-ASR experiments:
@@ -76,3 +101,5 @@ The backend starts `crispasr --server --backend vibevoice`, keeps the model warm
 This CrispASR/VibeVoice path is a blocking full-recording request. The server returns the final transcript only after the request completes and does not currently expose per-request stage, token, percentage, or FPS progress through `/v1/audio/transcriptions`. The recording overlay can show queued/transcribing cards for VibeVoice jobs, but it cannot show concrete in-flight VibeVoice progress in this integration. CrispASR CLI streaming and live-monitor modes are different execution paths, not the warm-server full-recording API WhisCode uses here.
 
 Routine telemetry for this backend is limited to bounded operational status such as health-check outcomes, startup duration, child PID, backend name, model basename, audio duration, output length, HTTP status class, error type, and malformed response shape counts. It does not record raw audio, transcript text, prompts, hotwords, chunk content, full request payloads, secrets, or full model paths. When CrispASR/VibeVoice chunk parsing fails or needs best-effort recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl` next to runtime telemetry for debugging; that file can contain transcript or provider output text.
+
+The current CrispASR VibeVoice path receives WhisCode's hotwords as an OpenAI-style `prompt` field, but the CrispASR VibeVoice server backend does not currently route that prompt into VibeVoice decoding. Use `mlx-vibevoice` for VibeVoice hotword/context conditioning inside WhisCode without modifying CrispASR.

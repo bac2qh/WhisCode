@@ -22,6 +22,14 @@ from whiscode.llama_cpp_asr import (
     default_llama_server_bin,
 )
 from whiscode.main import _resolve_model_path, ensure_whisper_processor
+from whiscode.mlx_vibevoice_asr import (
+    DEFAULT_MLX_VIBEVOICE_MAX_TOKENS,
+    DEFAULT_MLX_VIBEVOICE_PREFILL_STEP_SIZE,
+    DEFAULT_MLX_VIBEVOICE_TEMPERATURE,
+    MlxVibeVoiceBackend,
+    MlxVibeVoiceConfig,
+    default_mlx_vibevoice_model,
+)
 from whiscode.recorder import SAMPLE_RATE, _resample
 from whiscode.transcriber import transcribe
 
@@ -29,7 +37,7 @@ from whiscode.transcriber import transcribe
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Benchmark WhisCode ASR backend latency on a WAV file")
     parser.add_argument("--audio", type=Path, required=True, help="Input WAV file")
-    parser.add_argument("--asr-backend", choices=("mlx-whisper", "llama-cpp", "crispasr"), default="mlx-whisper")
+    parser.add_argument("--asr-backend", choices=("mlx-whisper", "mlx-vibevoice", "llama-cpp", "crispasr"), default="mlx-whisper")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model for mlx-whisper")
     parser.add_argument("--language", default="auto", help="Language code or auto")
     parser.add_argument("--prompt", default=None, help="Additional prompt/context")
@@ -56,6 +64,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--crispasr-startup-timeout", type=float, default=180.0)
     parser.set_defaults(crispasr_autostart=True)
     parser.add_argument("--no-crispasr-autostart", dest="crispasr_autostart", action="store_false")
+    parser.add_argument("--mlx-vibevoice-model", default=default_mlx_vibevoice_model())
+    parser.add_argument("--mlx-vibevoice-max-tokens", type=int, default=DEFAULT_MLX_VIBEVOICE_MAX_TOKENS)
+    parser.add_argument("--mlx-vibevoice-temperature", type=float, default=DEFAULT_MLX_VIBEVOICE_TEMPERATURE)
+    parser.add_argument("--mlx-vibevoice-prefill-step-size", type=int, default=DEFAULT_MLX_VIBEVOICE_PREFILL_STEP_SIZE)
     return parser.parse_args(argv)
 
 
@@ -86,6 +98,26 @@ def main(argv: list[str] | None = None) -> None:
                 )
 
             model_label = args.model
+        elif args.asr_backend == "mlx-vibevoice":
+            backend = MlxVibeVoiceBackend(
+                MlxVibeVoiceConfig(
+                    model=args.mlx_vibevoice_model,
+                    max_tokens=args.mlx_vibevoice_max_tokens,
+                    temperature=args.mlx_vibevoice_temperature,
+                    prefill_step_size=args.mlx_vibevoice_prefill_step_size,
+                )
+            )
+            backend.start()
+
+            def transcribe_audio():
+                return backend.transcribe(
+                    audio,
+                    language=args.language,
+                    extra_prompt=args.prompt,
+                    hotwords=hot_words,
+                )
+
+            model_label = backend.model_label
         elif args.asr_backend == "llama-cpp":
             backend = LlamaCppAsrBackend(
                 LlamaCppServerConfig(

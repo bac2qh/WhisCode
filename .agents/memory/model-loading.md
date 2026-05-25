@@ -29,3 +29,7 @@
 
 ## 2026-05-25
 - Documentation now records that WhisCode's current CrispASR/VibeVoice integration is a blocking warm-server `/v1/audio/transcriptions` request and cannot expose concrete stage, token, percentage, or FPS progress until CrispASR provides a progress-bearing server API or event stream.
+- WhisCode now has an optional `mlx-vibevoice` backend that uses MLX-Audio's VibeVoice ASR implementation directly while keeping `mlx-whisper` as the default backend.
+- The default MLX VibeVoice model path is `~/Documents/models/mlx-community/VibeVoice-ASR-8bit`, overridable with `WHISCODE_MLX_VIBEVOICE_MODEL` or `--mlx-vibevoice-model`; the local BF16 reference model can be selected the same way.
+- VibeVoice hotwords and `--prompt` are passed through MLX-Audio's `context` parameter, not Whisper's `initial_prompt`. This is why VibeVoice remains a separate backend from `mlx-whisper` even though both use MLX-Audio.
+- The downloaded MLX Community VibeVoice snapshots may not include tokenizer files. MLX-Audio's VibeVoice loader falls back to the intended `Qwen/Qwen2.5-7B` tokenizer because the model's decoder config is Qwen2-shaped with the matching VibeVoice special tokens.

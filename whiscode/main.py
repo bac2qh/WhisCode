@@ -55,6 +55,14 @@ from whiscode.llama_cpp_asr import (
     default_llama_model_path,
     default_llama_server_bin,
 )
+from whiscode.mlx_vibevoice_asr import (
+    DEFAULT_MLX_VIBEVOICE_MAX_TOKENS,
+    DEFAULT_MLX_VIBEVOICE_PREFILL_STEP_SIZE,
+    DEFAULT_MLX_VIBEVOICE_TEMPERATURE,
+    MlxVibeVoiceBackend,
+    MlxVibeVoiceConfig,
+    default_mlx_vibevoice_model,
+)
 from whiscode.postprocess import postprocess, postprocess_for_refine
 from whiscode.refiner import refine
 from whiscode.recorder import Recorder, SAMPLE_RATE
@@ -96,7 +104,7 @@ def parse_args(argv: list[str] | None = None):
     raw_argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
-    parser.add_argument("--asr-backend", choices=("mlx-whisper", "llama-cpp", "crispasr"), default="mlx-whisper", help="ASR backend to use (default: mlx-whisper)")
+    parser.add_argument("--asr-backend", choices=("mlx-whisper", "mlx-vibevoice", "llama-cpp", "crispasr"), default="mlx-whisper", help="ASR backend to use (default: mlx-whisper)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
     parser.add_argument("--language", default="auto", help="Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.")
     parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
@@ -148,6 +156,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--crispasr-startup-timeout", type=float, default=180.0, help="CrispASR server startup timeout in seconds (default: 180)")
     parser.set_defaults(crispasr_autostart=True)
     parser.add_argument("--no-crispasr-autostart", dest="crispasr_autostart", action="store_false", help="Require an existing CrispASR server instead of starting one")
+    parser.add_argument("--mlx-vibevoice-model", default=default_mlx_vibevoice_model(), help="MLX VibeVoice ASR model path or Hugging Face repo (default: WHISCODE_MLX_VIBEVOICE_MODEL or ~/Documents/models/mlx-community/VibeVoice-ASR-8bit)")
+    parser.add_argument("--mlx-vibevoice-max-tokens", type=int, default=DEFAULT_MLX_VIBEVOICE_MAX_TOKENS, help=f"MLX VibeVoice generated-token cap (default: {DEFAULT_MLX_VIBEVOICE_MAX_TOKENS})")
+    parser.add_argument("--mlx-vibevoice-temperature", type=float, default=DEFAULT_MLX_VIBEVOICE_TEMPERATURE, help=f"MLX VibeVoice sampling temperature (default: {DEFAULT_MLX_VIBEVOICE_TEMPERATURE})")
+    parser.add_argument("--mlx-vibevoice-prefill-step-size", type=int, default=DEFAULT_MLX_VIBEVOICE_PREFILL_STEP_SIZE, help=f"MLX VibeVoice prefill step size (default: {DEFAULT_MLX_VIBEVOICE_PREFILL_STEP_SIZE})")
     parser.set_defaults(recording_overlay=True)
     parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay (default)")
     parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay")
@@ -399,6 +411,31 @@ def main():
             )
 
         print(f"Model loaded. Press {args.hotkey} to start/stop recording.")
+    elif args.asr_backend == "mlx-vibevoice":
+        config = MlxVibeVoiceConfig(
+            model=args.mlx_vibevoice_model,
+            max_tokens=args.mlx_vibevoice_max_tokens,
+            temperature=args.mlx_vibevoice_temperature,
+            prefill_step_size=args.mlx_vibevoice_prefill_step_size,
+        )
+        asr_backend = MlxVibeVoiceBackend(config, telemetry=telemetry)
+        try:
+            print(f"Loading MLX VibeVoice model: {asr_backend.model_location} ...")
+            asr_backend.start()
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        def transcribe_audio(audio, progress_callback=None):
+            return asr_backend.transcribe(
+                audio,
+                language=args.language,
+                extra_prompt=args.prompt,
+                hotwords=hot_words,
+                progress_callback=progress_callback,
+            )
+
+        print(f"MLX VibeVoice ready ({asr_backend.model_label}). Press {args.hotkey} to start/stop recording.")
     elif args.asr_backend == "llama-cpp":
         config = LlamaCppServerConfig(
             server_bin=args.llama_server_bin.expanduser(),

@@ -8,3 +8,7 @@
 - Routine telemetry must not include raw audio, transcript text, prompts, hotword contents, chunk `Content`, provider payloads, typed text, secrets, or full paths.
 - After the user explicitly accepted local debug output, malformed CrispASR/VibeVoice response debugging writes original provider response bodies to `crispasr-raw-responses.jsonl` next to runtime telemetry. That file is local-only and can contain transcript or provider output text; routine shape telemetry remains bounded and content-free.
 - Recording queue diagnostics now emit bounded `recording.queue_full`, `recording.queued`, `transcription.queue_started`, `transcription.queue_completed`, and `transcription.queue_failed` events. These include queue/job metadata only; transcript text is intentionally kept out of telemetry and shown in copy-friendly stdout blocks.
+
+## 2026-05-25
+- The optional `mlx-vibevoice` backend emits bounded `mlx_vibevoice.model_load_*` and `mlx_vibevoice.transcription_*` telemetry. These events use safe model labels, durations, audio length, hotword counts, prompt presence, context length, output length, and error types.
+- MLX VibeVoice telemetry intentionally excludes raw audio, transcript text, prompts, hotword contents, full model paths, tokenizer payloads, and raw model output.

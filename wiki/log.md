@@ -37,3 +37,4 @@
 
 ## 2026-05-25
 - Documented that the current CrispASR/VibeVoice warm-server transcription path cannot expose concrete in-flight progress to the recording overlay.
+- Documented the optional MLX VibeVoice backend, its default local 8-bit model path, BF16 override, and hotword/context behavior.

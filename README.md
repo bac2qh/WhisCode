@@ -1,6 +1,6 @@
 # WhisCode
 
-Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your words are typed into any text field. Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples) by default, with optional llama.cpp/Qwen3-ASR and CrispASR/VibeVoice ASR backends for local experiments.
+Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your words are typed into any text field. Powered by [MLX Whisper](https://github.com/ml-explore/mlx-examples) by default, with optional MLX VibeVoice, llama.cpp/Qwen3-ASR, and CrispASR/VibeVoice ASR backends for local experiments.
 
 ## Version Status
 
@@ -45,10 +45,11 @@ uv run whiscode --hands-free
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--hotkey HOTKEY` | `shift_r` | Toggle key for recording |
-| `--asr-backend BACKEND` | `mlx-whisper` | ASR backend: `mlx-whisper`, optional `llama-cpp`, or optional `crispasr` |
+| `--asr-backend BACKEND` | `mlx-whisper` | ASR backend: `mlx-whisper`, optional `mlx-vibevoice`, optional `llama-cpp`, or optional `crispasr` |
 | `--language LANG` | `auto` | Language code (e.g. `en`, `zh`, `ja`) or `auto` to detect from audio |
 | `--prompt TEXT` | — | Additional context to improve transcription accuracy |
 | `--hotwords-file PATH` | `~/.config/whiscode/hotwords.txt` | Path to hotwords/replacements config file |
+| `--mlx-vibevoice-model MODEL` | `~/Documents/models/mlx-community/VibeVoice-ASR-8bit` | MLX VibeVoice model path or Hugging Face repo |
 | `--max-recording-seconds FLOAT` | `600.0` | Maximum recording length before auto-finalizing; `0` disables the cap |
 | `--refine` | off | Polish transcription with a local Ollama LLM (prose mode) |
 | `--refine-model MODEL` | `qwen3.5:4b` | Ollama model to use for refinement |
@@ -71,6 +72,42 @@ uv run whiscode --hands-free
 | `--recording-overlay` | on | Show floating recording and transcription overlay |
 | `--no-recording-overlay` | off | Disable floating recording and transcription overlay |
 | `--recording-notifications` | off | Keep macOS start/end notification banners in addition to overlay |
+
+### Optional MLX VibeVoice ASR
+
+`mlx-vibevoice` is an opt-in MLX-Audio backend for local VibeVoice ASR models. It is useful when you want VibeVoice's strong mixed Chinese/English and technical-term behavior without running a CrispASR server:
+
+```bash
+uv run whiscode --asr-backend mlx-vibevoice
+```
+
+By default this loads the local 8-bit model from:
+
+```text
+~/Documents/models/mlx-community/VibeVoice-ASR-8bit
+```
+
+Override the default with `WHISCODE_MLX_VIBEVOICE_MODEL` or `--mlx-vibevoice-model`. For the local BF16 reference model:
+
+```bash
+WHISCODE_MLX_VIBEVOICE_MODEL=~/Documents/models/mlx-community/VibeVoice-ASR-bf16 \
+  uv run whiscode --asr-backend mlx-vibevoice
+```
+
+or:
+
+```bash
+uv run whiscode --asr-backend mlx-vibevoice \
+  --mlx-vibevoice-model ~/Documents/models/mlx-community/VibeVoice-ASR-bf16
+```
+
+This backend keeps WhisCode's hotkeys, hands-free detection, overlay, terminal output, text injection, replacements, optional `--refine` behavior, and existing hotwords file. Hotwords and `--prompt` are passed to VibeVoice through MLX-Audio's `context` parameter, which is the prompt/hotword path VibeVoice was designed to use. If the local model snapshot does not include tokenizer files, MLX-Audio may fetch and cache the intended `Qwen/Qwen2.5-7B` tokenizer on first load.
+
+Benchmark backend latency on a WAV file:
+
+```bash
+uv run whiscode-benchmark-asr --audio sample.wav --asr-backend mlx-vibevoice
+```
 
 ### Optional llama.cpp ASR
 
@@ -143,6 +180,8 @@ uv run whiscode --asr-backend crispasr \
 By default WhisCode starts a warm CrispASR server on `127.0.0.1:8092`, sends final recordings to `/v1/audio/transcriptions`, and stops only the child process it started when WhisCode exits. Use `--no-crispasr-autostart` to connect to an already running server.
 
 The current CrispASR/VibeVoice integration is a blocking full-recording request. CrispASR returns the final transcript after the request completes, but this HTTP path does not expose per-request stage, token, or percentage progress while VibeVoice is running. WhisCode can still show queued/transcribing overlay cards for VibeVoice jobs, but it cannot show a meaningful frame percentage or FPS progress bar for this backend yet. CrispASR's CLI streaming and live-monitor modes are separate execution paths and are not the same as WhisCode's warm-server `/v1/audio/transcriptions` flow.
+
+The current CrispASR VibeVoice backend accepts WhisCode's hotwords as an OpenAI-style `prompt` field, but CrispASR's VibeVoice server path does not currently pass that prompt into the VibeVoice decoder. Use `mlx-vibevoice` when you need VibeVoice hotword/context conditioning from WhisCode without changing CrispASR.
 
 Benchmark backend latency on a WAV file:
 
@@ -266,6 +305,9 @@ uv run whiscode --refine
 
 # Start hands-free mode after importing or recording hands-free samples
 uv run whiscode --hands-free
+
+# Use local MLX VibeVoice ASR with the existing hotwords file
+uv run whiscode --asr-backend mlx-vibevoice
 ```
 
 ## Known Issues

@@ -57,6 +57,10 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.crispasr_port == 8092
     assert args.crispasr_backend == "vibevoice"
     assert args.crispasr_autostart is True
+    assert args.mlx_vibevoice_model.endswith("Documents/models/mlx-community/VibeVoice-ASR-8bit")
+    assert args.mlx_vibevoice_max_tokens == 8192
+    assert args.mlx_vibevoice_temperature == 0.0
+    assert args.mlx_vibevoice_prefill_step_size == 2048
 
 
 def test_runtime_telemetry_is_enabled_by_default_for_hotkey_mode():
@@ -143,6 +147,27 @@ def test_parse_args_crispasr_options():
     assert args.crispasr_request_timeout == 12
     assert args.crispasr_startup_timeout == 34
     assert args.crispasr_autostart is False
+
+
+def test_parse_args_mlx_vibevoice_options():
+    args = parse_args([
+        "--asr-backend",
+        "mlx-vibevoice",
+        "--mlx-vibevoice-model",
+        "/tmp/VibeVoice-ASR-bf16",
+        "--mlx-vibevoice-max-tokens",
+        "4096",
+        "--mlx-vibevoice-temperature",
+        "0.1",
+        "--mlx-vibevoice-prefill-step-size",
+        "1024",
+    ])
+
+    assert args.asr_backend == "mlx-vibevoice"
+    assert args.mlx_vibevoice_model == "/tmp/VibeVoice-ASR-bf16"
+    assert args.mlx_vibevoice_max_tokens == 4096
+    assert args.mlx_vibevoice_temperature == 0.1
+    assert args.mlx_vibevoice_prefill_step_size == 1024
 
 
 def test_parse_args_hands_free_options():

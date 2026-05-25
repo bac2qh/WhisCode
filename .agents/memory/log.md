@@ -58,3 +58,5 @@
 
 ## 2026-05-25
 - Documented the CrispASR/VibeVoice progress limitation in project memory: WhisCode's current warm-server transcription path is blocking and cannot feed concrete overlay progress until CrispASR exposes progress through a compatible API.
+- Added MLX VibeVoice backend memory after implementing `--asr-backend mlx-vibevoice`, defaulting to the local 8-bit MLX model and passing existing hotwords through VibeVoice context.
+- Added telemetry memory for bounded MLX VibeVoice model-load and transcription events.
