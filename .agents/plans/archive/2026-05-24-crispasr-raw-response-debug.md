@@ -1,3 +1,12 @@
+# Closeout 2026-05-24
+- Final status: `implemented`.
+- Related checkpoint: `.agents/checkpoints/2026-05-24-crispasr-raw-response-debug-checkpoints.md`.
+- Implementation commits: `dc15f8c` (`Log malformed CrispASR responses`) and `b6b28cc` (`Record CrispASR raw debug checkpoint`).
+- Merge result: fast-forwarded local `main`; no merge commit was created.
+- Verification: `uv run --with pytest pytest tests/test_crispasr_asr.py` passed; `uv run --with pytest pytest tests/test_crispasr_asr.py tests/test_telemetry.py` passed; `uv run python -m compileall whiscode` passed.
+- Cleanup: removed task worktree `.agents/worktrees/crispasr-raw-response-debug` and deleted local branch `crispasr-raw-response-debug`; unrelated worktree `.agents/worktrees/env-llama-paths` was left untouched.
+- Shipped: malformed CrispASR/VibeVoice chunk responses now preserve the original provider response body in local-only `crispasr-raw-responses.jsonl`, parser handling now covers official `assistant`/special-token wrapped VibeVoice raw output, and best-effort `Content` recovery can turn common JSON-ish failures into usable transcript text.
+
 # CrispASR Raw Response Debugging
 
 ## Summary
