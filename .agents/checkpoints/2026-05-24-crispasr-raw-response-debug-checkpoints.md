@@ -10,6 +10,7 @@
 - Immediate next step: implement raw response capture, best-effort parser recovery, tests, docs, and memory updates.
 
 ## 2026-05-24 Implementation Notes
+- Implementation commit: `dc15f8c660f1b5cfdd280eefd495bb373960e638`.
 - Confirmed expected VibeVoice-ASR shape from primary sources: Microsoft/Hugging Face docs describe structured Who/When/What output, the HF model card shows raw output as `Start`/`End`/`Speaker`/`Content` segment dictionaries plus a parsed list-of-dicts mode, and the Transformers processor strips an `assistant` prefix then joins `Content` values for transcription-only output.
 - Implemented raw CrispASR response preservation inside transcription responses and a local-only malformed-response debug JSONL writer.
 - Implemented parser support for native list chunks, direct JSON chunk-list strings, `assistant`/special-token wrapped raw VibeVoice strings, and best-effort `Content` scanning when nested JSON is malformed.
@@ -17,4 +18,4 @@
   - `uv run --with pytest pytest tests/test_crispasr_asr.py`
   - `uv run --with pytest pytest tests/test_crispasr_asr.py tests/test_telemetry.py`
   - `uv run python -m compileall whiscode`
-- Immediate next step: commit implementation, record commit hash, and close out.
+- Immediate next step: commit checkpoint hash bookkeeping and close out.
