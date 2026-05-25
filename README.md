@@ -32,7 +32,7 @@ Two install options:
 uv run whiscode
 ```
 
-Press **Right Shift** to start recording, press again to stop. The transcribed text is typed at your cursor position.
+Press **Right Shift** to start recording, press again to stop. The transcribed text is typed at your cursor position. If a prior recording is still transcribing, WhisCode queues the new recording and keeps transcriptions typed in order.
 
 For the v2 hands-free flow, start with:
 
@@ -150,9 +150,11 @@ uv run whiscode-benchmark-asr --audio sample.wav --asr-backend crispasr --langua
 
 ## Recording Overlay
 
-WhisCode shows a small floating macOS overlay while recording and transcribing. During recording it shows an elapsed stopwatch and live microphone levels as waveform bars. During transcription it shows a compact frame progress bar with percentage, processed/total frames, and frames per second when available. Guided enrollment uses the same overlay while each sample is being recorded.
+WhisCode shows a small floating macOS overlay while recording and transcribing. During recording it shows an elapsed stopwatch and live microphone levels as waveform bars. Completed recordings enter a FIFO transcription queue, and the overlay stacks cards with the newest recording on top while queued/transcribing cards shift downward. During transcription it shows a compact frame progress bar with percentage, processed/total frames, and frames per second when available. Guided enrollment uses the same overlay while each sample is being recorded.
 
 Use `--no-recording-overlay` to disable it. Use `--recording-notifications` with `whiscode` if you also want the older macOS start/end notification banners during normal recording.
+
+WhisCode keeps the last five successfully typed transcripts in `/tmp/whiscode-last-transcripts.txt` as a local recovery file. This avoids using or changing the system clipboard.
 
 ## Hands-Free Mode
 
@@ -189,7 +191,7 @@ uv run whiscode-enroll arrow-up arrowup1.m4a arrowup2.m4a arrowup3.m4a
 uv run whiscode-enroll arrow-down arrowdown1.m4a arrowdown2.m4a arrowdown3.m4a
 ```
 
-Hands-free mode also supports eight trained key command slots while idle: `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, and `arrow-down`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, Enter, Shift+Enter, Shift+Tab, Tab, Arrow Up, or Arrow Down key action. Command detection is disabled while recording or transcribing so dictated speech cannot press keys.
+Hands-free mode also supports eight trained key command slots while not actively recording: `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, and `arrow-down`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, Enter, Shift+Enter, Shift+Tab, Tab, Arrow Up, or Arrow Down key action. Command detection is disabled while recording so dictated speech cannot press keys, but it can run while earlier recordings are queued or transcribing.
 
 You can selectively enable key command slots with `~/.config/whiscode/commands.ini`:
 
@@ -225,7 +227,7 @@ WhisCode writes local JSONL telemetry by default to:
 ~/Library/Logs/WhisCode/events.jsonl
 ```
 
-Use it to inspect app startup, selected ASR backend, recording durations, transcription outcomes, backend failures, wake/end/command detections, detector distances, key-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
+Use it to inspect app startup, selected ASR backend, recording durations, queue depth, transcription outcomes, backend failures, wake/end/command detections, detector distances, key-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. The transcript recovery file at `/tmp/whiscode-last-transcripts.txt` also intentionally contains local typed transcript text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
 
 `handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. WhisCode keeps microphone capture lightweight and uses a bounded detector queue to reduce this. If detector processing still falls behind, `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` show how much queued audio was dropped and how long detection took. These diagnostics do not include raw audio or transcript text.
 

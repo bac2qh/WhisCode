@@ -29,3 +29,8 @@
 - Helpers now receive the parent WhisCode PID and schedule their normal stop path if the parent disappears before stdin EOF is delivered.
 - WhisCode also performs startup cleanup of stale orphan helpers only when their PPID is `1`, leaving helpers with a live WhisCode parent alone.
 - Added `python -m whiscode.recording_overlay --cleanup-orphans` for manual cleanup and bounded `recording_overlay.orphan_cleanup` telemetry that reports only found/terminated/failed counts.
+
+## 2026-05-24
+- Runtime recording/transcription now uses stacked overlay cards keyed by transcription job id. New recordings appear at the top, older queued/transcribing cards shift down, and each card moves from recording to queued to transcribing before disappearing.
+- Transcription now drains a FIFO queue with one worker while new recordings can continue. The overlay and queue events stay bounded and avoid transcript text.
+- WhisCode writes the last five successfully typed transcripts to `/tmp/whiscode-last-transcripts.txt` as a local recovery file instead of using the system clipboard.

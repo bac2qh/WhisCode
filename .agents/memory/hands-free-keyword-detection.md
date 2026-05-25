@@ -34,3 +34,7 @@
 
 ## 2026-05-16
 - Marked the current hands-free milestone as the `v2.0.0-beta.1` beta in README/package metadata before creating the matching local tag. V2 is documented as the hands-free beta centered on wake/end phrases, voice key commands, bounded continuous capture, and the default floating recording overlay.
+
+## 2026-05-24
+- Hands-free wake/end recordings now enqueue for transcription instead of suspending the detector until transcription completes. After an end phrase, timeout, or manual stop, the session resets to idle and can accept another wake phrase while the transcription worker drains prior jobs.
+- Hands-free command detection is disabled only while actively recording; it can run while earlier audio is queued or transcribing.

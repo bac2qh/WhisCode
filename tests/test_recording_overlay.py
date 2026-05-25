@@ -55,8 +55,8 @@ def test_overlay_client_sends_show_hide_stop_commands():
         str(os.getpid()),
     ]
     assert sent_commands(process) == [
-        {"command": "show"},
-        {"command": "hide"},
+        {"command": "show_recording", "item_id": "legacy"},
+        {"command": "remove_item", "item_id": "legacy"},
         {"command": "stop"},
     ]
     process.terminate.assert_called_once()
@@ -79,9 +79,9 @@ def test_overlay_client_sends_transcription_commands():
         client.hide()
 
     assert sent_commands(process) == [
-        {"command": "show_transcribing", "total_frames": 10},
+        {"command": "show_transcribing", "item_id": "legacy", "total_frames": 10},
         {"command": "transcription_progress", "current_frames": 5, "total_frames": 10, "rate": 123.4},
-        {"command": "hide"},
+        {"command": "remove_item", "item_id": "legacy"},
     ]
     assert client._visible is False
     assert client._mode is None
@@ -102,8 +102,35 @@ def test_overlay_client_clamps_transcription_progress():
         client.update_transcription_progress(current_frames=-5, total_frames=-10, rate=-3.0)
 
     assert sent_commands(process) == [
-        {"command": "show_transcribing", "total_frames": 0},
+        {"command": "show_transcribing", "item_id": "legacy", "total_frames": 0},
         {"command": "transcription_progress", "current_frames": 0, "total_frames": 0, "rate": 0.0},
+    ]
+
+
+def test_overlay_client_sends_stacked_item_commands():
+    process = make_process()
+
+    with (
+        patch("subprocess.Popen", return_value=process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+        patch.object(RecordingOverlayClient, "_ensure_sender_thread"),
+    ):
+        client = RecordingOverlayClient(update_interval=999)
+        client.show_recording_item("job-2")
+        client.show_queued_item("job-2", audio_seconds=3.25)
+        client.show_transcribing_item("job-1", audio_seconds=1.5)
+        client.update_transcription_progress(item_id="job-1", current_frames=4, total_frames=8)
+        client.remove_item("job-1")
+
+    assert sent_commands(process) == [
+        {"command": "show_recording", "item_id": "job-2"},
+        {"command": "show_queued", "item_id": "job-2", "audio_seconds": 3.25},
+        {"command": "show_transcribing", "item_id": "job-1", "audio_seconds": 1.5},
+        {"command": "transcription_progress", "item_id": "job-1", "current_frames": 4, "total_frames": 8},
+        {"command": "remove_item", "item_id": "job-1"},
     ]
 
 
@@ -175,8 +202,8 @@ def test_overlay_client_reports_helper_exit(capsys):
     assert client.enabled is False
     assert client._visible is False
     assert sent_commands(process) == []
-    assert ("recording_overlay.disabled", {"reason": "helper_exited", "stage": "show", "returncode": -5}) in telemetry.events
-    assert "recording overlay disabled: reason=helper_exited stage=show returncode=-5" in capsys.readouterr().err
+    assert ("recording_overlay.disabled", {"reason": "helper_exited", "stage": "show_recording", "returncode": -5}) in telemetry.events
+    assert "recording overlay disabled: reason=helper_exited stage=show_recording returncode=-5" in capsys.readouterr().err
 
 
 def test_overlay_client_stop_before_show_is_quiet(capsys):

@@ -64,6 +64,12 @@ from whiscode.stats import Stats
 from whiscode.status_notifier import notify_recording_completed, notify_recording_now
 from whiscode.telemetry import telemetry_from_args
 from whiscode.transcriber import transcribe
+from whiscode.transcription_queue import (
+    DEFAULT_TRANSCRIPTION_QUEUE_CAPACITY,
+    TranscriptRecoveryLog,
+    TranscriptionJob,
+    TranscriptionJobQueue,
+)
 
 WHISPER_PROCESSOR_SOURCES = {
     "mlx-community/whisper-large-v3-mlx": "openai/whisper-large-v3",
@@ -451,6 +457,8 @@ def main():
     stats = Stats()
     start_reminders(stats)
     overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry)
+    transcription_jobs = TranscriptionJobQueue(capacity=DEFAULT_TRANSCRIPTION_QUEUE_CAPACITY)
+    transcript_recovery = TranscriptRecoveryLog()
 
     state = State.IDLE
     state_lock = threading.Lock()
@@ -472,6 +480,8 @@ def main():
 
     def transition_to(new_state, source, **properties):
         nonlocal state
+        if state == new_state:
+            return
         previous = state
         state = new_state
         telemetry.emit(
@@ -481,6 +491,57 @@ def main():
             source=source,
             **properties,
         )
+
+    def refresh_state_from_queue(source: str) -> None:
+        if transcription_jobs.is_recording_reserved():
+            transition_to(State.RECORDING, source)
+        elif transcription_jobs.has_transcription_work():
+            transition_to(State.TRANSCRIBING, source)
+        else:
+            transition_to(State.IDLE, source)
+
+    def reject_recording_start(source: str) -> None:
+        queue_depth = transcription_jobs.queue_depth_for_telemetry()
+        telemetry.emit(
+            "recording.queue_full",
+            source=source,
+            queue_depth=queue_depth,
+            queue_capacity=DEFAULT_TRANSCRIPTION_QUEUE_CAPACITY,
+        )
+        print("Recording queue full; wait for transcription to catch up.")
+
+    def reserve_recording(source: str):
+        reservation = transcription_jobs.try_reserve_recording(source=source)
+        if reservation is None:
+            reject_recording_start(source)
+            return None
+        return reservation
+
+    def enqueue_recording(audio, audio_seconds: float, job_id: str, *, timeout_event: str | None = None) -> TranscriptionJob | None:
+        job = transcription_jobs.finish_recording(audio=audio, audio_seconds=audio_seconds, job_id=job_id)
+        if job is None:
+            overlay.remove_item(job_id)
+            reject_recording_start("enqueue")
+            return None
+        overlay.show_queued_item(job.job_id, audio_seconds=job.audio_seconds)
+        telemetry.emit(
+            "recording.queued",
+            job_id=job.job_id,
+            source=job.source,
+            queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+            audio_seconds=round(job.audio_seconds, 3),
+        )
+        if timeout_event == "hotkey":
+            print(f"Recording limit reached at {audio_seconds:.2f}s.")
+            telemetry.emit(
+                "recording.timeout",
+                mode="hotkey",
+                max_seconds=args.max_recording_seconds,
+                audio_seconds=round(audio_seconds, 3),
+            )
+        print(f"Queued recording {job.job_id} ({audio_seconds:.2f}s).")
+        refresh_state_from_queue("recording.queued")
+        return job
 
     def record_handsfree_cycle(reason: str, duration_seconds: float) -> None:
         now = time.monotonic()
@@ -506,80 +567,139 @@ def main():
         last_hotkey_time = now
         hotkey_queue.put_nowait("toggle")
 
-    def show_recording_status() -> None:
-        overlay.show()
+    def show_recording_status(job_id: str) -> None:
+        overlay.show_recording_item(job_id)
         if args.recording_notifications:
             notify_recording_now()
 
-    def hide_recording_status() -> None:
-        overlay.hide()
+    def notify_recording_stopped() -> None:
         if args.recording_notifications:
             notify_recording_completed()
 
-    def start_transcription(audio, audio_seconds, resume_handsfree=None):
-        def process(audio=audio, audio_seconds=audio_seconds):
-            nonlocal state
-            started = time.monotonic()
-            progress_state = {"total_frames": None}
+    def write_transcript_recovery(job: TranscriptionJob, processed: str) -> None:
+        result = transcript_recovery.record(
+            text=processed,
+            job_id=job.job_id,
+            source=job.source,
+            audio_seconds=job.audio_seconds,
+        )
+        properties = {
+            "job_id": job.job_id,
+            "entry_count": result.entry_count,
+            "ok": result.ok,
+        }
+        if result.error_type is not None:
+            properties["error_type"] = result.error_type
+        telemetry.emit("transcript_recovery_file_written", **properties)
 
-            def update_transcription_overlay(**progress) -> None:
-                total_frames = progress.get("total_frames")
-                if total_frames is not None:
-                    progress_state["total_frames"] = total_frames
-                overlay.update_transcription_progress(**progress)
+    def process_transcription_job(job: TranscriptionJob) -> None:
+        started = time.monotonic()
+        progress_state = {"total_frames": None}
 
-            overlay.show_transcribing()
-            telemetry.emit("transcription.started", audio_seconds=round(audio_seconds, 3), audio_samples=len(audio))
-            try:
-                text = transcribe_audio(audio, progress_callback=update_transcription_overlay)
-                if progress_state["total_frames"] is not None:
-                    overlay.update_transcription_progress(
-                        current_frames=progress_state["total_frames"],
-                        total_frames=progress_state["total_frames"],
-                    )
-                if text:
-                    if args.refine:
-                        processed = postprocess_for_refine(text, replacements=replacements)
-                        print("  Refining...")
-                        processed = refine(processed, model=args.refine_model)
-                    else:
-                        processed = postprocess(text, replacements=replacements)
-                    word_count = len(processed.split())
-                    stats.record(word_count, audio_seconds)
-                    print(f"  > {processed}")
-                    type_text(processed)
-                    telemetry.emit(
-                        "transcription.completed",
-                        outcome="typed",
-                        duration_seconds=round(time.monotonic() - started, 3),
-                        audio_seconds=round(audio_seconds, 3),
-                        word_count=word_count,
-                        refined=args.refine,
-                    )
-                else:
-                    print("  (no speech detected)")
-                    telemetry.emit(
-                        "transcription.completed",
-                        outcome="empty",
-                        duration_seconds=round(time.monotonic() - started, 3),
-                        audio_seconds=round(audio_seconds, 3),
-                    )
-            except Exception as e:
-                telemetry.emit(
-                    "transcription.failed",
-                    duration_seconds=round(time.monotonic() - started, 3),
-                    audio_seconds=round(audio_seconds, 3),
-                    error_type=type(e).__name__,
+        def update_transcription_overlay(**progress) -> None:
+            total_frames = progress.get("total_frames")
+            if total_frames is not None:
+                progress_state["total_frames"] = total_frames
+            overlay.update_transcription_progress(item_id=job.job_id, **progress)
+
+        overlay.show_transcribing_item(job.job_id, audio_seconds=job.audio_seconds)
+        queue_depth = transcription_jobs.queue_depth_for_telemetry()
+        telemetry.emit(
+            "transcription.queue_started",
+            job_id=job.job_id,
+            source=job.source,
+            queue_depth=queue_depth,
+            audio_seconds=round(job.audio_seconds, 3),
+        )
+        telemetry.emit("transcription.started", audio_seconds=round(job.audio_seconds, 3), audio_samples=len(job.audio))
+        print(f"Transcribing {job.job_id}...")
+        try:
+            text = transcribe_audio(job.audio, progress_callback=update_transcription_overlay)
+            if progress_state["total_frames"] is not None:
+                overlay.update_transcription_progress(
+                    item_id=job.job_id,
+                    current_frames=progress_state["total_frames"],
+                    total_frames=progress_state["total_frames"],
                 )
-                print(f"  Error: {e}", file=sys.stderr)
-            finally:
-                overlay.hide()
-                with state_lock:
-                    transition_to(State.IDLE, "transcription.finally")
-                    if resume_handsfree:
-                        resume_handsfree()
+            if text:
+                if args.refine:
+                    processed = postprocess_for_refine(text, replacements=replacements)
+                    print("  Refining...")
+                    processed = refine(processed, model=args.refine_model)
+                else:
+                    processed = postprocess(text, replacements=replacements)
+                word_count = len(processed.split())
+                stats.record(word_count, job.audio_seconds)
+                print(f"  > {processed}")
+                type_text(processed)
+                write_transcript_recovery(job, processed)
+                duration_seconds = round(time.monotonic() - started, 3)
+                telemetry.emit(
+                    "transcription.completed",
+                    outcome="typed",
+                    duration_seconds=duration_seconds,
+                    audio_seconds=round(job.audio_seconds, 3),
+                    word_count=word_count,
+                    refined=args.refine,
+                )
+                telemetry.emit(
+                    "transcription.queue_completed",
+                    job_id=job.job_id,
+                    source=job.source,
+                    outcome="typed",
+                    duration_seconds=duration_seconds,
+                    queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+                )
+            else:
+                print("  (no speech detected)")
+                duration_seconds = round(time.monotonic() - started, 3)
+                telemetry.emit(
+                    "transcription.completed",
+                    outcome="empty",
+                    duration_seconds=duration_seconds,
+                    audio_seconds=round(job.audio_seconds, 3),
+                )
+                telemetry.emit(
+                    "transcription.queue_completed",
+                    job_id=job.job_id,
+                    source=job.source,
+                    outcome="empty",
+                    duration_seconds=duration_seconds,
+                    queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+                )
+        except Exception as e:
+            duration_seconds = round(time.monotonic() - started, 3)
+            telemetry.emit(
+                "transcription.failed",
+                duration_seconds=duration_seconds,
+                audio_seconds=round(job.audio_seconds, 3),
+                error_type=type(e).__name__,
+            )
+            telemetry.emit(
+                "transcription.queue_failed",
+                job_id=job.job_id,
+                source=job.source,
+                duration_seconds=duration_seconds,
+                queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+                error_type=type(e).__name__,
+            )
+            print(f"  Error: {e}", file=sys.stderr)
+        finally:
+            overlay.remove_item(job.job_id)
 
-        threading.Thread(target=process, daemon=True).start()
+    def transcription_worker():
+        while not shutdown_event.is_set():
+            job = transcription_jobs.get(timeout=0.2)
+            if job is None:
+                continue
+            with state_lock:
+                refresh_state_from_queue("transcription.queue_started")
+            try:
+                process_transcription_job(job)
+            finally:
+                transcription_jobs.complete_active(job.job_id)
+                with state_lock:
+                    refresh_state_from_queue("transcription.queue_finished")
 
     def hotkey_worker():
         nonlocal state
@@ -590,37 +710,36 @@ def main():
                 continue
 
             with state_lock:
-                if state == State.TRANSCRIBING:
-                    telemetry.emit("hotkey.ignored", reason="transcribing")
-                    continue
-
                 if event == "timeout" and state != State.RECORDING:
                     telemetry.emit("recording.timeout_ignored", reason=state.value)
                     continue
 
-                if state == State.IDLE:
+                if state in {State.IDLE, State.TRANSCRIBING}:
                     if event == "timeout":
+                        continue
+                    reservation = reserve_recording("hotkey")
+                    if reservation is None:
                         continue
                     transition_to(State.RECORDING, "hotkey")
                     recorder.start()
-                    show_recording_status()
+                    show_recording_status(reservation.job_id)
                     print("Recording...")
 
                 elif state == State.RECORDING:
+                    job_id = transcription_jobs.reserved_job_id()
+                    if job_id is None:
+                        telemetry.emit("recording.stop_ignored", reason="missing_reservation")
+                        continue
                     transition_to(State.TRANSCRIBING, "recording_timeout" if event == "timeout" else "hotkey")
                     audio = recorder.stop()
                     audio_seconds = len(audio) / SAMPLE_RATE
-                    hide_recording_status()
-                    if event == "timeout":
-                        print(f"Recording limit reached at {audio_seconds:.2f}s.")
-                        telemetry.emit(
-                            "recording.timeout",
-                            mode="hotkey",
-                            max_seconds=args.max_recording_seconds,
-                            audio_seconds=round(audio_seconds, 3),
-                        )
-                    print("Transcribing...")
-                    start_transcription(audio, audio_seconds)
+                    notify_recording_stopped()
+                    enqueue_recording(
+                        audio,
+                        audio_seconds,
+                        job_id,
+                        timeout_event="hotkey" if event == "timeout" else None,
+                    )
 
     def handsfree_worker():
         while not shutdown_event.is_set():
@@ -645,29 +764,30 @@ def main():
     def handle_handsfree_hotkey():
         nonlocal state
         with state_lock:
-            if state == State.TRANSCRIBING:
-                telemetry.emit("hotkey.ignored", reason="transcribing")
-                return
-
-            if state == State.IDLE:
+            if state in {State.IDLE, State.TRANSCRIBING}:
+                reservation = reserve_recording("manual_handsfree_hotkey")
+                if reservation is None:
+                    return
                 transition_to(State.RECORDING, "manual_handsfree_hotkey")
                 handsfree_session.manual_start()
-                show_recording_status()
+                show_recording_status(reservation.job_id)
                 print("Recording... (manual)")
 
             elif state == State.RECORDING:
+                job_id = transcription_jobs.reserved_job_id()
+                if job_id is None:
+                    telemetry.emit("recording.stop_ignored", reason="missing_reservation")
+                    return
                 event = handsfree_session.manual_stop()
                 transition_to(State.TRANSCRIBING, "manual_handsfree_hotkey", audio_seconds=round(event.duration_seconds, 3))
-                handsfree_session.suspend()
-                hide_recording_status()
-                print("Transcribing... (manual)")
-                start_transcription(event.audio, event.duration_seconds, handsfree_session.resume)
+                notify_recording_stopped()
+                enqueue_recording(event.audio, event.duration_seconds, job_id)
 
     def handle_handsfree_event(event):
         nonlocal state
         with state_lock:
             if event.kind == "command.detected":
-                if state == State.IDLE and event.command:
+                if state != State.RECORDING and event.command:
                     label = command_label(event.command)
                     telemetry.emit(
                         "handsfree.command_detected",
@@ -688,13 +808,18 @@ def main():
                 return
 
             if event.kind == "wake.detected":
-                if state == State.IDLE:
+                if state in {State.IDLE, State.TRANSCRIBING}:
+                    reservation = reserve_recording("handsfree_wake")
+                    if reservation is None:
+                        handsfree_session.reset_idle()
+                        refresh_state_from_queue("handsfree_wake_queue_full")
+                        return
                     transition_to(
                         State.RECORDING,
                         "handsfree_wake",
                         detection_distance=round(event.detection.distance, 6) if event.detection else None,
                     )
-                    show_recording_status()
+                    show_recording_status(reservation.job_id)
                     print(f"handsfree.wake.detected distance={event.detection.distance:.4f}")
                     print("Recording...")
                     telemetry.emit(
@@ -708,9 +833,14 @@ def main():
 
             if event.kind in {"end.detected", "timeout"}:
                 if state == State.RECORDING:
+                    job_id = transcription_jobs.reserved_job_id()
+                    if job_id is None:
+                        telemetry.emit("recording.stop_ignored", reason="missing_reservation")
+                        handsfree_session.reset_idle()
+                        refresh_state_from_queue(f"handsfree_{event.kind}_missing_reservation")
+                        return
                     transition_to(State.TRANSCRIBING, f"handsfree_{event.kind}", audio_seconds=round(event.duration_seconds, 3))
-                    handsfree_session.suspend()
-                    hide_recording_status()
+                    notify_recording_stopped()
                     if event.kind == "timeout":
                         print(f"handsfree.timeout seconds={event.duration_seconds:.2f}")
                         telemetry.emit("handsfree.timeout", audio_seconds=round(event.duration_seconds, 3))
@@ -725,8 +855,7 @@ def main():
                             active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                         )
                     record_handsfree_cycle(event.kind, event.duration_seconds)
-                    print("Transcribing...")
-                    start_transcription(event.audio, event.duration_seconds, handsfree_session.resume)
+                    enqueue_recording(event.audio, event.duration_seconds, job_id)
                 return
 
             if event.kind == "detector.error":
@@ -746,6 +875,8 @@ def main():
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
+
+    threading.Thread(target=transcription_worker, daemon=True).start()
 
     if args.hands_free:
         try:
@@ -819,6 +950,10 @@ def main():
 
         with state_lock:
             if not args.hands_free and state == State.RECORDING:
+                job_id = transcription_jobs.reserved_job_id()
+                if job_id is not None:
+                    transcription_jobs.cancel_recording(job_id)
+                    overlay.remove_item(job_id)
                 recorder.stop()
 
         print(f"\nSession stats: {stats.summary()}")

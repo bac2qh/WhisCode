@@ -15,6 +15,8 @@ from typing import Any
 
 import numpy as np
 
+LEGACY_OVERLAY_ITEM_ID = "legacy"
+
 
 @dataclass(frozen=True)
 class OverlayHelperProcess:
@@ -50,10 +52,14 @@ class RecordingOverlayClient:
         self._latest_level = 0.0
         self._visible = False
         self._mode: str | None = None
+        self._active_recording_item_id: str | None = None
         self._stop_event = threading.Event()
         self._sender_thread: threading.Thread | None = None
 
     def show(self) -> None:
+        self.show_recording_item(LEGACY_OVERLAY_ITEM_ID)
+
+    def show_recording_item(self, item_id: str) -> None:
         if not self.enabled:
             return
         if not self._ensure_process():
@@ -61,18 +67,48 @@ class RecordingOverlayClient:
         with self._lock:
             self._visible = True
             self._mode = "recording"
-        if self._send({"command": "show"}):
+            self._active_recording_item_id = item_id
+        if self._send({"command": "show_recording", "item_id": item_id}):
             self._ensure_sender_thread()
 
     def hide(self) -> None:
+        self.remove_item(LEGACY_OVERLAY_ITEM_ID)
+
+    def remove_item(self, item_id: str) -> None:
         if not self.enabled:
             return
         with self._lock:
-            self._visible = False
-            self._mode = None
-        self._send({"command": "hide"})
+            if self._active_recording_item_id == item_id:
+                self._active_recording_item_id = None
+            if item_id == LEGACY_OVERLAY_ITEM_ID:
+                self._visible = False
+                self._mode = None
+        self._send({"command": "remove_item", "item_id": item_id})
+
+    def show_queued_item(self, item_id: str, *, audio_seconds: float | None = None) -> None:
+        if not self.enabled:
+            return
+        if not self._ensure_process():
+            return
+        with self._lock:
+            if self._active_recording_item_id == item_id:
+                self._active_recording_item_id = None
+            self._visible = True
+        command: dict[str, Any] = {"command": "show_queued", "item_id": item_id}
+        if audio_seconds is not None:
+            command["audio_seconds"] = _nonnegative_float(audio_seconds)
+        self._send(command)
 
     def show_transcribing(self, *, total_frames: int | None = None) -> None:
+        self.show_transcribing_item(LEGACY_OVERLAY_ITEM_ID, total_frames=total_frames)
+
+    def show_transcribing_item(
+        self,
+        item_id: str,
+        *,
+        total_frames: int | None = None,
+        audio_seconds: float | None = None,
+    ) -> None:
         if not self.enabled:
             return
         if not self._ensure_process():
@@ -80,14 +116,19 @@ class RecordingOverlayClient:
         with self._lock:
             self._visible = True
             self._mode = "transcribing"
-        command: dict[str, Any] = {"command": "show_transcribing"}
+            if self._active_recording_item_id == item_id:
+                self._active_recording_item_id = None
+        command: dict[str, Any] = {"command": "show_transcribing", "item_id": item_id}
         if total_frames is not None:
             command["total_frames"] = _nonnegative_int(total_frames)
+        if audio_seconds is not None:
+            command["audio_seconds"] = _nonnegative_float(audio_seconds)
         self._send(command)
 
     def update_transcription_progress(
         self,
         *,
+        item_id: str | None = None,
         current_frames: int | None = None,
         total_frames: int | None = None,
         rate: float | None = None,
@@ -95,6 +136,8 @@ class RecordingOverlayClient:
         if not self.enabled:
             return
         command: dict[str, Any] = {"command": "transcription_progress"}
+        if item_id is not None:
+            command["item_id"] = item_id
         if current_frames is not None:
             command["current_frames"] = _nonnegative_int(current_frames)
         if total_frames is not None:
@@ -196,8 +239,9 @@ class RecordingOverlayClient:
                 visible = self._visible
                 mode = self._mode
                 level = self._latest_level
-            if visible and mode == "recording":
-                self._send({"command": "level", "level": level})
+                item_id = self._active_recording_item_id
+            if visible and mode == "recording" and item_id is not None:
+                self._send({"command": "level", "item_id": item_id, "level": level})
             time.sleep(self.update_interval)
 
     def _send(self, command: dict[str, Any]) -> bool:
@@ -255,6 +299,16 @@ def _nonnegative_int(value: Any) -> int:
     except (TypeError, ValueError):
         return 0
     return max(0, numeric)
+
+
+def _nonnegative_float(value: Any) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(numeric):
+        return 0.0
+    return max(0.0, numeric)
 
 
 def _draw_attributed_text(text: str, point: Any, attrs: dict[Any, Any], *, attributed_string_class=None) -> Any:
@@ -440,77 +494,115 @@ def _run_helper(parent_pid: int | None = None) -> None:
             self = objc.super(OverlayView, self).initWithFrame_(frame)
             if self is None:
                 return None
-            self.mode = None
-            self.started_at = None
-            self.levels = deque([0.0] * 28, maxlen=28)
-            self.current_frames = 0
-            self.total_frames = 0
-            self.rate = 0.0
+            self.items = []
             self.setWantsLayer_(True)
             return self
 
-        def showRecording(self):
-            self.mode = "recording"
-            self.started_at = time.monotonic()
-            self.levels.clear()
-            self.levels.extend([0.0] * 28)
+        def showRecordingItem_(self, item_id):
+            item = self._upsertItem_mode_(item_id, "recording")
+            item["started_at"] = time.monotonic()
+            item["levels"] = deque([0.0] * 28, maxlen=28)
             self.setNeedsDisplay_(True)
 
-        def hideRecording(self):
-            self.mode = None
-            self.started_at = None
+        def showQueuedItem_audioSeconds_(self, item_id, audio_seconds):
+            item = self._upsertItem_mode_(item_id, "queued")
+            item["audio_seconds"] = max(0.0, float(audio_seconds or 0.0))
             self.setNeedsDisplay_(True)
 
-        def showTranscribingWithTotal_(self, total_frames):
-            self.mode = "transcribing"
-            self.started_at = time.monotonic()
-            self.current_frames = 0
-            self.total_frames = max(0, int(total_frames or 0))
-            self.rate = 0.0
+        def showTranscribingItem_total_audioSeconds_(self, item_id, total_frames, audio_seconds):
+            item = self._upsertItem_mode_(item_id, "transcribing")
+            item["started_at"] = time.monotonic()
+            item["current_frames"] = 0
+            item["total_frames"] = max(0, int(total_frames or 0))
+            item["rate"] = 0.0
+            item["audio_seconds"] = max(0.0, float(audio_seconds or 0.0))
             self.setNeedsDisplay_(True)
 
-        def setLevel_(self, level):
-            self.levels.append(float(max(0.0, min(1.0, level))))
+        def removeItem_(self, item_id):
+            self.items = [item for item in self.items if item["id"] != item_id]
             self.setNeedsDisplay_(True)
 
-        def setTranscriptionProgress_total_rate_(self, current_frames, total_frames, rate):
-            self.current_frames = max(0, int(current_frames or 0))
+        def setLevel_item_(self, level, item_id):
+            item = self._findItem_(item_id)
+            if item is None or item["mode"] != "recording":
+                return
+            item["levels"].append(float(max(0.0, min(1.0, level))))
+            self.setNeedsDisplay_(True)
+
+        def setTranscriptionProgress_total_rate_item_(self, current_frames, total_frames, rate, item_id):
+            item = self._findItem_(item_id)
+            if item is None or item["mode"] != "transcribing":
+                return
+            item["current_frames"] = max(0, int(current_frames or 0))
             if total_frames is not None:
-                self.total_frames = max(0, int(total_frames or 0))
-            self.rate = max(0.0, float(rate or 0.0))
+                item["total_frames"] = max(0, int(total_frames or 0))
+            item["rate"] = max(0.0, float(rate or 0.0))
             self.setNeedsDisplay_(True)
+
+        def itemCount(self):
+            return len(self.items)
+
+        def _findItem_(self, item_id):
+            for item in self.items:
+                if item["id"] == item_id:
+                    return item
+            return None
+
+        def _upsertItem_mode_(self, item_id, mode):
+            item = self._findItem_(item_id)
+            if item is None:
+                item = {
+                    "id": item_id,
+                    "mode": mode,
+                    "started_at": time.monotonic(),
+                    "levels": deque([0.0] * 28, maxlen=28),
+                    "current_frames": 0,
+                    "total_frames": 0,
+                    "rate": 0.0,
+                    "audio_seconds": 0.0,
+                }
+                self.items.insert(0, item)
+            else:
+                item["mode"] = mode
+            return item
 
         def drawRect_(self, rect):
             bounds = self.bounds()
-            NSColor.colorWithCalibratedWhite_alpha_(0.08, 0.88).setFill()
-            path = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(bounds, 18, 18)
-            path.fill()
+            card_height = 46
+            gap = 8
+            top = bounds.size.height
+            for index, item in enumerate(self.items):
+                y = top - card_height - index * (card_height + gap)
+                card = NSMakeRect(0, y, bounds.size.width, card_height)
+                NSColor.colorWithCalibratedWhite_alpha_(0.08, 0.88).setFill()
+                path = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(card, 18, 18)
+                path.fill()
+                if item["mode"] == "transcribing":
+                    self._drawTranscribingInRect_item_(card, item)
+                elif item["mode"] == "queued":
+                    self._drawQueuedInRect_item_(card, item)
+                else:
+                    self._drawRecordingInRect_item_(card, item)
 
-            if self.mode == "transcribing":
-                self._drawTranscribing()
-                return
-
-            self._drawRecording()
-
-        def _drawRecording(self):
+        def _drawRecordingInRect_item_(self, card, item):
             NSColor.colorWithCalibratedRed_green_blue_alpha_(1.0, 0.22, 0.18, 1.0).setFill()
-            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(16, 18, 10, 10)).fill()
+            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(card.origin.x + 16, card.origin.y + 18, 10, 10)).fill()
 
-            elapsed = 0 if self.started_at is None else max(0, int(time.monotonic() - self.started_at))
+            elapsed = max(0, int(time.monotonic() - item["started_at"]))
             minutes, seconds = divmod(elapsed, 60)
             text = f"{minutes:02d}:{seconds:02d}"
             attrs = {
                 NSFontAttributeName: NSFont.monospacedDigitSystemFontOfSize_weight_(16, 0.3),
                 NSForegroundColorAttributeName: NSColor.whiteColor(),
             }
-            _draw_attributed_text(text, NSMakePoint(36, 13), attrs)
+            _draw_attributed_text(text, NSMakePoint(card.origin.x + 36, card.origin.y + 13), attrs)
 
-            bar_x = 92
+            bar_x = card.origin.x + 92
             bar_width = 4
             gap = 3
-            center_y = 23
+            center_y = card.origin.y + 23
             NSColor.colorWithCalibratedRed_green_blue_alpha_(0.45, 0.85, 1.0, 0.95).setFill()
-            for index, level in enumerate(self.levels):
+            for index, level in enumerate(item["levels"]):
                 height = max(4, min(28, 4 + int(level * 28)))
                 x = bar_x + index * (bar_width + gap)
                 y = center_y - height / 2
@@ -520,21 +612,33 @@ def _run_helper(parent_pid: int | None = None) -> None:
                     2,
                 ).fill()
 
-        def _drawTranscribing(self):
-            total = max(0, int(self.total_frames or 0))
-            current = max(0, int(self.current_frames or 0))
+        def _drawQueuedInRect_item_(self, card, item):
+            NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.55).setFill()
+            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(card.origin.x + 16, card.origin.y + 18, 10, 10)).fill()
+
+            audio_seconds = max(0.0, float(item.get("audio_seconds") or 0.0))
+            text = f"Queued  {audio_seconds:.1f}s"
+            attrs = {
+                NSFontAttributeName: NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0.3),
+                NSForegroundColorAttributeName: NSColor.whiteColor(),
+            }
+            _draw_attributed_text(text, NSMakePoint(card.origin.x + 36, card.origin.y + 16), attrs)
+
+        def _drawTranscribingInRect_item_(self, card, item):
+            total = max(0, int(item["total_frames"] or 0))
+            current = max(0, int(item["current_frames"] or 0))
             if total > 0:
                 current = min(current, total)
                 progress = min(1.0, current / total)
             else:
-                elapsed = 0.0 if self.started_at is None else time.monotonic() - self.started_at
+                elapsed = time.monotonic() - item["started_at"]
                 progress = (math.sin(elapsed * 4.0) + 1.0) / 2.0
 
             NSColor.colorWithCalibratedRed_green_blue_alpha_(0.45, 0.85, 1.0, 0.95).setFill()
-            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(16, 18, 10, 10)).fill()
+            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(card.origin.x + 16, card.origin.y + 18, 10, 10)).fill()
 
             percent = int(round(progress * 100)) if total > 0 else 0
-            rate = int(round(float(self.rate or 0.0)))
+            rate = int(round(float(item["rate"] or 0.0)))
             if total > 0 and rate > 0:
                 text = f"Transcribing {percent:3d}%  {current}/{total}  {rate} fps"
             elif total > 0:
@@ -545,17 +649,17 @@ def _run_helper(parent_pid: int | None = None) -> None:
                 NSFontAttributeName: NSFont.monospacedDigitSystemFontOfSize_weight_(12, 0.3),
                 NSForegroundColorAttributeName: NSColor.whiteColor(),
             }
-            _draw_attributed_text(text, NSMakePoint(36, 24), attrs)
+            _draw_attributed_text(text, NSMakePoint(card.origin.x + 36, card.origin.y + 24), attrs)
 
-            track = NSMakeRect(36, 11, 288, 7)
+            track = NSMakeRect(card.origin.x + 36, card.origin.y + 11, 288, 7)
             NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.22).setFill()
             NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(track, 3.5, 3.5).fill()
 
             fill_width = 288 * progress if total > 0 else 56
-            fill_x = 36 if total > 0 else 36 + (288 - fill_width) * progress
+            fill_x = card.origin.x + 36 if total > 0 else card.origin.x + 36 + (288 - fill_width) * progress
             NSColor.colorWithCalibratedRed_green_blue_alpha_(0.45, 0.85, 1.0, 1.0).setFill()
             NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
-                NSMakeRect(fill_x, 11, fill_width, 7),
+                NSMakeRect(fill_x, card.origin.y + 11, fill_width, 7),
                 3.5,
                 3.5,
             ).fill()
@@ -585,24 +689,57 @@ def _run_helper(parent_pid: int | None = None) -> None:
             self.view = OverlayView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
             self.panel.setContentView_(self.view)
 
+        def _syncPanelFrame(self):
+            count = max(1, int(self.view.itemCount()))
+            width = 360
+            card_height = 46
+            gap = 8
+            height = card_height * count + gap * max(0, count - 1)
+            screen = NSScreen.mainScreen().visibleFrame()
+            x = screen.origin.x + (screen.size.width - width) / 2
+            y = screen.origin.y + screen.size.height - height - 24
+            self.panel.setFrame_display_(NSMakeRect(x, y, width, height), True)
+            self.view.setFrame_(NSMakeRect(0, 0, width, height))
+
         def handle(self, command):
             name = command.get("command")
-            if name == "show":
-                self.view.showRecording()
+            item_id = str(command.get("item_id") or LEGACY_OVERLAY_ITEM_ID)
+            if name in {"show", "show_recording"}:
+                self.view.showRecordingItem_(item_id)
+                self._syncPanelFrame()
+                self.panel.orderFrontRegardless()
+            elif name == "show_queued":
+                self.view.showQueuedItem_audioSeconds_(item_id, command.get("audio_seconds", 0.0))
+                self._syncPanelFrame()
                 self.panel.orderFrontRegardless()
             elif name == "show_transcribing":
-                self.view.showTranscribingWithTotal_(command.get("total_frames", 0))
+                self.view.showTranscribingItem_total_audioSeconds_(
+                    item_id,
+                    command.get("total_frames", 0),
+                    command.get("audio_seconds", 0.0),
+                )
+                self._syncPanelFrame()
                 self.panel.orderFrontRegardless()
             elif name == "hide":
-                self.view.hideRecording()
-                self.panel.orderOut_(None)
+                self.view.removeItem_(item_id)
+                if self.view.itemCount():
+                    self._syncPanelFrame()
+                else:
+                    self.panel.orderOut_(None)
+            elif name == "remove_item":
+                self.view.removeItem_(item_id)
+                if self.view.itemCount():
+                    self._syncPanelFrame()
+                else:
+                    self.panel.orderOut_(None)
             elif name == "level":
-                self.view.setLevel_(float(command.get("level", 0.0)))
+                self.view.setLevel_item_(float(command.get("level", 0.0)), item_id)
             elif name == "transcription_progress":
-                self.view.setTranscriptionProgress_total_rate_(
+                self.view.setTranscriptionProgress_total_rate_item_(
                     command.get("current_frames", 0),
                     command.get("total_frames"),
                     command.get("rate", 0.0),
+                    item_id,
                 )
             elif name == "stop":
                 self.panel.orderOut_(None)
