@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Checkpoint: `.agents/checkpoints/2026-05-24-copy-friendly-stdout-transcripts-checkpoints.md`.
+- Implementation commits: `8585b1b` (`Make transcript stdout copy friendly`) and `af3ba85` (`Record stdout transcript checkpoint`).
+- Merge commit: none; local `main` fast-forwarded to `af3ba85`.
+- Verification: `uv run --with pytest pytest tests/test_transcription_queue.py tests/test_main_cli.py`; `uv run --with pytest pytest`; `uv run python -m compileall whiscode`; `git diff --check`.
+- Worktree and branch cleanup: removed `.agents/worktrees/stdout-transcript-blocks` and deleted `feature/stdout-transcript-blocks`.
+- Shipped: successful transcripts now print to stdout as flush-left, single-line, blank-line-separated blocks, and the `/tmp` transcript recovery file plus its telemetry event were removed.
+
 # Copy-Friendly Stdout Transcripts
 
 ## Summary

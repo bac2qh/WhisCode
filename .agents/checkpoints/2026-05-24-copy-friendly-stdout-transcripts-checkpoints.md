@@ -13,3 +13,10 @@
 - Key decisions: The typed/refine/hands-free paths keep using the existing processed transcript; only terminal presentation changes. Routine telemetry remains transcript-free, and raw CrispASR debug logging is unchanged.
 - Verification: `uv run --with pytest pytest tests/test_transcription_queue.py tests/test_main_cli.py` passed; `uv run --with pytest pytest` passed; `uv run python -m compileall whiscode` passed; `git diff --check` passed.
 - Commits: `8585b1b` (`Make transcript stdout copy friendly`).
+
+## 2026-05-24 - Closeout
+- Done: Fast-forward merged `feature/stdout-transcript-blocks` into local `main`, removed the task worktree, deleted the local task branch, and archived the plan.
+- Immediate next step: None.
+- Key decisions: No merge commit was needed because local `main` fast-forwarded cleanly.
+- Verification: Main contains implementation commit `8585b1b` and checkpoint commit `af3ba85`; closeout archive bookkeeping is tracked separately.
+- Commits: `8585b1b`, `af3ba85`.
