@@ -16,4 +16,5 @@
   - `uv run --with pytest pytest tests/test_main_cli.py tests/test_benchmark_asr.py`
   - `uv run --with pytest pytest`
   - `uv run python -m compileall whiscode`
-- Immediate next step: commit and close out to local `main`.
+- Implementation commit: `be057b2` (`Retire CrispASR as recommended VibeVoice path`).
+- Immediate next step: commit this checkpoint update and close out to local `main`.
