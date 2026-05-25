@@ -1,3 +1,12 @@
+# Closeout
+- Final status: implemented.
+- Checkpoint: `.agents/checkpoints/2026-05-25-document-crispasr-progress-limit-checkpoints.md`.
+- Implementation commits: `7682ef3` (`Document CrispASR progress limitation`) and `b196640` (`Record CrispASR progress docs checkpoint`).
+- Merge commit: none; local `main` fast-forwarded to `b196640`.
+- Verification: `git diff --check`; `rg -n "blocking full-recording|does not expose|cannot show|backend-dependent|CrispASR/VibeVoice warm-server" README.md wiki .agents/memory`.
+- Worktree and branch cleanup: removed `.agents/worktrees/doc-crispasr-progress-limit` and deleted `doc-crispasr-progress-limit`.
+- Shipped: README and wiki now document that current CrispASR/VibeVoice warm-server transcription is blocking and cannot feed concrete overlay progress.
+
 # Document CrispASR/VibeVoice Progress Limitation
 
 ## Summary

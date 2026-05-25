@@ -17,3 +17,11 @@
 - Key decisions: Keep this documentation-only. Do not add estimated progress or change telemetry because the user asked to document the limitation, not implement a workaround.
 - Verification: `git diff --check` passed; `rg -n "blocking full-recording|does not expose|cannot show|backend-dependent|CrispASR/VibeVoice warm-server" README.md wiki .agents/memory` found the expected README, wiki, and memory mentions.
 - Commits: `7682ef3` (`Document CrispASR progress limitation`).
+
+## 2026-05-25 Closeout
+
+- Done: Fast-forward merged `doc-crispasr-progress-limit` into local `main`, removed the task worktree, deleted the local task branch, and archived the plan.
+- Immediate next step: Push local `main` to `origin/main`.
+- Key decisions: No merge commit was needed because local `main` fast-forwarded cleanly. Closeout bookkeeping is tracked separately from the documentation implementation commits.
+- Verification: Main contains documentation commit `7682ef3` and checkpoint commit `b196640`; `git diff --check` and the README/wiki/memory `rg` verification passed before merge.
+- Commits: `7682ef3`, `b196640`.
