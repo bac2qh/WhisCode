@@ -13,7 +13,7 @@
 
 - Done: Updated `README.md`, `wiki/pages/asr-backends.md`, `wiki/pages/recording-overlay.md`, and `wiki/log.md` to document that the current CrispASR/VibeVoice warm-server `/v1/audio/transcriptions` path is blocking and does not expose concrete in-flight progress.
 - Done: Updated model-loading and recording-overlay project memory with the same backend limitation.
-- Immediate next step: Commit the documentation update, record the commit hash, then close out and push `main`.
+- Immediate next step: Close out the task worktree and push `main`.
 - Key decisions: Keep this documentation-only. Do not add estimated progress or change telemetry because the user asked to document the limitation, not implement a workaround.
 - Verification: `git diff --check` passed; `rg -n "blocking full-recording|does not expose|cannot show|backend-dependent|CrispASR/VibeVoice warm-server" README.md wiki .agents/memory` found the expected README, wiki, and memory mentions.
-- Commits: Pending.
+- Commits: `7682ef3` (`Document CrispASR progress limitation`).
