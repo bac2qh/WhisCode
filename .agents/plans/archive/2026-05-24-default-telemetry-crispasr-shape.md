@@ -1,3 +1,12 @@
+# Closeout 2026-05-24
+- Final status: `implemented`.
+- Related checkpoint: `.agents/checkpoints/2026-05-24-default-telemetry-crispasr-shape-checkpoints.md`.
+- Implementation commits: `7732529` (`Enable default runtime telemetry`) and `a711e51` (`Record default telemetry implementation checkpoint`).
+- Merge result: fast-forwarded local `main` to `a711e51`; no merge commit was created.
+- Verification: `uv run --with pytest pytest tests/test_crispasr_asr.py tests/test_main_cli.py tests/test_telemetry.py` passed; `uv run python -m compileall whiscode` passed.
+- Cleanup: removed task worktree `.agents/worktrees/default-telemetry-crispasr-shape` and deleted local branch `default-telemetry-crispasr-shape`; unrelated worktree `.agents/worktrees/env-llama-paths` was left untouched.
+- Shipped: WhisCode runtime telemetry is enabled by default with `--no-telemetry` opt-out, and malformed CrispASR/VibeVoice chunk output emits bounded shape diagnostics without raw content.
+
 # Default Telemetry And CrispASR Shape Diagnostics
 
 ## Summary

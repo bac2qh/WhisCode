@@ -16,4 +16,11 @@
   - `uv run --with pytest pytest tests/test_crispasr_asr.py tests/test_main_cli.py tests/test_telemetry.py` passed: 45 tests.
   - `uv run python -m compileall whiscode` passed.
 - Implementation commit: `7732529` (`Enable default runtime telemetry`).
-- Immediate next step: commit this checkpoint hash update, then close out.
+- Checkpoint hash commit: `a711e51` (`Record default telemetry implementation checkpoint`).
+- Closeout:
+  - Merged into local `main` by fast-forward at `a711e51`; no merge commit was created.
+  - Removed task worktree `.agents/worktrees/default-telemetry-crispasr-shape`.
+  - Deleted local branch `default-telemetry-crispasr-shape`.
+  - Left unrelated worktree `.agents/worktrees/env-llama-paths` untouched.
+  - Archived the plan to `.agents/plans/archive/2026-05-24-default-telemetry-crispasr-shape.md`.
+- Immediate next step: none for this plan.
