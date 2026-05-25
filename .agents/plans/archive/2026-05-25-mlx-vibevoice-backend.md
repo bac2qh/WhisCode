@@ -1,3 +1,12 @@
+## Closeout
+- Final status: implemented.
+- Related checkpoint file: `.agents/checkpoints/2026-05-25-mlx-vibevoice-backend-checkpoints.md`.
+- Implementation commits: `f412d41`, `17b1c61`.
+- Merge commit: none; local `main` was fast-forwarded.
+- Verification performed: `uv run --with pytest pytest tests/test_mlx_vibevoice_asr.py tests/test_main_cli.py tests/test_benchmark_asr.py`; `uv run --with pytest pytest`; `uv run python -m compileall whiscode`; `uv run whiscode --help`.
+- Worktree and branch cleanup result: removed `.agents/worktrees/mlx-vibevoice-backend` and deleted `feature/mlx-vibevoice-backend`.
+- Summary: Added the optional `mlx-vibevoice` backend using MLX-Audio VibeVoice ASR, defaulted it to the local 8-bit model, preserved existing hotwords through VibeVoice context, added benchmark support, bounded telemetry, tests, and docs.
+
 # Add MLX VibeVoice ASR Backend To WhisCode
 
 ## Summary
