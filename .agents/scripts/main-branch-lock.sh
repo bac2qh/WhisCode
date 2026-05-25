@@ -41,7 +41,11 @@ done
 [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || usage
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-project_root="$(git -C "$script_dir/../.." rev-parse --show-toplevel 2>/dev/null || cd "$script_dir/../.." && pwd)"
+if project_root="$(git -C "$script_dir/../.." rev-parse --show-toplevel 2>/dev/null)"; then
+  :
+else
+  project_root="$(cd "$script_dir/../.." && pwd)"
+fi
 locks_dir="$project_root/.agents/locks"
 lock_dir="$locks_dir/main-branch.lock"
 metadata_file="$lock_dir/metadata"

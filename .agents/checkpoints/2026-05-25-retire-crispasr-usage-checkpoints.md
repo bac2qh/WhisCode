@@ -17,4 +17,6 @@
   - `uv run --with pytest pytest`
   - `uv run python -m compileall whiscode`
 - Implementation commit: `be057b2` (`Retire CrispASR as recommended VibeVoice path`).
-- Immediate next step: commit this checkpoint update and close out to local `main`.
+- Closeout discovered that `.agents/scripts/main-branch-lock.sh` computed `project_root` with `git ... || cd ... && pwd`, which always appended `pwd` after successful `git rev-parse` because of shell operator precedence. This produced a newline-containing lock path and prevented the mutex from running the merge.
+- Approved scope adjustment: fix the mutex helper in this branch so future closeouts can use it, then use a minimal manual lock for this closeout because the main helper is the broken component being fixed.
+- Immediate next step: commit the checkpoint and lock-helper fix, then close out to local `main`.
