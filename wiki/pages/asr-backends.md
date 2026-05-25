@@ -14,7 +14,7 @@ This path remains the compatibility default and is the backend installed by the 
 
 ## Optional MLX VibeVoice Backend
 
-`mlx-vibevoice` is an opt-in in-process backend that uses MLX-Audio's VibeVoice ASR implementation:
+`mlx-vibevoice` is the recommended VibeVoice backend. It is an opt-in in-process backend that uses MLX-Audio's VibeVoice ASR implementation and has been noticeably faster locally than the older CrispASR/GGUF path:
 
 ```bash
 uv run whiscode --asr-backend mlx-vibevoice
@@ -59,16 +59,16 @@ The backend starts the server only when selected, keeps it warm while WhisCode r
 
 Telemetry for this backend is limited to bounded operational status such as backend selection, health-check outcomes, startup duration, child PID, audio duration, output length, HTTP status class, and error type. It does not record raw audio, transcript text, prompts, full request payloads, secrets, or model output content.
 
-## Optional CrispASR Backend
+## Legacy CrispASR Backend
 
-`crispasr` is an opt-in backend for local VibeVoice ASR GGUF experiments:
+`crispasr` is a legacy backend for local VibeVoice ASR GGUF experiments. Prefer `mlx-vibevoice` for current VibeVoice use; keep this path only for existing GGUF setups or compatibility experiments:
 
 ```bash
 WHISCODE_CRISPASR_MODEL=~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-f16.gguf \
   uv run whiscode --asr-backend crispasr --language en
 ```
 
-WhisCode expects a source-built sibling CrispASR checkout by default:
+WhisCode expects a source-built sibling CrispASR checkout by default when this legacy backend is selected:
 
 ```text
 ~/Documents/repos/CrispASR/build/bin/crispasr
@@ -102,4 +102,4 @@ This CrispASR/VibeVoice path is a blocking full-recording request. The server re
 
 Routine telemetry for this backend is limited to bounded operational status such as health-check outcomes, startup duration, child PID, backend name, model basename, audio duration, output length, HTTP status class, error type, and malformed response shape counts. It does not record raw audio, transcript text, prompts, hotwords, chunk content, full request payloads, secrets, or full model paths. When CrispASR/VibeVoice chunk parsing fails or needs best-effort recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl` next to runtime telemetry for debugging; that file can contain transcript or provider output text.
 
-The current CrispASR VibeVoice path receives WhisCode's hotwords as an OpenAI-style `prompt` field, but the CrispASR VibeVoice server backend does not currently route that prompt into VibeVoice decoding. Use `mlx-vibevoice` for VibeVoice hotword/context conditioning inside WhisCode without modifying CrispASR.
+The current CrispASR VibeVoice path receives WhisCode's hotwords as an OpenAI-style `prompt` field, but the CrispASR VibeVoice server backend does not currently route that prompt into VibeVoice decoding. Use `mlx-vibevoice` for VibeVoice hotword/context conditioning inside WhisCode.

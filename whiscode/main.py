@@ -104,7 +104,7 @@ def parse_args(argv: list[str] | None = None):
     raw_argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
     parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
-    parser.add_argument("--asr-backend", choices=("mlx-whisper", "mlx-vibevoice", "llama-cpp", "crispasr"), default="mlx-whisper", help="ASR backend to use (default: mlx-whisper)")
+    parser.add_argument("--asr-backend", choices=("mlx-whisper", "mlx-vibevoice", "llama-cpp", "crispasr"), default="mlx-whisper", help="ASR backend to use (default: mlx-whisper; use mlx-vibevoice for VibeVoice; crispasr is legacy)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
     parser.add_argument("--language", default="auto", help="Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.")
     parser.add_argument("--prompt", default=None, help="Additional context prompt to improve transcription accuracy")
@@ -145,9 +145,9 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--llama-ngl", type=int, default=99, help="llama.cpp GPU layers for ASR server (default: 99)")
     parser.set_defaults(llama_autostart=True)
     parser.add_argument("--no-llama-autostart", dest="llama_autostart", action="store_false", help="Require an existing llama.cpp ASR server instead of starting one")
-    parser.add_argument("--crispasr-bin", type=Path, default=default_crispasr_bin(), help="Source-built crispasr binary for --asr-backend crispasr")
-    parser.add_argument("--crispasr-model", type=Path, default=default_crispasr_model_path(), help="VibeVoice ASR GGUF model path for --asr-backend crispasr")
-    parser.add_argument("--crispasr-backend", default="vibevoice", help="CrispASR backend name (default: vibevoice)")
+    parser.add_argument("--crispasr-bin", type=Path, default=default_crispasr_bin(), help="Legacy source-built crispasr binary for --asr-backend crispasr")
+    parser.add_argument("--crispasr-model", type=Path, default=default_crispasr_model_path(), help="Legacy VibeVoice ASR GGUF model path for --asr-backend crispasr")
+    parser.add_argument("--crispasr-backend", default="vibevoice", help="Legacy CrispASR backend name (default: vibevoice)")
     parser.add_argument("--crispasr-host", default="127.0.0.1", help="CrispASR server host (default: 127.0.0.1)")
     parser.add_argument("--crispasr-port", type=int, default=8092, help="CrispASR server port (default: 8092)")
     parser.add_argument("--crispasr-max-tokens", type=int, default=2048, help="CrispASR generated-token cap (default: 2048)")
@@ -465,6 +465,7 @@ def main():
 
         print(f"llama.cpp ASR ready at {args.llama_host}:{args.llama_port}. Press {args.hotkey} to start/stop recording.")
     elif args.asr_backend == "crispasr":
+        print("Warning: --asr-backend crispasr is legacy; prefer --asr-backend mlx-vibevoice for local VibeVoice ASR.")
         config = CrispAsrServerConfig(
             server_bin=args.crispasr_bin.expanduser(),
             model=args.crispasr_model.expanduser(),

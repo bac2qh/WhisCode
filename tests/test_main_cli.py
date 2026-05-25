@@ -79,6 +79,18 @@ def test_runtime_telemetry_can_be_disabled():
     assert telemetry.enabled is False
 
 
+def test_help_marks_crispasr_as_legacy(capsys):
+    try:
+        parse_args(["--help"])
+    except SystemExit as e:
+        assert e.code == 0
+
+    output = capsys.readouterr().out
+    assert "mlx-vibevoice" in output
+    assert "VibeVoice" in output
+    assert "crispasr is legacy" in output
+
+
 def test_parse_args_llama_cpp_options():
     args = parse_args([
         "--asr-backend",

@@ -37,7 +37,7 @@ from whiscode.transcriber import transcribe
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Benchmark WhisCode ASR backend latency on a WAV file")
     parser.add_argument("--audio", type=Path, required=True, help="Input WAV file")
-    parser.add_argument("--asr-backend", choices=("mlx-whisper", "mlx-vibevoice", "llama-cpp", "crispasr"), default="mlx-whisper")
+    parser.add_argument("--asr-backend", choices=("mlx-whisper", "mlx-vibevoice", "llama-cpp", "crispasr"), default="mlx-whisper", help="Backend to benchmark; prefer mlx-vibevoice for VibeVoice because crispasr is legacy")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model for mlx-whisper")
     parser.add_argument("--language", default="auto", help="Language code or auto")
     parser.add_argument("--prompt", default=None, help="Additional prompt/context")
