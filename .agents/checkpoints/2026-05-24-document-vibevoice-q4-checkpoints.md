@@ -11,9 +11,10 @@
 - Immediate next step: update README, wiki, and memory with concise guidance, then verify and close out.
 
 ## 2026-05-24 Implementation Notes
+- Implementation commit: `817a5dd6149a197ac490898a2d943a0f6b24779b`.
 - Documented the Q4/F16 tradeoff in `README.md` and `wiki/pages/asr-backends.md`.
 - Updated model-loading memory and the memory log with the durable local benchmark finding.
 - Verification passed:
   - `git diff --check`
   - `rg -n "vibevoice-asr-q4_k|real-time factor|Q4" README.md wiki/pages/asr-backends.md .agents/memory/model-loading.md`
-- Immediate next step: commit, archive the plan, merge back to local `main`, and clean up the task worktree.
+- Immediate next step: commit checkpoint hash bookkeeping, archive the plan, merge back to local `main`, and clean up the task worktree.
