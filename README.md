@@ -132,12 +132,12 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON
 cmake --build build --target crispasr-cli
 ```
 
-Download `vibevoice-asr-f16.gguf` from `cstr/vibevoice-asr-GGUF` and place it at the path in `WHISCODE_CRISPASR_MODEL`, or pass paths explicitly:
+Download a GGUF from `cstr/vibevoice-asr-GGUF` and place it at the path in `WHISCODE_CRISPASR_MODEL`, or pass paths explicitly. The upstream GGUF repo lists `vibevoice-asr-q4_k.gguf` as the recommended default at about 5 GB and `vibevoice-asr-f16.gguf` as the 16 GB reference-quality file. On local WhisCode smoke tests, Q4 was correct and about 2x faster than warm F16 on an 8.2-second synthetic sample, but only about 0.09 seconds faster on a 1.9-second sample. Treat Q4 mainly as the smaller model and a possible latency improvement for longer recordings, not a guaranteed dramatic speedup for short dictation.
 
 ```bash
 uv run whiscode --asr-backend crispasr \
   --crispasr-bin ~/Documents/repos/CrispASR/build/bin/crispasr \
-  --crispasr-model ~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-f16.gguf
+  --crispasr-model ~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-q4_k.gguf
 ```
 
 By default WhisCode starts a warm CrispASR server on `127.0.0.1:8092`, sends final recordings to `/v1/audio/transcriptions`, and stops only the child process it started when WhisCode exits. Use `--no-crispasr-autostart` to connect to an already running server.

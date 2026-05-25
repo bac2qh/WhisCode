@@ -54,6 +54,23 @@ Build the executable target with `cmake --build build --target crispasr-cli`.
 
 Override those defaults with `WHISCODE_CRISPASR_BIN`, `WHISCODE_CRISPASR_MODEL`, `--crispasr-bin`, or `--crispasr-model`.
 
+The `cstr/vibevoice-asr-GGUF` model card lists `vibevoice-asr-q4_k.gguf` as the recommended default at about 5 GB and `vibevoice-asr-f16.gguf` as the 16 GB reference-quality file. In local WhisCode smoke benchmarks on synthetic speech, both files transcribed correctly:
+
+| Model | Audio length | Transcription wall time | Real-time factor |
+| --- | ---: | ---: | ---: |
+| `vibevoice-asr-q4_k.gguf` | 1.865s | 0.924s | 0.496 |
+| `vibevoice-asr-f16.gguf` warm server | 1.865s | 1.014s | 0.544 |
+| `vibevoice-asr-q4_k.gguf` | 8.173s | 0.895s | 0.109 |
+| `vibevoice-asr-f16.gguf` warm server | 8.173s | 1.864s | 0.228 |
+
+Q4 is much smaller and can be meaningfully faster on longer recordings, but these local numbers did not show a dramatic short-dictation latency improvement. Keep F16 available when reference quality matters; use Q4 when disk, memory, or longer-recording latency matters more. To compare without disturbing a warm F16 server on port `8092`, start Q4 on another port:
+
+```bash
+uv run whiscode --asr-backend crispasr \
+  --crispasr-port 8093 \
+  --crispasr-model ~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-q4_k.gguf
+```
+
 The backend starts `crispasr --server --backend vibevoice`, keeps the model warm while WhisCode runs, sends final recordings as multipart WAV requests to `/v1/audio/transcriptions`, and returns plain transcript text to the existing WhisCode postprocessing pipeline. It reuses existing healthy servers and terminates only the child process it started.
 
 Routine telemetry for this backend is limited to bounded operational status such as health-check outcomes, startup duration, child PID, backend name, model basename, audio duration, output length, HTTP status class, error type, and malformed response shape counts. It does not record raw audio, transcript text, prompts, hotwords, chunk content, full request payloads, secrets, or full model paths. When CrispASR/VibeVoice chunk parsing fails or needs best-effort recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl` next to runtime telemetry for debugging; that file can contain transcript or provider output text.
