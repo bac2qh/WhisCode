@@ -1,7 +1,8 @@
 import json
 
-from whiscode.calibrate import advisory_threshold, build_report, telemetry_distance_groups
+from whiscode.calibrate import DEFAULT_TELEMETRY_PATH, advisory_threshold, build_report, parse_args, telemetry_distance_groups
 from whiscode.handsfree import active_command_slots
+from whiscode.telemetry import DEFAULT_TELEMETRY_PATH as RUNTIME_TELEMETRY_PATH
 
 
 def test_advisory_threshold_uses_reference_separation_midpoint():
@@ -12,6 +13,13 @@ def test_advisory_threshold_uses_reference_separation_midpoint():
     })
 
     assert threshold == 0.065
+
+
+def test_calibrate_default_telemetry_path_matches_runtime_default():
+    args = parse_args([])
+
+    assert DEFAULT_TELEMETRY_PATH == RUNTIME_TELEMETRY_PATH
+    assert args.telemetry_path == RUNTIME_TELEMETRY_PATH
 
 
 def test_telemetry_distance_groups_reads_confirmed_and_summary_distances(tmp_path):

@@ -17,8 +17,7 @@ from whiscode.handsfree import (
     active_command_slots,
     command_reference_dirs,
 )
-
-DEFAULT_TELEMETRY_PATH = Path.home() / ".config" / "whiscode" / "telemetry" / "events.jsonl"
+from whiscode.telemetry import DEFAULT_TELEMETRY_PATH
 
 
 @dataclass(frozen=True)

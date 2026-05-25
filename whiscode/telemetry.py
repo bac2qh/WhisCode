@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_TELEMETRY_PATH = Path.home() / ".config" / "whiscode" / "telemetry" / "events.jsonl"
+DEFAULT_TELEMETRY_PATH = Path.home() / "Library" / "Logs" / "WhisCode" / "events.jsonl"
 
 
 class Telemetry:

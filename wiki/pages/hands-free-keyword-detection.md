@@ -58,7 +58,7 @@ Use the report to decide threshold changes after re-enrollment and live observat
 WhisCode runtime and guided enrollment write local JSONL telemetry by default:
 
 ```bash
-~/.config/whiscode/telemetry/events.jsonl
+~/Library/Logs/WhisCode/events.jsonl
 ```
 
 The telemetry records app lifecycle, selected ASR backend, enrollment progress, reference counts, detector load results, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/command detections, key-command injection outcomes, recording durations, transcription outcomes, backend failure shape diagnostics, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. It does not record raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text.

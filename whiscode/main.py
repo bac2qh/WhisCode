@@ -111,7 +111,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--no-enroll-prompt", action="store_true", help="Exit instead of prompting to record missing hands-free samples")
     parser.add_argument("--enroll-samples", type=int, default=3, help="Samples per phrase for guided enrollment when --hands-free needs setup (default: 3)")
     parser.add_argument("--enroll-seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds per guided enrollment sample (default: {DEFAULT_ENROLL_SECONDS})")
-    parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
+    parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/Library/Logs/WhisCode/events.jsonl)")
     parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry")
     parser.add_argument("--llama-server-bin", type=Path, default=default_llama_server_bin(), help="Source-built llama-server binary for --asr-backend llama-cpp")
     parser.add_argument("--llama-model", type=Path, default=default_llama_model_path(), help="Qwen3-ASR GGUF model path for --asr-backend llama-cpp")

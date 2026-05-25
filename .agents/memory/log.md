@@ -49,3 +49,4 @@
 - Updated CrispASR/VibeVoice memory after normalizing native and stringified chunk lists into user-visible transcript text by joining non-empty `Content` values.
 - Updated repository hygiene memory after adding the standard local `main` closeout mutex helper.
 - Added telemetry memory after enabling local runtime telemetry by default and adding bounded CrispASR malformed response shape diagnostics.
+- Updated telemetry memory after moving the default telemetry file from `~/.config` to `~/Library/Logs/WhisCode/events.jsonl` for macOS log placement.

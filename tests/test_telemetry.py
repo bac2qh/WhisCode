@@ -1,6 +1,11 @@
 import json
+from pathlib import Path
 
-from whiscode.telemetry import Telemetry
+from whiscode.telemetry import DEFAULT_TELEMETRY_PATH, Telemetry
+
+
+def test_default_telemetry_path_uses_macos_logs_folder():
+    assert DEFAULT_TELEMETRY_PATH == Path.home() / "Library" / "Logs" / "WhisCode" / "events.jsonl"
 
 
 def test_telemetry_writes_jsonl(tmp_path):

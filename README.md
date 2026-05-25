@@ -66,7 +66,7 @@ uv run whiscode --hands-free
 | `--hands-free-command-confirmations INT` | `2` | Consecutive command matches required before pressing a key |
 | `--hands-free-debug` | off | Print detector distances for threshold tuning |
 | `--no-enroll-prompt` | off | Exit instead of offering guided enrollment when samples are missing |
-| `--telemetry-path PATH` | `~/.config/whiscode/telemetry/events.jsonl` | Local JSONL telemetry path |
+| `--telemetry-path PATH` | `~/Library/Logs/WhisCode/events.jsonl` | Local JSONL telemetry path |
 | `--no-telemetry` | off | Disable local telemetry |
 | `--recording-overlay` | on | Show floating recording and transcription overlay |
 | `--no-recording-overlay` | off | Disable floating recording and transcription overlay |
@@ -222,7 +222,7 @@ WhisCode ignores partial detector windows and quiet windows before calling the k
 WhisCode writes local JSONL telemetry by default to:
 
 ```bash
-~/.config/whiscode/telemetry/events.jsonl
+~/Library/Logs/WhisCode/events.jsonl
 ```
 
 Use it to inspect app startup, selected ASR backend, recording durations, transcription outcomes, backend failures, wake/end/command detections, detector distances, key-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. Disable it with `--no-telemetry` or write to another file with `--telemetry-path`.

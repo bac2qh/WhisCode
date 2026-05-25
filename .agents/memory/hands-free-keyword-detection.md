@@ -11,7 +11,7 @@
 
 ## 2026-05-14
 - Added local JSONL telemetry for diagnosing repeated hands-free wake/end/transcribe/resume loops.
-- Telemetry is local-only and defaults to `~/.config/whiscode/telemetry/events.jsonl` for `--hands-free` and guided `whiscode-enroll --record`.
+- Telemetry is local-only. It originally defaulted to `~/.config/whiscode/telemetry/events.jsonl` for `--hands-free` and guided `whiscode-enroll --record`; as of 2026-05-24 runtime telemetry defaults to `~/Library/Logs/WhisCode/events.jsonl` on this macOS-focused project.
 - Added `--telemetry-path` and `--no-telemetry` to both runtime and enrollment CLIs.
 - Telemetry records bounded lifecycle, detector, recording, enrollment, transcription, and loop-suspected metadata, while avoiding raw audio, transcripts, prompts, hotword contents, and typed text.
 - Fixed a telemetry regression where `app.signal_received` was emitted inside the Ctrl+C signal handler. Signal handlers must remain signal-safe and only update simple in-memory shutdown state; telemetry is emitted after the main listener loop exits.

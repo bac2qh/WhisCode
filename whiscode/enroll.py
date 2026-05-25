@@ -42,7 +42,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End reference folder (default: {DEFAULT_END_DIR})")
     parser.add_argument("--command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--command-config", type=Path, default=DEFAULT_COMMAND_CONFIG_PATH, help=f"Command enablement config for guided recording (default: {DEFAULT_COMMAND_CONFIG_PATH})")
-    parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/.config/whiscode/telemetry/events.jsonl)")
+    parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/Library/Logs/WhisCode/events.jsonl)")
     parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry for guided recording")
     parser.set_defaults(recording_overlay=True)
     parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay during guided recording (default)")
