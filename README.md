@@ -101,7 +101,19 @@ uv run whiscode --asr-backend mlx-vibevoice \
   --mlx-vibevoice-model ~/Documents/models/mlx-community/VibeVoice-ASR-bf16
 ```
 
-This backend keeps WhisCode's hotkeys, hands-free detection, overlay, terminal output, text injection, replacements, optional `--refine` behavior, and existing hotwords file. Hotwords and `--prompt` are passed to VibeVoice through MLX-Audio's `context` parameter, which is the prompt/hotword path VibeVoice was designed to use. If the local model snapshot does not include tokenizer files, MLX-Audio may fetch and cache the intended `Qwen/Qwen2.5-7B` tokenizer on first load.
+This backend keeps WhisCode's hotkeys, hands-free detection, overlay, terminal output, text injection, replacements, optional `--refine` behavior, and existing hotwords file. Hotwords and `--prompt` are passed to VibeVoice through MLX-Audio's `context` parameter, which is the prompt/hotword path VibeVoice was designed to use. This is a soft model hint, not a guaranteed glossary constraint: VibeVoice can still miss project-specific phrases, hyphenated names, or tool names such as `Goal Mode` or `long-autonomous-run`.
+
+For terms that must be corrected reliably, add replacements to `~/.config/whiscode/hotwords.txt`. Plain lines are ASR hints; `wrong -> right` lines are deterministic post-ASR replacements:
+
+```text
+LLM
+WhisCode
+goal mode -> Goal Mode
+long autonomous run -> long-autonomous-run
+long autonomous run skill -> long-autonomous-run skill
+```
+
+If the local model snapshot does not include tokenizer files, MLX-Audio may fetch and cache the intended `Qwen/Qwen2.5-7B` tokenizer on first load.
 
 Benchmark backend latency on a WAV file:
 
