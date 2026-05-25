@@ -142,6 +142,8 @@ uv run whiscode --asr-backend crispasr \
 
 By default WhisCode starts a warm CrispASR server on `127.0.0.1:8092`, sends final recordings to `/v1/audio/transcriptions`, and stops only the child process it started when WhisCode exits. Use `--no-crispasr-autostart` to connect to an already running server.
 
+The current CrispASR/VibeVoice integration is a blocking full-recording request. CrispASR returns the final transcript after the request completes, but this HTTP path does not expose per-request stage, token, or percentage progress while VibeVoice is running. WhisCode can still show queued/transcribing overlay cards for VibeVoice jobs, but it cannot show a meaningful frame percentage or FPS progress bar for this backend yet. CrispASR's CLI streaming and live-monitor modes are separate execution paths and are not the same as WhisCode's warm-server `/v1/audio/transcriptions` flow.
+
 Benchmark backend latency on a WAV file:
 
 ```bash
@@ -150,7 +152,7 @@ uv run whiscode-benchmark-asr --audio sample.wav --asr-backend crispasr --langua
 
 ## Recording Overlay
 
-WhisCode shows a small floating macOS overlay while recording and transcribing. During recording it shows an elapsed stopwatch and live microphone levels as waveform bars. Completed recordings enter a FIFO transcription queue, and the overlay stacks cards with the newest recording on top while queued/transcribing cards shift downward. During transcription it shows a compact frame progress bar with percentage, processed/total frames, and frames per second when available. Guided enrollment uses the same overlay while each sample is being recorded.
+WhisCode shows a small floating macOS overlay while recording and transcribing. During recording it shows an elapsed stopwatch and live microphone levels as waveform bars. Completed recordings enter a FIFO transcription queue, and the overlay stacks cards with the newest recording on top while queued/transcribing cards shift downward. During transcription it shows queued/transcribing state for every backend, plus a compact frame progress bar with percentage, processed/total frames, and frames per second when the selected backend reports progress, such as MLX Whisper. Guided enrollment uses the same overlay while each sample is being recorded.
 
 Use `--no-recording-overlay` to disable it. Use `--recording-notifications` with `whiscode` if you also want the older macOS start/end notification banners during normal recording.
 

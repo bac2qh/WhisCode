@@ -9,10 +9,12 @@ During recording, the overlay shows:
 
 Completed recordings enter a FIFO transcription queue. The overlay stacks cards in one top-centered panel, with the newest recording card on top and older queued/transcribing cards pushed down.
 
-During transcription, each card switches to a compact progress view that shows:
+During transcription, each card switches to a compact progress view. For backends that report progress, such as MLX Whisper, it shows:
 - percentage complete.
 - processed and total Whisper frames.
 - frames per second when available from the local progress source.
+
+For backends without an in-flight progress source, the overlay still shows queued/transcribing state but does not show concrete percentage or FPS progress. The current CrispASR/VibeVoice warm-server integration is in this category because WhisCode sends one blocking `/v1/audio/transcriptions` request and receives only the final transcript.
 
 The overlay is implemented as a separate AppKit helper process controlled by the main WhisCode process through newline-delimited JSON commands. Runtime recording/transcription cards use stable job ids so a card can move from recording to queued to transcribing before it disappears. If the helper cannot start, recording and transcription continue without the overlay. If the parent command stream closes, the helper treats EOF as a stop command so orphaned panels do not remain on screen. The helper also monitors its parent PID and exits if the parent process disappears before stdin reaches EOF.
 

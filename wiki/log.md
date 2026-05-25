@@ -34,3 +34,6 @@
 - Documented the optional CrispASR/VibeVoice GGUF backend and benchmark command for local ASR latency comparison.
 - Documented default local runtime telemetry and bounded CrispASR malformed response shape diagnostics.
 - Documented the macOS telemetry default path under `~/Library/Logs/WhisCode/events.jsonl`.
+
+## 2026-05-25
+- Documented that the current CrispASR/VibeVoice warm-server transcription path cannot expose concrete in-flight progress to the recording overlay.

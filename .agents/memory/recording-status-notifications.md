@@ -34,3 +34,6 @@
 - Runtime recording/transcription now uses stacked overlay cards keyed by transcription job id. New recordings appear at the top, older queued/transcribing cards shift down, and each card moves from recording to queued to transcribing before disappearing.
 - Transcription now drains a FIFO queue with one worker while new recordings can continue. The overlay and queue events stay bounded and avoid transcript text.
 - Successful transcripts are printed to stdout as flush-left, single-line blocks with blank spacing between entries. WhisCode no longer writes a `/tmp` transcript recovery file or changes the system clipboard for transcript recovery.
+
+## 2026-05-25
+- Documentation now clarifies that the recording overlay always shows queued/transcribing state, but concrete percentage/FPS progress is backend-dependent. The current CrispASR/VibeVoice warm-server path does not provide in-flight progress, so VibeVoice cards cannot show meaningful percent progress yet.
