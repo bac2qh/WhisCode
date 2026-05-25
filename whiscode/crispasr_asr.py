@@ -4,11 +4,13 @@ import http.client
 import io
 import json
 import os
+import re
 import subprocess
 import time
 import uuid
 import wave
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +25,10 @@ DEFAULT_CRISPASR_MAX_TOKENS = 2048
 DEFAULT_CRISPASR_TEMPERATURE = 0.0
 DEFAULT_CRISPASR_STARTUP_TIMEOUT_SECONDS = 180.0
 DEFAULT_CRISPASR_REQUEST_TIMEOUT_SECONDS = 300.0
+DEFAULT_CRISPASR_RAW_RESPONSE_LOG_PATH = Path.home() / "Library" / "Logs" / "WhisCode" / "crispasr-raw-responses.jsonl"
+RAW_RESPONSE_BODY_KEY = "_whiscode_raw_response_body"
 SAMPLE_RATE = 16000
+_CONTENT_KEY_PATTERN = re.compile(r"""(["'])Content\1\s*:\s*(["'])""")
 
 
 class CrispAsrError(RuntimeError):
@@ -327,7 +332,7 @@ class CrispAsrBackend:
             file_bytes=file_bytes,
         )
         headers = {"Content-Type": content_type}
-        return self._request_json("POST", path, body=body, headers=headers, timeout=timeout)
+        return self._request_json("POST", path, body=body, headers=headers, timeout=timeout, include_raw_body=True)
 
     def _request_json(
         self,
@@ -337,6 +342,7 @@ class CrispAsrBackend:
         body: bytes | None = None,
         headers: dict[str, str] | None = None,
         timeout: float,
+        include_raw_body: bool = False,
     ) -> dict[str, Any]:
         conn = http.client.HTTPConnection(self.config.host, self.config.port, timeout=timeout)
         try:
@@ -348,15 +354,22 @@ class CrispAsrBackend:
         if response.status < 200 or response.status >= 300:
             raise _HttpStatusError(response.status)
         if not data:
-            return {}
+            return {RAW_RESPONSE_BODY_KEY: ""} if include_raw_body else {}
         text = data.decode("utf-8")
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError:
-            return {"text": text}
+            result: dict[str, Any] = {"text": text}
+            if include_raw_body:
+                result[RAW_RESPONSE_BODY_KEY] = text
+            return result
         if isinstance(parsed, dict):
-            return parsed
-        return {"text": parsed}
+            result = dict(parsed)
+        else:
+            result = {"text": parsed}
+        if include_raw_body:
+            result[RAW_RESPONSE_BODY_KEY] = text
+        return result
 
     def _emit(self, event: str, **properties: Any) -> None:
         if self.telemetry is not None:
@@ -434,25 +447,65 @@ def extract_crispasr_text(response: dict[str, Any], *, telemetry=None) -> str:
     except (KeyError, TypeError) as e:
         raise CrispAsrError("CrispASR response did not include text") from e
     if isinstance(text, list):
-        return _join_vibevoice_chunks(text, telemetry=telemetry)
+        return _join_vibevoice_chunks(text, telemetry=telemetry, response=response)
     if isinstance(text, str):
         stripped = text.strip()
-        if _looks_like_vibevoice_chunk_list_string(stripped):
+        chunk_list_text = _vibevoice_chunk_list_string_candidate(stripped)
+        if chunk_list_text is not None:
             try:
-                parsed = json.loads(stripped)
+                parsed = json.loads(chunk_list_text)
             except json.JSONDecodeError as e:
-                _emit_vibevoice_shape_invalid(
+                debug_result = _emit_vibevoice_shape_invalid(
                     telemetry,
+                    response=response,
                     stage="json_parse",
                     text_type="str",
                     string_length=len(stripped),
                     prefix_class=_vibevoice_string_prefix_class(stripped),
                 )
+                recovered = _extract_vibevoice_content_best_effort(chunk_list_text)
+                if recovered is not None:
+                    text, content_count = recovered
+                    _emit_vibevoice_shape_recovered(
+                        telemetry,
+                        stage="json_parse",
+                        method="content_scan",
+                        recovered_content_count=content_count,
+                        string_length=len(stripped),
+                        raw_response_logged=debug_result.logged if debug_result else None,
+                        raw_response_log=debug_result.path.name if debug_result else None,
+                    )
+                    return text
                 raise CrispAsrError("CrispASR VibeVoice chunks were malformed") from e
             if isinstance(parsed, list):
-                return _join_vibevoice_chunks(parsed, telemetry=telemetry)
+                return _join_vibevoice_chunks(parsed, telemetry=telemetry, response=response)
         return stripped
     return str(text or "").strip()
+
+
+def _vibevoice_chunk_list_string_candidate(text: str) -> str | None:
+    if _looks_like_vibevoice_chunk_list_string(text):
+        return text
+    unwrapped = _strip_vibevoice_raw_output_wrappers(text)
+    if unwrapped != text and _looks_like_vibevoice_chunk_list_string(unwrapped):
+        return unwrapped
+    return None
+
+
+def _strip_vibevoice_raw_output_wrappers(text: str) -> str:
+    stripped = text.strip()
+    for prefix in ("<|im_start|>assistant", "assistant"):
+        if stripped.startswith(prefix):
+            stripped = stripped[len(prefix) :].strip()
+            break
+    changed = True
+    while changed:
+        changed = False
+        for suffix in ("<|endoftext|>", "<|im_end|>"):
+            if stripped.endswith(suffix):
+                stripped = stripped[: -len(suffix)].strip()
+                changed = True
+    return stripped
 
 
 def _looks_like_vibevoice_chunk_list_string(text: str) -> bool:
@@ -462,9 +515,9 @@ def _looks_like_vibevoice_chunk_list_string(text: str) -> bool:
     return not remainder or remainder.startswith("{") or remainder.startswith("]")
 
 
-def _join_vibevoice_chunks(chunks: list[Any], *, telemetry=None) -> str:
+def _join_vibevoice_chunks(chunks: list[Any], *, telemetry=None, response: dict[str, Any] | None = None) -> str:
     if not chunks:
-        _emit_vibevoice_shape_invalid(telemetry, stage="chunk_list", text_type="list", list_length=0)
+        _emit_vibevoice_shape_invalid(telemetry, response=response, stage="chunk_list", text_type="list", list_length=0)
         raise CrispAsrError("CrispASR VibeVoice chunks were empty")
 
     contents = []
@@ -474,6 +527,7 @@ def _join_vibevoice_chunks(chunks: list[Any], *, telemetry=None) -> str:
         if not isinstance(chunk, dict):
             _emit_vibevoice_shape_invalid(
                 telemetry,
+                response=response,
                 stage="chunk_item",
                 text_type="list",
                 list_length=len(chunks),
@@ -494,6 +548,7 @@ def _join_vibevoice_chunks(chunks: list[Any], *, telemetry=None) -> str:
     if missing_content_count or non_string_content_count:
         _emit_vibevoice_shape_invalid(
             telemetry,
+            response=response,
             stage="chunk_content",
             text_type="list",
             list_length=len(chunks),
@@ -505,6 +560,7 @@ def _join_vibevoice_chunks(chunks: list[Any], *, telemetry=None) -> str:
     if not contents:
         _emit_vibevoice_shape_invalid(
             telemetry,
+            response=response,
             stage="chunk_content",
             text_type="list",
             list_length=len(chunks),
@@ -514,6 +570,58 @@ def _join_vibevoice_chunks(chunks: list[Any], *, telemetry=None) -> str:
     return " ".join(contents)
 
 
+def _extract_vibevoice_content_best_effort(text: str) -> tuple[str, int] | None:
+    contents = []
+    for match in _CONTENT_KEY_PATTERN.finditer(text):
+        value_quote = match.group(2)
+        value = _scan_jsonish_string_value(text, match.end(), value_quote)
+        if value is None:
+            continue
+        stripped = value.strip()
+        if stripped:
+            contents.append(stripped)
+    if not contents:
+        return None
+    return " ".join(contents), len(contents)
+
+
+def _scan_jsonish_string_value(text: str, start: int, quote: str) -> str | None:
+    value = []
+    i = start
+    while i < len(text):
+        char = text[i]
+        if char == "\\" and i + 1 < len(text):
+            value.append(_decode_jsonish_escape(text[i + 1]))
+            i += 2
+            continue
+        if char == quote and _looks_like_jsonish_value_end(text, i + 1):
+            return "".join(value)
+        value.append(char)
+        i += 1
+    return None
+
+
+def _decode_jsonish_escape(char: str) -> str:
+    escapes = {
+        '"': '"',
+        "'": "'",
+        "\\": "\\",
+        "/": "/",
+        "b": "\b",
+        "f": "\f",
+        "n": "\n",
+        "r": "\r",
+        "t": "\t",
+    }
+    return escapes.get(char, char)
+
+
+def _looks_like_jsonish_value_end(text: str, index: int) -> bool:
+    while index < len(text) and text[index].isspace():
+        index += 1
+    return index >= len(text) or text[index] in ",}]"
+
+
 def _vibevoice_string_prefix_class(text: str) -> str:
     if text.startswith("[{"):
         return "list_object"
@@ -521,9 +629,81 @@ def _vibevoice_string_prefix_class(text: str) -> str:
         return "empty_list"
     if text.startswith("["):
         return "list_other"
+    if text.startswith("<|im_start|>assistant"):
+        return "assistant_special_token"
+    if text.startswith("assistant"):
+        return "assistant"
     return "other"
 
 
-def _emit_vibevoice_shape_invalid(telemetry, **properties: Any) -> None:
+@dataclass(frozen=True)
+class _RawResponseDebugResult:
+    logged: bool
+    path: Path
+    error_type: str | None = None
+
+
+def _emit_vibevoice_shape_invalid(
+    telemetry,
+    *,
+    response: dict[str, Any] | None = None,
+    **properties: Any,
+) -> _RawResponseDebugResult | None:
+    debug_result = _write_crispasr_raw_response_debug(response, telemetry, stage=str(properties.get("stage", "unknown")))
+    if debug_result is not None:
+        properties = {
+            **properties,
+            "raw_response_logged": debug_result.logged,
+            "raw_response_log": debug_result.path.name,
+        }
+        if debug_result.error_type:
+            properties["raw_response_log_error_type"] = debug_result.error_type
     if telemetry is not None:
         telemetry.emit("crispasr.response_shape_invalid", **properties)
+    return debug_result
+
+
+def _emit_vibevoice_shape_recovered(telemetry, **properties: Any) -> None:
+    if telemetry is not None:
+        telemetry.emit(
+            "crispasr.response_shape_recovered",
+            **{key: value for key, value in properties.items() if value is not None},
+        )
+
+
+def _write_crispasr_raw_response_debug(
+    response: dict[str, Any] | None,
+    telemetry,
+    *,
+    stage: str,
+) -> _RawResponseDebugResult | None:
+    if telemetry is None or getattr(telemetry, "enabled", True) is False:
+        return None
+    if not isinstance(response, dict) or RAW_RESPONSE_BODY_KEY not in response:
+        return None
+    raw_body = response[RAW_RESPONSE_BODY_KEY]
+    if not isinstance(raw_body, str):
+        raw_body = json.dumps(raw_body, ensure_ascii=False, sort_keys=True)
+
+    path = _crispasr_raw_response_log_path(telemetry)
+    payload = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "session_id": getattr(telemetry, "session_id", None),
+        "pid": os.getpid(),
+        "stage": stage,
+        "raw_response_body": raw_body,
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
+    except OSError as e:
+        return _RawResponseDebugResult(logged=False, path=path, error_type=type(e).__name__)
+    return _RawResponseDebugResult(logged=True, path=path)
+
+
+def _crispasr_raw_response_log_path(telemetry) -> Path:
+    telemetry_path = getattr(telemetry, "path", None)
+    if telemetry_path:
+        return Path(telemetry_path).expanduser().with_name("crispasr-raw-responses.jsonl")
+    return DEFAULT_CRISPASR_RAW_RESPONSE_LOG_PATH

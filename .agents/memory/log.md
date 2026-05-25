@@ -50,3 +50,5 @@
 - Updated repository hygiene memory after adding the standard local `main` closeout mutex helper.
 - Added telemetry memory after enabling local runtime telemetry by default and adding bounded CrispASR malformed response shape diagnostics.
 - Updated telemetry memory after moving the default telemetry file from `~/.config` to `~/Library/Logs/WhisCode/events.jsonl` for macOS log placement.
+- Verified VibeVoice-ASR output shape against Microsoft/Hugging Face docs and Transformers source: parsed output is segment dictionaries with `Start`, `End`, `Speaker`, and `Content`; raw decoded output can be `assistant`-prefixed; transcription-only output joins `Content` values with spaces.
+- Added durable memory that malformed CrispASR/VibeVoice chunk output now writes original provider response bodies to local-only `crispasr-raw-responses.jsonl` for debugging after explicit user acceptance.

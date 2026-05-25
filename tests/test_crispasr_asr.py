@@ -12,6 +12,7 @@ from whiscode.crispasr_asr import (
     CrispAsrError,
     CrispAsrServerConfig,
     HealthResult,
+    RAW_RESPONSE_BODY_KEY,
     audio_to_wav_bytes,
     build_crispasr_prompt,
     build_multipart_form,
@@ -22,7 +23,10 @@ from whiscode.crispasr_asr import (
 
 
 class FakeTelemetry:
-    def __init__(self):
+    def __init__(self, *, enabled=True, path=None, session_id="test-session"):
+        self.enabled = enabled
+        self.path = path
+        self.session_id = session_id
         self.events = []
 
     def emit(self, event, **properties):
@@ -95,6 +99,39 @@ def test_build_multipart_form_includes_fields_and_audio_file():
     assert b"RIFFdata" in body
 
 
+def test_request_json_preserves_original_body_for_transcription_debug(tmp_path):
+    backend = CrispAsrBackend(make_config(tmp_path), telemetry=FakeTelemetry())
+    raw_body = json.dumps({"text": '[{"Content": "open the repo"}]'}, separators=(",", ":")).encode("utf-8")
+
+    class FakeResponse:
+        status = 200
+
+        def read(self):
+            return raw_body
+
+    class FakeConnection:
+        def __init__(self, host, port, timeout):
+            self.host = host
+            self.port = port
+            self.timeout = timeout
+            self.request_args = None
+
+        def request(self, method, path, body=None, headers=None):
+            self.request_args = (method, path, body, headers)
+
+        def getresponse(self):
+            return FakeResponse()
+
+        def close(self):
+            pass
+
+    with patch("http.client.HTTPConnection", return_value=FakeConnection("127.0.0.1", 8092, 1.0)):
+        response = backend._request_json("POST", "/v1/audio/transcriptions", timeout=1.0, include_raw_body=True)
+
+    assert response["text"] == '[{"Content": "open the repo"}]'
+    assert response[RAW_RESPONSE_BODY_KEY] == raw_body.decode("utf-8")
+
+
 def test_extract_crispasr_text_reads_text_field():
     assert extract_crispasr_text({"text": " hello "}) == "hello"
 
@@ -106,6 +143,24 @@ def test_extract_crispasr_text_joins_stringified_vibevoice_chunks():
     ]
 
     assert extract_crispasr_text({"text": json.dumps(chunks)}) == "open the repo run pytest"
+
+
+def test_extract_crispasr_text_joins_wrapped_vibevoice_raw_output():
+    chunks = [
+        {"Start": 0, "End": 7.56, "Speaker": 0, "Content": "hello everyone"},
+        {"Start": 7.56, "End": 11.2, "Speaker": 1, "Content": "thanks for having me"},
+    ]
+    raw_output = f"<|im_start|>assistant\n{json.dumps(chunks)}<|im_end|>\n<|endoftext|>"
+
+    assert extract_crispasr_text({"text": raw_output}) == "hello everyone thanks for having me"
+
+
+def test_extract_crispasr_text_joins_assistant_prefixed_vibevoice_raw_output():
+    chunks = [
+        {"Start": 0, "End": 1.2, "Speaker": 0, "Content": "打开 repo"},
+    ]
+
+    assert extract_crispasr_text({"text": "assistant\n" + json.dumps(chunks, ensure_ascii=False)}) == "打开 repo"
 
 
 def test_extract_crispasr_text_joins_native_vibevoice_chunks():
@@ -133,7 +188,7 @@ def test_extract_crispasr_text_joins_mixed_english_chinese_chunks():
         [{"Content": ""}, {"Content": "   "}],
         [{"Start": 0.0, "End": 0.4, "Speaker": "SPEAKER_00"}],
         [{"Content": "valid"}, "invalid"],
-        '[{"Content": "unterminated"',
+        '[{"Content":',
     ],
 )
 def test_extract_crispasr_text_rejects_empty_or_malformed_vibevoice_chunks(text):
@@ -148,9 +203,10 @@ def test_extract_crispasr_text_rejects_missing_text():
 
 def test_extract_crispasr_text_emits_safe_shape_diagnostic_for_bad_chunk_json():
     telemetry = FakeTelemetry()
+    bad_chunk_json = '[{"Content":'
 
     with pytest.raises(CrispAsrError, match="VibeVoice chunks"):
-        extract_crispasr_text({"text": '[{"Content": "unterminated"'}, telemetry=telemetry)
+        extract_crispasr_text({"text": bad_chunk_json}, telemetry=telemetry)
 
     assert telemetry.events == [
         (
@@ -158,11 +214,79 @@ def test_extract_crispasr_text_emits_safe_shape_diagnostic_for_bad_chunk_json():
             {
                 "stage": "json_parse",
                 "text_type": "str",
-                "string_length": 27,
+                "string_length": len(bad_chunk_json),
                 "prefix_class": "list_object",
             },
         )
     ]
+
+
+def test_extract_crispasr_text_recovers_and_logs_malformed_chunk_string(tmp_path):
+    telemetry = FakeTelemetry(path=tmp_path / "events.jsonl")
+    raw_body = '{"text":"original provider response with malformed nested chunks"}'
+    malformed_chunks = '[{"Content": "say "hello" now."}, {"Content": "打开 repo"}]'
+
+    text = extract_crispasr_text(
+        {"text": malformed_chunks, RAW_RESPONSE_BODY_KEY: raw_body},
+        telemetry=telemetry,
+    )
+
+    assert text == 'say "hello" now. 打开 repo'
+    assert [event for event, properties in telemetry.events] == [
+        "crispasr.response_shape_invalid",
+        "crispasr.response_shape_recovered",
+    ]
+    assert telemetry.events[0][1] == {
+        "stage": "json_parse",
+        "text_type": "str",
+        "string_length": len(malformed_chunks),
+        "prefix_class": "list_object",
+        "raw_response_logged": True,
+        "raw_response_log": "crispasr-raw-responses.jsonl",
+    }
+    assert telemetry.events[1][1] == {
+        "stage": "json_parse",
+        "method": "content_scan",
+        "recovered_content_count": 2,
+        "string_length": len(malformed_chunks),
+        "raw_response_logged": True,
+        "raw_response_log": "crispasr-raw-responses.jsonl",
+    }
+
+    raw_log = tmp_path / "crispasr-raw-responses.jsonl"
+    payload = json.loads(raw_log.read_text(encoding="utf-8"))
+    assert payload["session_id"] == "test-session"
+    assert payload["stage"] == "json_parse"
+    assert payload["raw_response_body"] == raw_body
+
+
+def test_extract_crispasr_text_logs_raw_response_for_malformed_native_chunks(tmp_path):
+    telemetry = FakeTelemetry(path=tmp_path / "events.jsonl")
+    raw_body = '{"text":[{"Content":123}]}'
+
+    with pytest.raises(CrispAsrError, match="VibeVoice chunks"):
+        extract_crispasr_text(
+            {"text": [{"Content": 123}], RAW_RESPONSE_BODY_KEY: raw_body},
+            telemetry=telemetry,
+        )
+
+    assert telemetry.events == [
+        (
+            "crispasr.response_shape_invalid",
+            {
+                "stage": "chunk_content",
+                "text_type": "list",
+                "list_length": 1,
+                "missing_content_count": 0,
+                "non_string_content_count": 1,
+                "raw_response_logged": True,
+                "raw_response_log": "crispasr-raw-responses.jsonl",
+            },
+        )
+    ]
+    payload = json.loads((tmp_path / "crispasr-raw-responses.jsonl").read_text(encoding="utf-8"))
+    assert payload["stage"] == "chunk_content"
+    assert payload["raw_response_body"] == raw_body
 
 
 def test_extract_crispasr_text_emits_safe_shape_diagnostic_for_bad_chunk_content():
