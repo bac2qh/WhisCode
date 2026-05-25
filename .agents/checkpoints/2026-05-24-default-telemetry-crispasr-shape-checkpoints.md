@@ -15,4 +15,5 @@
 - Verification:
   - `uv run --with pytest pytest tests/test_crispasr_asr.py tests/test_main_cli.py tests/test_telemetry.py` passed: 45 tests.
   - `uv run python -m compileall whiscode` passed.
-- Immediate next step: create the implementation commit, then record its hash and close out.
+- Implementation commit: `7732529` (`Enable default runtime telemetry`).
+- Immediate next step: commit this checkpoint hash update, then close out.
