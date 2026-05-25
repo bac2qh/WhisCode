@@ -14,4 +14,5 @@
 - Verification:
   - `uv run --with pytest pytest tests/test_telemetry.py tests/test_main_cli.py tests/test_enroll.py tests/test_calibrate.py` passed: 50 tests.
   - `uv run python -m compileall whiscode` passed.
-- Immediate next step: create the implementation commit and close out.
+- Implementation commit: `8038a5c` (`Use macOS log folder for telemetry`).
+- Immediate next step: commit this checkpoint hash update and close out.
