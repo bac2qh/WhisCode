@@ -1,3 +1,12 @@
+# Closeout 2026-05-24
+- Final status: `implemented`.
+- Related checkpoint: `.agents/checkpoints/2026-05-24-document-vibevoice-q4-checkpoints.md`.
+- Implementation commits: `817a5dd` (`Document VibeVoice Q4 tradeoff`) and `f88ae08` (`Record VibeVoice Q4 docs checkpoint`).
+- Merge result: fast-forwarded local `main`; no merge commit was created.
+- Verification: `git diff --check` passed; `rg -n "vibevoice-asr-q4_k|real-time factor|Q4" README.md wiki/pages/asr-backends.md .agents/memory/model-loading.md` found the expected documentation references.
+- Cleanup: removed task worktree `.agents/worktrees/document-vibevoice-q4` and deleted local branch `document-vibevoice-q4`; unrelated worktree `.agents/worktrees/env-llama-paths` was left untouched.
+- Shipped: documented that Q4 is much smaller and can help longer recordings, but local short-dictation latency was not meaningfully better than warm F16.
+
 # Document VibeVoice Q4 Tradeoff
 
 ## Summary
