@@ -6,7 +6,9 @@ from whiscode.main import (
     ensure_hands_free_references,
     ensure_whisper_processor,
     parse_args,
+    runtime_telemetry_enabled_by_default,
 )
+from whiscode.telemetry import telemetry_from_args
 
 
 WhisperModel = type("Model", (), {"__module__": "mlx_audio.stt.models.whisper.whisper"})
@@ -39,6 +41,22 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.crispasr_port == 8092
     assert args.crispasr_backend == "vibevoice"
     assert args.crispasr_autostart is True
+
+
+def test_runtime_telemetry_is_enabled_by_default_for_hotkey_mode():
+    args = parse_args([])
+
+    telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
+
+    assert telemetry.enabled is True
+
+
+def test_runtime_telemetry_can_be_disabled():
+    args = parse_args(["--no-telemetry"])
+
+    telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
+
+    assert telemetry.enabled is False
 
 
 def test_parse_args_llama_cpp_options():

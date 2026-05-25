@@ -323,7 +323,7 @@ def ensure_hands_free_references(
 
 def main():
     args = parse_args()
-    telemetry = telemetry_from_args(args, default_enabled=args.hands_free or args.telemetry_path is not None)
+    telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
     telemetry.emit("app.started", mode="hands_free" if args.hands_free else "hotkey")
     telemetry.emit("asr.backend_selected", backend=args.asr_backend)
 
@@ -824,6 +824,11 @@ def main():
         print(f"\nSession stats: {stats.summary()}")
         telemetry.emit("app.exiting", stats=stats.summary())
         print("Exiting.")
+
+
+def runtime_telemetry_enabled_by_default(args) -> bool:
+    del args
+    return True
 
 
 if __name__ == "__main__":

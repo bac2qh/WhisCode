@@ -32,3 +32,4 @@
 ## 2026-05-24
 - Documented the optional llama.cpp/Qwen3-ASR backend and clarified that MLX Whisper remains the default compatibility backend.
 - Documented the optional CrispASR/VibeVoice GGUF backend and benchmark command for local ASR latency comparison.
+- Documented default local runtime telemetry and bounded CrispASR malformed response shape diagnostics.

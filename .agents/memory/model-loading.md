@@ -22,3 +22,4 @@
 - CrispASR defaults can be set with `WHISCODE_CRISPASR_BIN` and `WHISCODE_CRISPASR_MODEL`; the recommended VibeVoice F16 GGUF path is `~/Documents/models/vibevoice-asr-GGUF/vibevoice-asr-f16.gguf`.
 - The current CrispASR checkout builds the executable with `cmake --build build --target crispasr-cli`; the `crispasr` target itself builds the library.
 - VibeVoice responses from CrispASR can surface as chunk lists even when WhisCode expects a single transcript. WhisCode now normalizes stringified and native chunk lists by joining non-empty `Content` values with spaces, and drops `Start`, `End`, and `Speaker` metadata before postprocessing, refinement, hands-free command handling, or text injection.
+- When VibeVoice emits malformed chunk-list output, WhisCode now records bounded `crispasr.response_shape_invalid` telemetry with structure counts only, then fails with `CrispAsrError`.

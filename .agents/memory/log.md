@@ -48,3 +48,4 @@
 - Added optional CrispASR/VibeVoice ASR backend memory: `mlx-whisper` remains the default, while `--asr-backend crispasr` uses a warm source-built CrispASR server and the benchmark command compares backend latency on WAV files.
 - Updated CrispASR/VibeVoice memory after normalizing native and stringified chunk lists into user-visible transcript text by joining non-empty `Content` values.
 - Updated repository hygiene memory after adding the standard local `main` closeout mutex helper.
+- Added telemetry memory after enabling local runtime telemetry by default and adding bounded CrispASR malformed response shape diagnostics.

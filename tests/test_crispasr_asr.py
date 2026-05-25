@@ -146,6 +146,48 @@ def test_extract_crispasr_text_rejects_missing_text():
         extract_crispasr_text({"segments": []})
 
 
+def test_extract_crispasr_text_emits_safe_shape_diagnostic_for_bad_chunk_json():
+    telemetry = FakeTelemetry()
+
+    with pytest.raises(CrispAsrError, match="VibeVoice chunks"):
+        extract_crispasr_text({"text": '[{"Content": "unterminated"'}, telemetry=telemetry)
+
+    assert telemetry.events == [
+        (
+            "crispasr.response_shape_invalid",
+            {
+                "stage": "json_parse",
+                "text_type": "str",
+                "string_length": 27,
+                "prefix_class": "list_object",
+            },
+        )
+    ]
+
+
+def test_extract_crispasr_text_emits_safe_shape_diagnostic_for_bad_chunk_content():
+    telemetry = FakeTelemetry()
+
+    with pytest.raises(CrispAsrError, match="VibeVoice chunks"):
+        extract_crispasr_text(
+            {"text": [{"Start": 0.0, "End": 0.4, "Speaker": "SPEAKER_00"}]},
+            telemetry=telemetry,
+        )
+
+    assert telemetry.events == [
+        (
+            "crispasr.response_shape_invalid",
+            {
+                "stage": "chunk_content",
+                "text_type": "list",
+                "list_length": 1,
+                "missing_content_count": 1,
+                "non_string_content_count": 0,
+            },
+        )
+    ]
+
+
 def test_start_reuses_existing_server(tmp_path):
     telemetry = FakeTelemetry()
     backend = CrispAsrBackend(make_config(tmp_path), telemetry=telemetry)
@@ -281,6 +323,28 @@ def test_transcribe_posts_multipart_audio_and_parses_response(tmp_path):
         "crispasr.transcription_started",
         "crispasr.transcription_completed",
     ]
+
+
+def test_transcribe_emits_shape_diagnostic_before_malformed_chunk_failure(tmp_path):
+    telemetry = FakeTelemetry()
+    backend = CrispAsrBackend(make_config(tmp_path), telemetry=telemetry)
+    backend._post_multipart = lambda *args, **kwargs: {"text": [{"Content": 123}]}
+
+    with pytest.raises(CrispAsrError, match="VibeVoice chunks"):
+        backend.transcribe(np.zeros(16000, dtype=np.float32), language="en")
+
+    assert [event for event, properties in telemetry.events] == [
+        "crispasr.transcription_started",
+        "crispasr.response_shape_invalid",
+        "crispasr.transcription_failed",
+    ]
+    assert telemetry.events[1][1] == {
+        "stage": "chunk_content",
+        "text_type": "list",
+        "list_length": 1,
+        "missing_content_count": 0,
+        "non_string_content_count": 1,
+    }
 
 
 def test_transcribe_omits_auto_language(tmp_path):

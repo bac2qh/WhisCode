@@ -55,13 +55,13 @@ Use the report to decide threshold changes after re-enrollment and live observat
 
 ## Telemetry
 
-Hands-free mode and guided enrollment write local JSONL telemetry by default:
+WhisCode runtime and guided enrollment write local JSONL telemetry by default:
 
 ```bash
 ~/.config/whiscode/telemetry/events.jsonl
 ```
 
-The telemetry records app lifecycle, enrollment progress, reference counts, detector load results, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/command detections, key-command injection outcomes, recording durations, transcription outcomes, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. It does not record raw audio, transcripts, prompts, hotword contents, or typed text.
+The telemetry records app lifecycle, selected ASR backend, enrollment progress, reference counts, detector load results, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/command detections, key-command injection outcomes, recording durations, transcription outcomes, backend failure shape diagnostics, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. It does not record raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text.
 
 `handsfree.audio_overflow` means PortAudio reported that the microphone read loop fell behind. `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` help determine whether detector work is falling behind the live microphone stream. These are not direct macOS swap or memory-overflow signals.
 

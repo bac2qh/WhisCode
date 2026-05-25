@@ -193,7 +193,7 @@ class CrispAsrBackend:
                 file_bytes=audio_to_wav_bytes(audio),
                 timeout=self.config.request_timeout_seconds,
             )
-            text = extract_crispasr_text(response)
+            text = extract_crispasr_text(response, telemetry=self.telemetry)
         except _HttpStatusError as e:
             self._emit(
                 "crispasr.transcription_failed",
@@ -428,22 +428,29 @@ def audio_to_wav_bytes(audio: np.ndarray, *, sample_rate: int = SAMPLE_RATE) -> 
     return output.getvalue()
 
 
-def extract_crispasr_text(response: dict[str, Any]) -> str:
+def extract_crispasr_text(response: dict[str, Any], *, telemetry=None) -> str:
     try:
         text = response["text"]
     except (KeyError, TypeError) as e:
         raise CrispAsrError("CrispASR response did not include text") from e
     if isinstance(text, list):
-        return _join_vibevoice_chunks(text)
+        return _join_vibevoice_chunks(text, telemetry=telemetry)
     if isinstance(text, str):
         stripped = text.strip()
         if _looks_like_vibevoice_chunk_list_string(stripped):
             try:
                 parsed = json.loads(stripped)
             except json.JSONDecodeError as e:
+                _emit_vibevoice_shape_invalid(
+                    telemetry,
+                    stage="json_parse",
+                    text_type="str",
+                    string_length=len(stripped),
+                    prefix_class=_vibevoice_string_prefix_class(stripped),
+                )
                 raise CrispAsrError("CrispASR VibeVoice chunks were malformed") from e
             if isinstance(parsed, list):
-                return _join_vibevoice_chunks(parsed)
+                return _join_vibevoice_chunks(parsed, telemetry=telemetry)
         return stripped
     return str(text or "").strip()
 
@@ -455,21 +462,68 @@ def _looks_like_vibevoice_chunk_list_string(text: str) -> bool:
     return not remainder or remainder.startswith("{") or remainder.startswith("]")
 
 
-def _join_vibevoice_chunks(chunks: list[Any]) -> str:
+def _join_vibevoice_chunks(chunks: list[Any], *, telemetry=None) -> str:
     if not chunks:
+        _emit_vibevoice_shape_invalid(telemetry, stage="chunk_list", text_type="list", list_length=0)
         raise CrispAsrError("CrispASR VibeVoice chunks were empty")
 
     contents = []
+    missing_content_count = 0
+    non_string_content_count = 0
     for chunk in chunks:
-        if not isinstance(chunk, dict) or "Content" not in chunk:
+        if not isinstance(chunk, dict):
+            _emit_vibevoice_shape_invalid(
+                telemetry,
+                stage="chunk_item",
+                text_type="list",
+                list_length=len(chunks),
+                item_type=type(chunk).__name__,
+            )
             raise CrispAsrError("CrispASR VibeVoice chunks were malformed")
+        if "Content" not in chunk:
+            missing_content_count += 1
+            continue
         content = chunk["Content"]
         if not isinstance(content, str):
-            raise CrispAsrError("CrispASR VibeVoice chunks were malformed")
+            non_string_content_count += 1
+            continue
         stripped = content.strip()
         if stripped:
             contents.append(stripped)
 
+    if missing_content_count or non_string_content_count:
+        _emit_vibevoice_shape_invalid(
+            telemetry,
+            stage="chunk_content",
+            text_type="list",
+            list_length=len(chunks),
+            missing_content_count=missing_content_count,
+            non_string_content_count=non_string_content_count,
+        )
+        raise CrispAsrError("CrispASR VibeVoice chunks were malformed")
+
     if not contents:
+        _emit_vibevoice_shape_invalid(
+            telemetry,
+            stage="chunk_content",
+            text_type="list",
+            list_length=len(chunks),
+            empty_content_count=len(chunks),
+        )
         raise CrispAsrError("CrispASR VibeVoice chunks were empty")
     return " ".join(contents)
+
+
+def _vibevoice_string_prefix_class(text: str) -> str:
+    if text.startswith("[{"):
+        return "list_object"
+    if text.startswith("[]"):
+        return "empty_list"
+    if text.startswith("["):
+        return "list_other"
+    return "other"
+
+
+def _emit_vibevoice_shape_invalid(telemetry, **properties: Any) -> None:
+    if telemetry is not None:
+        telemetry.emit("crispasr.response_shape_invalid", **properties)

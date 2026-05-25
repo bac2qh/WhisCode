@@ -6,3 +6,4 @@
 - [Model loading](model-loading.md)
 - [Recording status notifications](recording-status-notifications.md)
 - [Repository hygiene](repository-hygiene.md)
+- [Telemetry](telemetry.md)
