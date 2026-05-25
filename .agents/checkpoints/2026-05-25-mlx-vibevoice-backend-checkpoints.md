@@ -21,4 +21,5 @@
   - `uv run --with pytest pytest`
   - `uv run python -m compileall whiscode`
   - `uv run whiscode --help`
-- Immediate next step: commit the implementation and close out to local `main`.
+- Implementation commit: `f412d41` (`Add MLX VibeVoice ASR backend`).
+- Immediate next step: commit this checkpoint update and close out to local `main`.
