@@ -15,4 +15,11 @@
   - `uv run --with pytest pytest tests/test_telemetry.py tests/test_main_cli.py tests/test_enroll.py tests/test_calibrate.py` passed: 50 tests.
   - `uv run python -m compileall whiscode` passed.
 - Implementation commit: `8038a5c` (`Use macOS log folder for telemetry`).
-- Immediate next step: commit this checkpoint hash update and close out.
+- Checkpoint hash commit: `0e953b3` (`Record macOS telemetry path checkpoint`).
+- Closeout:
+  - Merged into local `main` by fast-forward at `0e953b3`; no merge commit was created.
+  - Removed task worktree `.agents/worktrees/macos-telemetry-log-path`.
+  - Deleted local branch `macos-telemetry-log-path`.
+  - Left unrelated worktree `.agents/worktrees/env-llama-paths` untouched.
+  - Archived the plan to `.agents/plans/archive/2026-05-24-macos-telemetry-log-path.md`.
+- Immediate next step: none for this plan.

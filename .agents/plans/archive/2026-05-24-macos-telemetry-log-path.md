@@ -1,3 +1,12 @@
+# Closeout 2026-05-24
+- Final status: `implemented`.
+- Related checkpoint: `.agents/checkpoints/2026-05-24-macos-telemetry-log-path-checkpoints.md`.
+- Implementation commits: `8038a5c` (`Use macOS log folder for telemetry`) and `0e953b3` (`Record macOS telemetry path checkpoint`).
+- Merge result: fast-forwarded local `main` to `0e953b3`; no merge commit was created.
+- Verification: `uv run --with pytest pytest tests/test_telemetry.py tests/test_main_cli.py tests/test_enroll.py tests/test_calibrate.py` passed; `uv run python -m compileall whiscode` passed.
+- Cleanup: removed task worktree `.agents/worktrees/macos-telemetry-log-path` and deleted local branch `macos-telemetry-log-path`; unrelated worktree `.agents/worktrees/env-llama-paths` was left untouched.
+- Shipped: default telemetry now writes to `~/Library/Logs/WhisCode/events.jsonl`, while `--telemetry-path` and `--no-telemetry` remain unchanged.
+
 # macOS Telemetry Log Path
 
 ## Summary
