@@ -66,7 +66,6 @@ from whiscode.telemetry import telemetry_from_args
 from whiscode.transcriber import transcribe
 from whiscode.transcription_queue import (
     DEFAULT_TRANSCRIPTION_QUEUE_CAPACITY,
-    TranscriptRecoveryLog,
     TranscriptionJob,
     TranscriptionJobQueue,
 )
@@ -81,6 +80,16 @@ class State(Enum):
     IDLE = "idle"
     RECORDING = "recording"
     TRANSCRIBING = "transcribing"
+
+
+def _format_transcript_for_stdout(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _print_transcript_for_stdout(text: str) -> None:
+    print()
+    print(_format_transcript_for_stdout(text))
+    print()
 
 
 def parse_args(argv: list[str] | None = None):
@@ -458,7 +467,6 @@ def main():
     start_reminders(stats)
     overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry)
     transcription_jobs = TranscriptionJobQueue(capacity=DEFAULT_TRANSCRIPTION_QUEUE_CAPACITY)
-    transcript_recovery = TranscriptRecoveryLog()
 
     state = State.IDLE
     state_lock = threading.Lock()
@@ -576,22 +584,6 @@ def main():
         if args.recording_notifications:
             notify_recording_completed()
 
-    def write_transcript_recovery(job: TranscriptionJob, processed: str) -> None:
-        result = transcript_recovery.record(
-            text=processed,
-            job_id=job.job_id,
-            source=job.source,
-            audio_seconds=job.audio_seconds,
-        )
-        properties = {
-            "job_id": job.job_id,
-            "entry_count": result.entry_count,
-            "ok": result.ok,
-        }
-        if result.error_type is not None:
-            properties["error_type"] = result.error_type
-        telemetry.emit("transcript_recovery_file_written", **properties)
-
     def process_transcription_job(job: TranscriptionJob) -> None:
         started = time.monotonic()
         progress_state = {"total_frames": None}
@@ -630,9 +622,8 @@ def main():
                     processed = postprocess(text, replacements=replacements)
                 word_count = len(processed.split())
                 stats.record(word_count, job.audio_seconds)
-                print(f"  > {processed}")
+                _print_transcript_for_stdout(processed)
                 type_text(processed)
-                write_transcript_recovery(job, processed)
                 duration_seconds = round(time.monotonic() - started, 3)
                 telemetry.emit(
                     "transcription.completed",

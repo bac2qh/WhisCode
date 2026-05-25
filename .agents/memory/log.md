@@ -54,3 +54,4 @@
 - Added durable memory that malformed CrispASR/VibeVoice chunk output now writes original provider response bodies to local-only `crispasr-raw-responses.jsonl` for debugging after explicit user acceptance.
 - Added VibeVoice Q4 GGUF tradeoff memory after downloading and benchmarking `vibevoice-asr-q4_k.gguf`: Q4 is much smaller and can be faster on longer samples, but local short-dictation latency was not meaningfully better than warm F16.
 - Added recording queue and stacked overlay memory after allowing hotkey and hands-free recordings to continue while prior audio transcribes, with last-five typed transcript recovery in `/tmp/whiscode-last-transcripts.txt`.
+- Updated recording and telemetry memory after replacing the `/tmp` transcript recovery file with copy-friendly stdout transcript blocks.

@@ -3,6 +3,8 @@ from pathlib import Path
 from whiscode.handsfree import command_reference_dirs
 from whiscode.main import (
     _default_whisper_processor_source,
+    _format_transcript_for_stdout,
+    _print_transcript_for_stdout,
     ensure_hands_free_references,
     ensure_whisper_processor,
     parse_args,
@@ -18,6 +20,20 @@ def write_reference_samples(path: Path, prefix: str, count: int = 3) -> None:
     path.mkdir(parents=True, exist_ok=True)
     for i in range(count):
         (path / f"{prefix}-{i}.wav").write_text("x")
+
+
+def test_format_transcript_for_stdout_collapses_multiline_text():
+    assert _format_transcript_for_stdout("  first line\nsecond\tline  ") == "first line second line"
+
+
+def test_format_transcript_for_stdout_preserves_mixed_english_chinese_text():
+    assert _format_transcript_for_stdout("调用 API\nwith retry  逻辑") == "调用 API with retry 逻辑"
+
+
+def test_print_transcript_for_stdout_uses_copy_friendly_block(capsys):
+    _print_transcript_for_stdout("  hello\nworld  ")
+
+    assert capsys.readouterr().out == "\nhello world\n\n"
 
 
 def test_parse_args_defaults_to_hotkey_mode():

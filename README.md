@@ -154,7 +154,7 @@ WhisCode shows a small floating macOS overlay while recording and transcribing. 
 
 Use `--no-recording-overlay` to disable it. Use `--recording-notifications` with `whiscode` if you also want the older macOS start/end notification banners during normal recording.
 
-WhisCode keeps the last five successfully typed transcripts in `/tmp/whiscode-last-transcripts.txt` as a local recovery file. This avoids using or changing the system clipboard.
+Successful transcripts are also printed to stdout as flush-left single-line blocks with blank spacing between entries, so terminal output can be copied without touching the system clipboard.
 
 ## Hands-Free Mode
 
@@ -227,7 +227,7 @@ WhisCode writes local JSONL telemetry by default to:
 ~/Library/Logs/WhisCode/events.jsonl
 ```
 
-Use it to inspect app startup, selected ASR backend, recording durations, queue depth, transcription outcomes, backend failures, wake/end/command detections, detector distances, key-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. The transcript recovery file at `/tmp/whiscode-last-transcripts.txt` also intentionally contains local typed transcript text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
+Use it to inspect app startup, selected ASR backend, recording durations, queue depth, transcription outcomes, backend failures, wake/end/command detections, detector distances, key-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
 
 `handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. WhisCode keeps microphone capture lightweight and uses a bounded detector queue to reduce this. If detector processing still falls behind, `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` show how much queued audio was dropped and how long detection took. These diagnostics do not include raw audio or transcript text.
 

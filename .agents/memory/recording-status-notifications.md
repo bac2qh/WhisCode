@@ -33,4 +33,4 @@
 ## 2026-05-24
 - Runtime recording/transcription now uses stacked overlay cards keyed by transcription job id. New recordings appear at the top, older queued/transcribing cards shift down, and each card moves from recording to queued to transcribing before disappearing.
 - Transcription now drains a FIFO queue with one worker while new recordings can continue. The overlay and queue events stay bounded and avoid transcript text.
-- WhisCode writes the last five successfully typed transcripts to `/tmp/whiscode-last-transcripts.txt` as a local recovery file instead of using the system clipboard.
+- Successful transcripts are printed to stdout as flush-left, single-line blocks with blank spacing between entries. WhisCode no longer writes a `/tmp` transcript recovery file or changes the system clipboard for transcript recovery.

@@ -1,8 +1,6 @@
-from datetime import datetime, timezone
-
 import numpy as np
 
-from whiscode.transcription_queue import TranscriptRecoveryLog, TranscriptionJobQueue
+from whiscode.transcription_queue import TranscriptionJobQueue
 
 
 def test_transcription_job_queue_reserves_capacity_for_active_recording():
@@ -42,39 +40,3 @@ def test_transcription_job_queue_drains_fifo_and_tracks_active_work():
     jobs.complete_active(second_job.job_id)
 
     assert jobs.has_transcription_work() is False
-
-
-def test_transcript_recovery_log_keeps_last_five_entries(tmp_path):
-    recovery = TranscriptRecoveryLog(
-        path=tmp_path / "whiscode-last-transcripts.txt",
-        clock=lambda: datetime(2026, 5, 24, 22, 0, tzinfo=timezone.utc),
-    )
-
-    for index in range(6):
-        result = recovery.record(
-            text=f"transcript {index}",
-            job_id=f"job-{index}",
-            source="hotkey",
-            audio_seconds=index + 0.25,
-        )
-        assert result.ok is True
-
-    text = (tmp_path / "whiscode-last-transcripts.txt").read_text(encoding="utf-8")
-    assert "transcript 0" not in text
-    assert "job_id=job-0" not in text
-    for index in range(1, 6):
-        assert f"transcript {index}" in text
-        assert f"job_id=job-{index}" in text
-    assert text.count("--- timestamp=") == 5
-
-
-def test_transcript_recovery_log_reports_write_errors(tmp_path):
-    blocker = tmp_path / "not-a-dir"
-    blocker.write_text("file")
-    recovery = TranscriptRecoveryLog(path=blocker / "whiscode-last-transcripts.txt")
-
-    result = recovery.record(text="hello", job_id="job-1", source="hotkey", audio_seconds=1.0)
-
-    assert result.ok is False
-    assert result.entry_count == 1
-    assert result.error_type is not None
