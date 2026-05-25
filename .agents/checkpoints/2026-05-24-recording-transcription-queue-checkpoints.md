@@ -10,6 +10,7 @@
 - Immediate next step: implement queue worker, hands-free queue behavior, stacked overlay commands/helper rendering, transcript recovery writer, tests, docs, and memory updates.
 
 ## 2026-05-24 Implementation Notes
+- Implementation commit: `e25799492f08b9e740f624ad0c34ee3aa13e8327`.
 - Implemented a `TranscriptionJobQueue` with a fixed capacity of five waiting jobs, one active transcription, and one active recording reservation.
 - Refactored runtime handling so hotkey and hands-free recordings enqueue completed audio while a single transcription worker drains jobs FIFO and types completed text immediately.
 - Hands-free no longer suspends wake/end detection during transcription; after each end/timeout/manual stop, the session can accept another wake while earlier jobs transcribe. Command detection is disabled only during active recording.
@@ -21,4 +22,4 @@
   - `uv run python -m compileall whiscode`
   - `uv run --with pytest pytest`
   - `git diff --check`
-- Immediate next step: commit implementation and checkpoint, then close out.
+- Immediate next step: commit checkpoint hash bookkeeping, then close out.
