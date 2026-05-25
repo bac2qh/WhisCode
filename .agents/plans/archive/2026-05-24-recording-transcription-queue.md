@@ -1,3 +1,12 @@
+# Closeout 2026-05-24
+- Final status: `implemented`.
+- Related checkpoint: `.agents/checkpoints/2026-05-24-recording-transcription-queue-checkpoints.md`.
+- Implementation commits: `e257994` (`Queue recordings during transcription`) and `83fbbe9` (`Record recording queue checkpoint`).
+- Merge result: fast-forwarded local `main`; no merge commit was created.
+- Verification: `uv run --with pytest pytest tests/test_transcription_queue.py tests/test_recording_overlay.py tests/test_handsfree.py tests/test_main_cli.py` passed; `uv run python -m compileall whiscode` passed; `uv run --with pytest pytest` passed; `git diff --check` passed.
+- Cleanup: removed task worktree `.agents/worktrees/recording-transcription-queue` and deleted local branch `recording-transcription-queue`; unrelated worktree `.agents/worktrees/env-llama-paths` was left untouched.
+- Shipped: hotkey and hands-free recordings now queue while earlier audio transcribes, the overlay stacks per-job cards, typed transcripts are recovered in `/tmp/whiscode-last-transcripts.txt`, and no clipboard integration was added.
+
 # Recording Queue And Stacked Overlay
 
 ## Summary
