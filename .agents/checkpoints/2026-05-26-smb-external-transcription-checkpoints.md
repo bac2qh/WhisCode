@@ -29,9 +29,10 @@
 - Cached SMB readiness after the first successful session registration and directory check so idle polling does not repeatedly register sessions.
 - Updated CLI/env handling so `WHISCODE_EXTERNAL_AUDIO_INBOX` and `--external-audio-inbox` can be local paths or SMB URLs, with SMB credentials supplied by `WHISCODE_EXTERNAL_SMB_USERNAME`, `WHISCODE_EXTERNAL_SMB_PASSWORD`, and optional `WHISCODE_EXTERNAL_SMB_DOMAIN`.
 - Updated README, ASR wiki docs, wiki log, and external transcription memory for the native SMB contract.
+- Implementation commit: `7fa6af4`.
 
 ### Immediate Next Step
-- Commit the implementation, record the commit hash here, then close out by merging the task branch to local `main` under the main-branch mutex.
+- Close out by merging the task branch to local `main` under the main-branch mutex.
 
 ### Decisions And Reasoning
 - SMB credentials stay out of URLs and routine telemetry; docs show 1Password `op run --env-file` as the intended injection path.
