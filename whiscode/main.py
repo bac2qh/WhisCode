@@ -39,7 +39,20 @@ from whiscode.handsfree import (
     missing_reference_messages,
     reference_sample_count,
 )
+from whiscode.asr_engine_manager import AsrEngineManager
 from whiscode.enroll import DEFAULT_ENROLL_SECONDS, record_guided_samples
+from whiscode.external_transcription import (
+    DEFAULT_EXTERNAL_POLL_SECONDS,
+    DEFAULT_EXTERNAL_STABLE_SECONDS,
+    ExternalAudioWatcher,
+    ExternalFileJob,
+    ExternalFileQueue,
+    ExternalTranscriptionConfig,
+    default_external_outbox,
+    parse_external_extensions,
+    process_external_transcription_job,
+    watch_external_inbox,
+)
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import press_key_command, type_text
 from whiscode.crispasr_asr import (
@@ -164,6 +177,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay (default)")
     parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay")
     parser.add_argument("--recording-notifications", action="store_true", help="Keep macOS start/end notification banners in addition to the overlay")
+    parser.add_argument("--external-audio-inbox", type=Path, default=_env_path("WHISCODE_EXTERNAL_AUDIO_INBOX"), help="Watch this folder for external audio files to transcribe (mlx-vibevoice only)")
+    parser.add_argument("--external-transcript-outbox", type=Path, default=_env_path("WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX"), help="Folder for external .txt/.json transcript results (default: sibling outbox)")
+    parser.add_argument("--external-poll-seconds", type=float, default=_env_float("WHISCODE_EXTERNAL_POLL_SECONDS", DEFAULT_EXTERNAL_POLL_SECONDS), help=f"External inbox scan cadence in seconds (default: {DEFAULT_EXTERNAL_POLL_SECONDS})")
+    parser.add_argument("--external-stable-seconds", type=float, default=_env_float("WHISCODE_EXTERNAL_STABLE_SECONDS", DEFAULT_EXTERNAL_STABLE_SECONDS), help=f"Seconds an external file must stop changing before queueing (default: {DEFAULT_EXTERNAL_STABLE_SECONDS})")
     args = parser.parse_args(argv)
     wake_threshold_supplied = "--hands-free-threshold" in raw_argv
     if args.hands_free_threshold is None:
@@ -174,7 +191,34 @@ def parse_args(argv: list[str] | None = None):
         args.hands_free_command_threshold = args.hands_free_threshold if wake_threshold_supplied else DEFAULT_COMMAND_THRESHOLD
     if args.hands_free_max_seconds is None:
         args.hands_free_max_seconds = args.max_recording_seconds
+    args.external_extensions = parse_external_extensions(os.environ.get("WHISCODE_EXTERNAL_EXTENSIONS"))
+    if args.external_audio_inbox is not None:
+        args.external_audio_inbox = args.external_audio_inbox.expanduser()
+        args.external_transcript_outbox = (
+            args.external_transcript_outbox.expanduser()
+            if args.external_transcript_outbox is not None
+            else default_external_outbox(args.external_audio_inbox)
+        )
+    if args.external_poll_seconds <= 0:
+        parser.error("--external-poll-seconds must be greater than 0")
+    if args.external_stable_seconds < 0:
+        parser.error("--external-stable-seconds must be non-negative")
     return args
+
+
+def _env_path(name: str) -> Path | None:
+    value = os.environ.get(name)
+    return Path(value) if value else None
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None or value.strip() == "":
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
 
 
 def _resolve_model_path(model_name: str) -> str:
@@ -348,11 +392,27 @@ def ensure_hands_free_references(
     return True
 
 
+def validate_external_intake_args(args) -> None:
+    if args.external_audio_inbox is not None and args.asr_backend != "mlx-vibevoice":
+        raise ValueError("external audio inbox support requires --asr-backend mlx-vibevoice")
+
+
 def main():
     args = parse_args()
     telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
     telemetry.emit("app.started", mode="hands_free" if args.hands_free else "hotkey")
     telemetry.emit("asr.backend_selected", backend=args.asr_backend)
+
+    try:
+        validate_external_intake_args(args)
+    except ValueError as e:
+        telemetry.emit(
+            "app.failed",
+            reason="external_backend_unsupported",
+            backend=args.asr_backend,
+        )
+        print(f"Error: {e}.", file=sys.stderr)
+        sys.exit(1)
 
     hotkey = getattr(keyboard.Key, args.hotkey, None)
     if hotkey is None:
@@ -418,16 +478,27 @@ def main():
             temperature=args.mlx_vibevoice_temperature,
             prefill_step_size=args.mlx_vibevoice_prefill_step_size,
         )
-        asr_backend = MlxVibeVoiceBackend(config, telemetry=telemetry)
+        primary_vibevoice_backend = MlxVibeVoiceBackend(config, telemetry=telemetry)
         try:
-            print(f"Loading MLX VibeVoice model: {asr_backend.model_location} ...")
-            asr_backend.start()
+            print(f"Loading MLX VibeVoice model: {primary_vibevoice_backend.model_location} ...")
+            primary_vibevoice_backend.start()
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
 
+        def create_vibevoice_engine():
+            engine = MlxVibeVoiceBackend(config, telemetry=telemetry)
+            engine.start()
+            return engine
+
+        asr_backend = AsrEngineManager(
+            primary_engine=primary_vibevoice_backend,
+            engine_factory=create_vibevoice_engine,
+            telemetry=telemetry,
+        )
+
         def transcribe_audio(audio, progress_callback=None):
-            return asr_backend.transcribe(
+            return asr_backend.transcribe_manual(
                 audio,
                 language=args.language,
                 extra_prompt=args.prompt,
@@ -505,6 +576,18 @@ def main():
     start_reminders(stats)
     overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry)
     transcription_jobs = TranscriptionJobQueue(capacity=DEFAULT_TRANSCRIPTION_QUEUE_CAPACITY)
+    external_queue = ExternalFileQueue() if args.external_audio_inbox is not None else None
+    external_config = (
+        ExternalTranscriptionConfig(
+            inbox=args.external_audio_inbox,
+            outbox=args.external_transcript_outbox,
+            extensions=args.external_extensions,
+            poll_seconds=args.external_poll_seconds,
+            stable_seconds=args.external_stable_seconds,
+        )
+        if args.external_audio_inbox is not None
+        else None
+    )
 
     state = State.IDLE
     state_lock = threading.Lock()
@@ -730,6 +813,90 @@ def main():
                 with state_lock:
                     refresh_state_from_queue("transcription.queue_finished")
 
+    def process_external_file(job: ExternalFileJob) -> None:
+        if external_config is None or asr_backend is None:
+            return
+        started = time.monotonic()
+        audio_seconds = None
+        telemetry.emit(
+            "external.transcription_started",
+            file_id=job.file_id,
+            extension=job.extension,
+            size_bytes=job.size_bytes,
+            backend=asr_backend.backend_name,
+            model=asr_backend.model_label,
+        )
+        try:
+            result = process_external_transcription_job(
+                external_config,
+                job,
+                transcribe_audio=lambda audio: asr_backend.transcribe_external(audio, language=args.language),
+                backend=asr_backend.backend_name,
+                model_label=asr_backend.model_label,
+            )
+        except Exception as e:
+            telemetry.emit(
+                "external.transcription_failed",
+                file_id=job.file_id,
+                extension=job.extension,
+                size_bytes=job.size_bytes,
+                audio_seconds=round(audio_seconds, 3) if audio_seconds is not None else None,
+                duration_seconds=round(time.monotonic() - started, 3),
+                backend=asr_backend.backend_name,
+                model=asr_backend.model_label,
+                error_type=type(e).__name__,
+            )
+            print(f"External transcription failed for {job.basename}: {e}", file=sys.stderr)
+            return
+
+        audio_seconds = result.audio_seconds
+        if result.status == "failed":
+            telemetry.emit(
+                "external.transcription_failed",
+                file_id=job.file_id,
+                extension=job.extension,
+                size_bytes=job.size_bytes,
+                audio_seconds=round(audio_seconds, 3) if audio_seconds is not None else None,
+                duration_seconds=round(result.processing_seconds, 3),
+                backend=asr_backend.backend_name,
+                model=asr_backend.model_label,
+                error_type=result.error_type or "ExternalTranscriptionError",
+            )
+            print(f"External transcription failed for {job.basename}.", file=sys.stderr)
+            return
+
+        telemetry.emit(
+            "external.transcription_completed",
+            file_id=job.file_id,
+            extension=job.extension,
+            size_bytes=job.size_bytes,
+            audio_seconds=round(audio_seconds, 3) if audio_seconds is not None else None,
+            duration_seconds=round(result.processing_seconds, 3),
+            backend=asr_backend.backend_name,
+            model=asr_backend.model_label,
+            output_chars=len(result.transcript),
+        )
+        print(f"External transcript completed for {job.basename}.")
+
+    def external_worker():
+        if external_queue is None:
+            return
+        while not shutdown_event.is_set():
+            if not transcription_jobs.is_idle():
+                shutdown_event.wait(0.2)
+                continue
+            job = external_queue.get(timeout=0.2)
+            if job is None:
+                continue
+            try:
+                if not transcription_jobs.is_idle():
+                    external_queue.requeue(job)
+                    shutdown_event.wait(0.2)
+                    continue
+                process_external_file(job)
+            finally:
+                external_queue.complete()
+
     def hotkey_worker():
         nonlocal state
         while not shutdown_event.is_set():
@@ -906,6 +1073,12 @@ def main():
     signal.signal(signal.SIGTERM, handle_signal)
 
     threading.Thread(target=transcription_worker, daemon=True).start()
+    if external_config is not None and external_queue is not None:
+        watcher = ExternalAudioWatcher(external_config, external_queue, telemetry=telemetry)
+        threading.Thread(target=watch_external_inbox, kwargs={"watcher": watcher, "stop_event": shutdown_event}, daemon=True).start()
+        threading.Thread(target=external_worker, daemon=True).start()
+        print(f"External audio inbox enabled: {external_config.inbox}")
+        print(f"External transcript outbox: {external_config.outbox}")
 
     if args.hands_free:
         try:

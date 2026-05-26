@@ -61,3 +61,6 @@
 - Added MLX VibeVoice backend memory after implementing `--asr-backend mlx-vibevoice`, defaulting to the local 8-bit MLX model and passing existing hotwords through VibeVoice context.
 - Added telemetry memory for bounded MLX VibeVoice model-load and transcription events.
 - Updated model-loading memory after retiring CrispASR/VibeVoice from recommended use and keeping it only as a legacy GGUF compatibility backend.
+
+## 2026-05-26
+- Added external transcription queue memory after implementing the MLX VibeVoice-only NAS inbox/outbox watcher and two-engine manual-priority behavior.

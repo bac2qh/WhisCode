@@ -39,3 +39,6 @@
 - Documented that the current CrispASR/VibeVoice warm-server transcription path cannot expose concrete in-flight progress to the recording overlay.
 - Documented the optional MLX VibeVoice backend, its default local 8-bit model path, BF16 override, and hotword/context behavior.
 - Documented that CrispASR/VibeVoice is now a legacy compatibility path and MLX VibeVoice is the recommended local VibeVoice backend.
+
+## 2026-05-26
+- Documented the MLX VibeVoice-only external NAS transcription queue, inbox/outbox contract, supported formats, ffmpeg-backed decode requirement, and two-engine manual-priority behavior.

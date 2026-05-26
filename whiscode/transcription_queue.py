@@ -116,6 +116,10 @@ class TranscriptionJobQueue:
         with self._lock:
             return self._active_job_id is not None or not self._pending.empty()
 
+    def is_idle(self) -> bool:
+        with self._lock:
+            return self._reserved is None and self._active_job_id is None and self._pending.empty()
+
     def queue_depth_for_telemetry(self) -> int:
         with self._lock:
             return self._pending.qsize() + (1 if self._active_job_id is not None else 0)

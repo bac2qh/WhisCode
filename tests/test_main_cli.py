@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from whiscode.handsfree import command_reference_dirs
 from whiscode.main import (
     _default_whisper_processor_source,
@@ -9,11 +11,24 @@ from whiscode.main import (
     ensure_whisper_processor,
     parse_args,
     runtime_telemetry_enabled_by_default,
+    validate_external_intake_args,
 )
 from whiscode.telemetry import telemetry_from_args
 
 
 WhisperModel = type("Model", (), {"__module__": "mlx_audio.stt.models.whisper.whisper"})
+
+
+@pytest.fixture(autouse=True)
+def clear_external_env(monkeypatch):
+    for name in (
+        "WHISCODE_EXTERNAL_AUDIO_INBOX",
+        "WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX",
+        "WHISCODE_EXTERNAL_EXTENSIONS",
+        "WHISCODE_EXTERNAL_POLL_SECONDS",
+        "WHISCODE_EXTERNAL_STABLE_SECONDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
 
 def write_reference_samples(path: Path, prefix: str, count: int = 3) -> None:
@@ -61,6 +76,11 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.mlx_vibevoice_max_tokens == 8192
     assert args.mlx_vibevoice_temperature == 0.0
     assert args.mlx_vibevoice_prefill_step_size == 2048
+    assert args.external_audio_inbox is None
+    assert args.external_transcript_outbox is None
+    assert args.external_poll_seconds == 2.0
+    assert args.external_stable_seconds == 5.0
+    assert ".ogg" in args.external_extensions
 
 
 def test_runtime_telemetry_is_enabled_by_default_for_hotkey_mode():
@@ -180,6 +200,52 @@ def test_parse_args_mlx_vibevoice_options():
     assert args.mlx_vibevoice_max_tokens == 4096
     assert args.mlx_vibevoice_temperature == 0.1
     assert args.mlx_vibevoice_prefill_step_size == 1024
+
+
+def test_parse_args_external_options():
+    args = parse_args([
+        "--asr-backend",
+        "mlx-vibevoice",
+        "--external-audio-inbox",
+        "/tmp/inbox",
+        "--external-transcript-outbox",
+        "/tmp/outbox",
+        "--external-poll-seconds",
+        "0.5",
+        "--external-stable-seconds",
+        "1.25",
+    ])
+
+    assert args.external_audio_inbox == Path("/tmp/inbox")
+    assert args.external_transcript_outbox == Path("/tmp/outbox")
+    assert args.external_poll_seconds == 0.5
+    assert args.external_stable_seconds == 1.25
+
+
+def test_parse_args_external_env_defaults(monkeypatch):
+    monkeypatch.setenv("WHISCODE_EXTERNAL_AUDIO_INBOX", "/tmp/env-inbox")
+    monkeypatch.setenv("WHISCODE_EXTERNAL_EXTENSIONS", "ogg,m4a")
+    monkeypatch.setenv("WHISCODE_EXTERNAL_POLL_SECONDS", "3")
+    monkeypatch.setenv("WHISCODE_EXTERNAL_STABLE_SECONDS", "7")
+
+    args = parse_args([])
+
+    assert args.external_audio_inbox == Path("/tmp/env-inbox")
+    assert args.external_transcript_outbox == Path("/tmp/outbox")
+    assert args.external_extensions == (".ogg", ".m4a")
+    assert args.external_poll_seconds == 3.0
+    assert args.external_stable_seconds == 7.0
+
+
+def test_external_intake_requires_mlx_vibevoice_backend():
+    args = parse_args(["--external-audio-inbox", "/tmp/inbox"])
+
+    try:
+        validate_external_intake_args(args)
+    except ValueError as e:
+        assert "mlx-vibevoice" in str(e)
+    else:
+        raise AssertionError("expected external backend validation to fail")
 
 
 def test_parse_args_hands_free_options():

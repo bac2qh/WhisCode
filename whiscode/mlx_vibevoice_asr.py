@@ -54,6 +54,10 @@ class MlxVibeVoiceBackend:
         self.model = None
 
     @property
+    def backend_name(self) -> str:
+        return "mlx-vibevoice"
+
+    @property
     def model_location(self) -> str:
         return _resolve_model_location(self.config.model)
 

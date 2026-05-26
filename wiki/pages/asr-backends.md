@@ -37,6 +37,18 @@ This backend passes WhisCode hotwords and `--prompt` through VibeVoice's MLX-Aud
 
 Telemetry for this backend is limited to bounded operational status such as model label, load duration, audio duration, hotword count, prompt presence, context length, output length, transcription duration, and error type. It does not record raw audio, transcript text, prompts, hotword contents, full model paths, tokenizer payloads, or model output content.
 
+## External NAS Transcription Queue
+
+WhisCode can watch a top-level external audio inbox when running `--asr-backend mlx-vibevoice`. Set `WHISCODE_EXTERNAL_AUDIO_INBOX` or pass `--external-audio-inbox PATH` to enable it. `WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX` or `--external-transcript-outbox PATH` controls result delivery; when omitted, the outbox defaults to a sibling `outbox` folder next to the inbox.
+
+The watcher ignores hidden files, unsupported extensions, and files whose source metadata already has a matching result sidecar. It waits until file size and mtime remain unchanged for `WHISCODE_EXTERNAL_STABLE_SECONDS` / `--external-stable-seconds` before queueing. It scans on `WHISCODE_EXTERNAL_POLL_SECONDS` / `--external-poll-seconds`. Supported extensions default to `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, and `.aac`; override with comma-separated `WHISCODE_EXTERNAL_EXTENSIONS`.
+
+External audio is decoded through MLX-Audio audio I/O, normalized to mono 16 kHz float32, then sent to MLX VibeVoice without WhisCode hotwords, prompt, replacements, postprocessing, optional refinement, typing, or manual dictation stats. OGG/Opus and M4A support depends on MLX-Audio's ffmpeg-capable decode path being available on the host.
+
+Outbox files are named `source-stem-<short-id>.txt` and `source-stem-<short-id>.json`. The JSON contains status, source basename, source size/mtime, duration, backend, model label, file id, transcript on success, or bounded error type/message on failure. Transcript text is intentionally present in outbox files because that is the external delivery channel; routine telemetry still excludes transcript text and full file paths.
+
+Manual dictation has priority over external files. External jobs start only while no local recording is reserved, queued, or actively transcribing. If a manual recording arrives while an external VibeVoice job is already using the primary in-process engine, WhisCode starts one rescue VibeVoice engine for manual work. When the external job completes, WhisCode retires the old external engine and promotes the rescue engine as primary. This caps the process at two in-process VibeVoice engines.
+
 ## Optional llama.cpp Backend
 
 `llama-cpp` is an opt-in backend for local Qwen3-ASR experiments:

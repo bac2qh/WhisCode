@@ -40,3 +40,14 @@ def test_transcription_job_queue_drains_fifo_and_tracks_active_work():
     jobs.complete_active(second_job.job_id)
 
     assert jobs.has_transcription_work() is False
+    assert jobs.is_idle() is True
+
+
+def test_transcription_job_queue_idle_includes_reserved_recording():
+    jobs = TranscriptionJobQueue(capacity=1)
+
+    reservation = jobs.try_reserve_recording(source="hotkey")
+
+    assert reservation is not None
+    assert jobs.has_transcription_work() is False
+    assert jobs.is_idle() is False

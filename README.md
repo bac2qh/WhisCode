@@ -72,6 +72,10 @@ uv run whiscode --hands-free
 | `--recording-overlay` | on | Show floating recording and transcription overlay |
 | `--no-recording-overlay` | off | Disable floating recording and transcription overlay |
 | `--recording-notifications` | off | Keep macOS start/end notification banners in addition to overlay |
+| `--external-audio-inbox PATH` | — | Watch a top-level folder for external audio files to transcribe with `mlx-vibevoice` |
+| `--external-transcript-outbox PATH` | sibling `outbox` | Folder for external `.txt` and `.json` transcript results |
+| `--external-poll-seconds FLOAT` | `2.0` | External inbox scan cadence |
+| `--external-stable-seconds FLOAT` | `5.0` | Quiet period before an external file is considered ready |
 
 ### Optional MLX VibeVoice ASR
 
@@ -120,6 +124,31 @@ Benchmark backend latency on a WAV file:
 ```bash
 uv run whiscode-benchmark-asr --audio sample.wav --asr-backend mlx-vibevoice
 ```
+
+### External NAS Transcription Queue
+
+WhisCode can also watch a shared inbox folder for audio files written by external agents or NAS workflows. This path is intentionally VibeVoice-only:
+
+```bash
+uv run whiscode --asr-backend mlx-vibevoice \
+  --external-audio-inbox /Volumes/nas/whiscode/inbox
+```
+
+When `--external-transcript-outbox` is omitted, WhisCode writes results to a sibling `outbox` folder next to the inbox. The same settings can be supplied with environment variables:
+
+```bash
+WHISCODE_EXTERNAL_AUDIO_INBOX=/Volumes/nas/whiscode/inbox
+WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX=/Volumes/nas/whiscode/outbox
+WHISCODE_EXTERNAL_EXTENSIONS=.wav,.mp3,.flac,.ogg,.opus,.m4a,.aac
+WHISCODE_EXTERNAL_POLL_SECONDS=2
+WHISCODE_EXTERNAL_STABLE_SECONDS=5
+```
+
+The watcher scans only the top level of the inbox, ignores hidden files and unsupported extensions, and queues a file only after its size and mtime have stayed unchanged for the stable period. Supported extensions default to `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, and `.aac`. MLX-Audio handles decoding through its audio I/O layer; Telegram-style OGG/Opus and M4A files require a working ffmpeg backend on the machine running WhisCode.
+
+Each completed external file produces `source-stem-<id>.txt` and `source-stem-<id>.json` in the outbox. The JSON records bounded source metadata, duration, backend, model label, status, transcript text on success, or a bounded error type/message on failure. External transcripts are the plain backend output: WhisCode does not apply hotwords, replacements, postprocessing, refinement, typing, or manual dictation stats to this queue.
+
+Manual dictation remains higher priority. External work starts only while no local recording is reserved, queued, or actively transcribing. If a manual recording arrives while a long external VibeVoice transcription is already using the loaded MLX engine, WhisCode lazily starts one rescue VibeVoice engine for manual work. After the external job finishes, the old external engine is retired and the rescue engine becomes primary. WhisCode uses at most two in-process VibeVoice engines for this behavior.
 
 ### Optional llama.cpp ASR
 
