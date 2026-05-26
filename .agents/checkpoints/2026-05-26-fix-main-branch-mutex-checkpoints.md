@@ -41,3 +41,22 @@
 - `sh -n .agents/scripts/main-branch-lock.sh` passed.
 - `git diff --check` passed.
 - `uv run --with pytest pytest` passed: 237 tests.
+
+## 2026-05-26 Closeout
+
+### Done
+- Merged task branch `fix-main-branch-mutex` into local `main` with a fast-forward merge.
+- Archived the active plan to `.agents/plans/archive/2026-05-26-fix-main-branch-mutex.md`.
+- Removed worktree `.agents/worktrees/fix-main-branch-mutex`.
+- Deleted local branch `fix-main-branch-mutex`.
+
+### Immediate Next Step
+- None. Plan is implemented and archived.
+
+### Decisions And Reasoning
+- Used the fixed helper itself for the mutex-protected closeout window.
+- Fast-forward merge preserved the implementation and checkpoint commits without a merge commit.
+
+### Verification
+- Pre-merge verification remained `uv run --with pytest pytest`: 237 tests passed.
+- Closeout verification checked plan archive, worktree removal, branch deletion, and clean `main` status before final reporting.

@@ -1,3 +1,12 @@
+> Closeout: implemented
+>
+> Related checkpoint: `.agents/checkpoints/2026-05-26-fix-main-branch-mutex-checkpoints.md`
+> Implementation commits: `babba97`, `e7ac4c7`
+> Merge commit: none (fast-forward)
+> Verification: `sh -n .agents/scripts/main-branch-lock.sh`; `git diff --check`; `uv run --with pytest pytest` (237 passed); mutex smoke `status` and `run -- /bin/echo hi`
+> Worktree and branch cleanup: remove `.agents/worktrees/fix-main-branch-mutex`; delete local branch `fix-main-branch-mutex`
+> Summary: ported the main-branch mutex to the Nix-style helper, added status/metadata/retry/root-resolution behavior, safer release, and explicit lock creation failure diagnostics.
+
 # Fix Main Branch Mutex
 
 ## Summary
