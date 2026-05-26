@@ -1,3 +1,12 @@
+> Closeout: implemented
+>
+> Related checkpoint: `.agents/checkpoints/2026-05-26-external-nas-transcription-queue-checkpoints.md`
+> Implementation commits: `662ea5d`, `38f7506`
+> Merge commit: none (fast-forward)
+> Verification: `uv run --with pytest pytest` (230 passed)
+> Worktree and branch cleanup: removed `.agents/worktrees/external-nas-transcription-queue`; deleted local branch `external-nas-transcription-queue`
+> Summary: shipped the MLX VibeVoice-only external NAS inbox/outbox transcription queue, sidecar results, bounded telemetry, and two-engine manual-priority rescue behavior.
+
 # External NAS Transcription Queue
 
 ## Status
