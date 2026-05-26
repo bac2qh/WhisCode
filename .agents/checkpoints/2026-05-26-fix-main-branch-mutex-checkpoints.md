@@ -25,9 +25,10 @@
 - Added explicit diagnostics for lock parent/directory creation failure so sandbox or permission failures do not spin as unknown lock contention.
 - Added pytest coverage for status, acquire/release, task-worktree root resolution, stale lock cleanup, live lock timeout metadata, and permission/create failure behavior.
 - Updated repository hygiene memory.
+- Implementation commit: `babba97 Fix main branch mutex helper`.
 
 ### Immediate Next Step
-- Commit the implementation, then close out through the updated mutex helper.
+- Close out through the updated mutex helper.
 
 ### Decisions And Reasoning
 - Used the Nix helper as the baseline because it has the workflow behavior WhisCode expected during closeout.
