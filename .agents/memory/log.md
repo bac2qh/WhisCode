@@ -64,3 +64,4 @@
 
 ## 2026-05-26
 - Added external transcription queue memory after implementing the MLX VibeVoice-only NAS inbox/outbox watcher and two-engine manual-priority behavior.
+- Updated repository hygiene memory after replacing the main-branch closeout mutex helper with the Nix-style `run`/`status` helper and explicit lock-create failure diagnostics.
