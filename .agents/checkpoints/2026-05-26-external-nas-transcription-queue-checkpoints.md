@@ -30,9 +30,10 @@
 - Wired external intake into the app only for `mlx-vibevoice`; other backends fail fast when an external inbox is configured.
 - Kept external jobs out of WhisCode manual hotwords, prompt, replacements, postprocessing, refinement, keyboard typing, and stats.
 - Documented the external NAS queue in README and wiki, and added durable project memory.
+- Implementation commit: `662ea5d Add external VibeVoice transcription queue`.
 
 ### Immediate Next Step
-- Commit the implementation, then update this checkpoint with the commit hash and closeout status.
+- Archive the plan, merge the task branch into local `main`, remove the worktree, and delete the local task branch.
 
 ### Decisions And Reasoning
 - User clarified that Whisper support is not needed for this new feature, so external intake is `mlx-vibevoice` only.
