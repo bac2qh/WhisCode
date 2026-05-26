@@ -42,3 +42,4 @@
 
 ## 2026-05-26
 - Documented the MLX VibeVoice-only external NAS transcription queue, inbox/outbox contract, supported formats, ffmpeg-backed decode requirement, and two-engine manual-priority behavior.
+- Documented native SMB URL support for the external NAS transcription queue, including `op run` credential environment variables and unmounted NAS operation.

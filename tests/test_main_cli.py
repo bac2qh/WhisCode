@@ -27,6 +27,9 @@ def clear_external_env(monkeypatch):
         "WHISCODE_EXTERNAL_EXTENSIONS",
         "WHISCODE_EXTERNAL_POLL_SECONDS",
         "WHISCODE_EXTERNAL_STABLE_SECONDS",
+        "WHISCODE_EXTERNAL_SMB_USERNAME",
+        "WHISCODE_EXTERNAL_SMB_PASSWORD",
+        "WHISCODE_EXTERNAL_SMB_DOMAIN",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -216,8 +219,8 @@ def test_parse_args_external_options():
         "1.25",
     ])
 
-    assert args.external_audio_inbox == Path("/tmp/inbox")
-    assert args.external_transcript_outbox == Path("/tmp/outbox")
+    assert args.external_audio_inbox == "/tmp/inbox"
+    assert args.external_transcript_outbox == "/tmp/outbox"
     assert args.external_poll_seconds == 0.5
     assert args.external_stable_seconds == 1.25
 
@@ -230,11 +233,23 @@ def test_parse_args_external_env_defaults(monkeypatch):
 
     args = parse_args([])
 
-    assert args.external_audio_inbox == Path("/tmp/env-inbox")
-    assert args.external_transcript_outbox == Path("/tmp/outbox")
+    assert args.external_audio_inbox == "/tmp/env-inbox"
+    assert args.external_transcript_outbox is None
     assert args.external_extensions == (".ogg", ".m4a")
     assert args.external_poll_seconds == 3.0
     assert args.external_stable_seconds == 7.0
+
+
+def test_parse_args_preserves_smb_urls():
+    args = parse_args([
+        "--asr-backend",
+        "mlx-vibevoice",
+        "--external-audio-inbox",
+        "smb://192.168.4.21/NAS_1/whiscode/inbox",
+    ])
+
+    assert args.external_audio_inbox == "smb://192.168.4.21/NAS_1/whiscode/inbox"
+    assert args.external_transcript_outbox is None
 
 
 def test_external_intake_requires_mlx_vibevoice_backend():

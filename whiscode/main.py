@@ -45,10 +45,12 @@ from whiscode.external_transcription import (
     DEFAULT_EXTERNAL_POLL_SECONDS,
     DEFAULT_EXTERNAL_STABLE_SECONDS,
     ExternalAudioWatcher,
+    ExternalConfigError,
     ExternalFileJob,
     ExternalFileQueue,
     ExternalTranscriptionConfig,
-    default_external_outbox,
+    SmbCredentials,
+    build_external_storage,
     parse_external_extensions,
     process_external_transcription_job,
     watch_external_inbox,
@@ -177,8 +179,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay (default)")
     parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay")
     parser.add_argument("--recording-notifications", action="store_true", help="Keep macOS start/end notification banners in addition to the overlay")
-    parser.add_argument("--external-audio-inbox", type=Path, default=_env_path("WHISCODE_EXTERNAL_AUDIO_INBOX"), help="Watch this folder for external audio files to transcribe (mlx-vibevoice only)")
-    parser.add_argument("--external-transcript-outbox", type=Path, default=_env_path("WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX"), help="Folder for external .txt/.json transcript results (default: sibling outbox)")
+    parser.add_argument("--external-audio-inbox", default=_env_value("WHISCODE_EXTERNAL_AUDIO_INBOX"), help="Watch this folder or smb:// URL for external audio files to transcribe (mlx-vibevoice only)")
+    parser.add_argument("--external-transcript-outbox", default=_env_value("WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX"), help="Folder or smb:// URL for external .txt/.json transcript results (default: sibling outbox)")
     parser.add_argument("--external-poll-seconds", type=float, default=_env_float("WHISCODE_EXTERNAL_POLL_SECONDS", DEFAULT_EXTERNAL_POLL_SECONDS), help=f"External inbox scan cadence in seconds (default: {DEFAULT_EXTERNAL_POLL_SECONDS})")
     parser.add_argument("--external-stable-seconds", type=float, default=_env_float("WHISCODE_EXTERNAL_STABLE_SECONDS", DEFAULT_EXTERNAL_STABLE_SECONDS), help=f"Seconds an external file must stop changing before queueing (default: {DEFAULT_EXTERNAL_STABLE_SECONDS})")
     args = parser.parse_args(argv)
@@ -192,13 +194,6 @@ def parse_args(argv: list[str] | None = None):
     if args.hands_free_max_seconds is None:
         args.hands_free_max_seconds = args.max_recording_seconds
     args.external_extensions = parse_external_extensions(os.environ.get("WHISCODE_EXTERNAL_EXTENSIONS"))
-    if args.external_audio_inbox is not None:
-        args.external_audio_inbox = args.external_audio_inbox.expanduser()
-        args.external_transcript_outbox = (
-            args.external_transcript_outbox.expanduser()
-            if args.external_transcript_outbox is not None
-            else default_external_outbox(args.external_audio_inbox)
-        )
     if args.external_poll_seconds <= 0:
         parser.error("--external-poll-seconds must be greater than 0")
     if args.external_stable_seconds < 0:
@@ -206,9 +201,9 @@ def parse_args(argv: list[str] | None = None):
     return args
 
 
-def _env_path(name: str) -> Path | None:
+def _env_value(name: str) -> str | None:
     value = os.environ.get(name)
-    return Path(value) if value else None
+    return value if value else None
 
 
 def _env_float(name: str, default: float) -> float:
@@ -576,16 +571,27 @@ def main():
     start_reminders(stats)
     overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry)
     transcription_jobs = TranscriptionJobQueue(capacity=DEFAULT_TRANSCRIPTION_QUEUE_CAPACITY)
+    external_storage = None
+    if args.external_audio_inbox is not None:
+        try:
+            external_storage = build_external_storage(
+                inbox=args.external_audio_inbox,
+                outbox=args.external_transcript_outbox,
+                smb_credentials=_smb_credentials_from_env(),
+            )
+        except ExternalConfigError as e:
+            telemetry.emit("app.failed", reason="external_config_invalid", error_type=type(e).__name__)
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
     external_queue = ExternalFileQueue() if args.external_audio_inbox is not None else None
     external_config = (
         ExternalTranscriptionConfig(
-            inbox=args.external_audio_inbox,
-            outbox=args.external_transcript_outbox,
+            storage=external_storage,
             extensions=args.external_extensions,
             poll_seconds=args.external_poll_seconds,
             stable_seconds=args.external_stable_seconds,
         )
-        if args.external_audio_inbox is not None
+        if external_storage is not None
         else None
     )
 
@@ -823,6 +829,7 @@ def main():
             file_id=job.file_id,
             extension=job.extension,
             size_bytes=job.size_bytes,
+            storage_scheme=external_config.storage.scheme,
             backend=asr_backend.backend_name,
             model=asr_backend.model_label,
         )
@@ -840,6 +847,7 @@ def main():
                 file_id=job.file_id,
                 extension=job.extension,
                 size_bytes=job.size_bytes,
+                storage_scheme=external_config.storage.scheme,
                 audio_seconds=round(audio_seconds, 3) if audio_seconds is not None else None,
                 duration_seconds=round(time.monotonic() - started, 3),
                 backend=asr_backend.backend_name,
@@ -856,6 +864,7 @@ def main():
                 file_id=job.file_id,
                 extension=job.extension,
                 size_bytes=job.size_bytes,
+                storage_scheme=external_config.storage.scheme,
                 audio_seconds=round(audio_seconds, 3) if audio_seconds is not None else None,
                 duration_seconds=round(result.processing_seconds, 3),
                 backend=asr_backend.backend_name,
@@ -870,6 +879,7 @@ def main():
             file_id=job.file_id,
             extension=job.extension,
             size_bytes=job.size_bytes,
+            storage_scheme=external_config.storage.scheme,
             audio_seconds=round(audio_seconds, 3) if audio_seconds is not None else None,
             duration_seconds=round(result.processing_seconds, 3),
             backend=asr_backend.backend_name,
@@ -1077,8 +1087,7 @@ def main():
         watcher = ExternalAudioWatcher(external_config, external_queue, telemetry=telemetry)
         threading.Thread(target=watch_external_inbox, kwargs={"watcher": watcher, "stop_event": shutdown_event}, daemon=True).start()
         threading.Thread(target=external_worker, daemon=True).start()
-        print(f"External audio inbox enabled: {external_config.inbox}")
-        print(f"External transcript outbox: {external_config.outbox}")
+        print(f"External audio inbox enabled: {external_config.storage.safe_description()}")
 
     if args.hands_free:
         try:
@@ -1166,6 +1175,20 @@ def main():
 def runtime_telemetry_enabled_by_default(args) -> bool:
     del args
     return True
+
+
+def _smb_credentials_from_env() -> SmbCredentials | None:
+    username = os.environ.get("WHISCODE_EXTERNAL_SMB_USERNAME")
+    password = os.environ.get("WHISCODE_EXTERNAL_SMB_PASSWORD")
+    if not username and not password:
+        return None
+    if not username or not password:
+        raise ExternalConfigError("SMB external intake requires both WHISCODE_EXTERNAL_SMB_USERNAME and WHISCODE_EXTERNAL_SMB_PASSWORD")
+    return SmbCredentials(
+        username=username,
+        password=password,
+        domain=os.environ.get("WHISCODE_EXTERNAL_SMB_DOMAIN") or None,
+    )
 
 
 if __name__ == "__main__":
