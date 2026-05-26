@@ -43,3 +43,23 @@
 
 ### Verification
 - `uv run --with pytest pytest` passed: 230 tests.
+
+## 2026-05-26 Closeout
+
+### Done
+- Merged task branch `external-nas-transcription-queue` into local `main` with a fast-forward merge.
+- Archived the active plan to `.agents/plans/archive/2026-05-26-external-nas-transcription-queue.md`.
+- Removed worktree `.agents/worktrees/external-nas-transcription-queue`.
+- Deleted local branch `external-nas-transcription-queue`.
+- Closeout/archive commit: `a1381e9 Archive external queue implementation plan`.
+
+### Immediate Next Step
+- None. Plan is implemented and archived.
+
+### Decisions And Reasoning
+- Fast-forward merge preserved the two task commits without a merge commit.
+- Closeout bookkeeping was committed separately on local `main` after branch merge and cleanup.
+
+### Verification
+- Pre-merge verification remained `uv run --with pytest pytest`: 230 tests passed.
+- Closeout verification checked branch deletion, worktree removal, plan archival, and clean `main` status before final reporting.
