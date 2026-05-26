@@ -45,3 +45,23 @@
 - `uv run --with pytest pytest tests/test_external_transcription.py tests/test_main_cli.py` passed: 43 tests.
 - `uv run --with pytest pytest` passed: 244 tests.
 - `git diff --check` passed.
+
+## 2026-05-26 Closeout
+
+### Done
+- Fast-forward merged `smb-external-transcription` into local `main`.
+- Archived the plan to `.agents/plans/archive/2026-05-26-smb-external-transcription.md`.
+- Removed task worktree `.agents/worktrees/smb-external-transcription`.
+- Deleted local branch `smb-external-transcription`.
+- Closeout bookkeeping commit: this commit.
+
+### Immediate Next Step
+- None; task is closed.
+
+### Decisions And Reasoning
+- Used a fast-forward merge because local `main` could advance directly to the task branch tip.
+- Kept closeout metadata in a separate main commit so archived plan/checkpoint state records final cleanup.
+
+### Verification
+- Closeout ran under `.agents/scripts/main-branch-lock.sh`.
+- The implementation had already passed targeted external/CLI tests, the full test suite, and `git diff --check` before merge.

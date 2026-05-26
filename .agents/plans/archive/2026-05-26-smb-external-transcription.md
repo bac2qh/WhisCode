@@ -1,3 +1,15 @@
+> Closeout Note (2026-05-26)
+>
+> - Final status: implemented.
+> - Related checkpoint file: `.agents/checkpoints/2026-05-26-smb-external-transcription-checkpoints.md`.
+> - Implementation commit: `7fa6af4`.
+> - Checkpoint bookkeeping commit: `44f924f`.
+> - Merge commit: none (fast-forward merge to local `main`).
+> - Verification performed: targeted external/CLI tests (43 passed), full test suite (244 passed), `git diff --check`.
+> - Worktree and branch cleanup result: removed `.agents/worktrees/smb-external-transcription`; deleted local branch `smb-external-transcription`.
+> - Summary: shipped native SMB external transcription intake for `smb://` NAS inbox/outbox URLs, SMB credential env handling, `smbprotocol` dependency, SMB sidecar publishing, docs, memory, and tests.
+>
+
 # Native SMB External Transcription Queue
 
 ## Summary
