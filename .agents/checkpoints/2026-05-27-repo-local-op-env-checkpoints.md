@@ -41,3 +41,23 @@
 - `git check-ignore -v .env.1password.whiscode-smb.example` confirmed the example is unignored by the `.env*.example` exception.
 - `uv run --with pytest pytest tests/test_main_cli.py` passed: 29 tests.
 - `git diff --check` passed.
+
+## 2026-05-27 Closeout
+
+### Done
+- Fast-forward merged `repo-local-op-env` into local `main`.
+- Archived the plan to `.agents/plans/archive/2026-05-27-repo-local-op-env.md`.
+- Removed task worktree `.agents/worktrees/repo-local-op-env`.
+- Deleted local branch `repo-local-op-env`.
+- Closeout bookkeeping commit: this commit.
+
+### Immediate Next Step
+- None; task is closed.
+
+### Decisions And Reasoning
+- Used a fast-forward merge because local `main` could advance directly to the task branch tip.
+- Kept closeout metadata in a separate main commit so archived plan/checkpoint state records final cleanup.
+
+### Verification
+- Closeout ran under `.agents/scripts/main-branch-lock.sh`.
+- The implementation had already passed ignored/unignored env-file checks, CLI tests, and `git diff --check` before merge.

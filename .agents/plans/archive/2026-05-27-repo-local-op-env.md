@@ -1,3 +1,15 @@
+> Closeout Note (2026-05-27)
+>
+> - Final status: implemented.
+> - Related checkpoint file: `.agents/checkpoints/2026-05-27-repo-local-op-env-checkpoints.md`.
+> - Implementation commit: `ce3fb35`.
+> - Checkpoint bookkeeping commit: `2ee04b6`.
+> - Merge commit: none (fast-forward merge to local `main`).
+> - Verification performed: ignored real env file check, unignored example check, `tests/test_main_cli.py` (29 passed), `git diff --check`.
+> - Worktree and branch cleanup result: removed `.agents/worktrees/repo-local-op-env`; deleted local branch `repo-local-op-env`.
+> - Summary: shipped tracked `.env.1password.whiscode-smb.example`, ignored real repo-local env files, and documented `op run --env-file .env.1password.whiscode-smb` instead of `~/.zshrc` exports.
+>
+
 # Repo-Local 1Password Env Pointer File
 
 ## Summary
