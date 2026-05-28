@@ -26,9 +26,10 @@
 - Updated README and ASR wiki docs to standardize on `.env.1password.whiscode-smb` with `op run --env-file`.
 - Documented that the real file is repo-local, ignored by Git, contains 1Password reference pointers rather than plaintext secrets, and should not be replaced by `~/.zshrc` exports.
 - Updated external transcription memory and wiki/memory logs.
+- Implementation commit: `ce3fb35`.
 
 ### Immediate Next Step
-- Commit implementation, record the commit hash here, then close out by merging the task branch to local `main` under the main-branch mutex.
+- Close out by merging the task branch to local `main` under the main-branch mutex.
 
 ### Decisions And Reasoning
 - The repo should track only a placeholder example file, not a real env file with user-specific vault/item references.
