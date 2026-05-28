@@ -43,3 +43,6 @@
 ## 2026-05-26
 - Documented the MLX VibeVoice-only external NAS transcription queue, inbox/outbox contract, supported formats, ffmpeg-backed decode requirement, and two-engine manual-priority behavior.
 - Documented native SMB URL support for the external NAS transcription queue, including `op run` credential environment variables and unmounted NAS operation.
+
+## 2026-05-27
+- Added repo-local 1Password env pointer file guidance for SMB NAS launch config. The tracked template is `.env.1password.whiscode-smb.example`; the real `.env.1password.whiscode-smb` remains ignored and is used with `op run --env-file`.

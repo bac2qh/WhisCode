@@ -66,3 +66,6 @@
 - Added external transcription queue memory after implementing the MLX VibeVoice-only NAS inbox/outbox watcher and two-engine manual-priority behavior.
 - Updated repository hygiene memory after replacing the main-branch closeout mutex helper with the Nix-style `run`/`status` helper and explicit lock-create failure diagnostics.
 - Updated external transcription queue memory after adding native SMB URL support for unmounted NAS inbox/outbox paths with credentials supplied by `op run` environment variables.
+
+## 2026-05-27
+- Standardized the external SMB launch config on an ignored repo-local `.env.1password.whiscode-smb` pointer file copied from tracked `.env.1password.whiscode-smb.example`; values should be 1Password `op://...` references and not plaintext secrets or `~/.zshrc` exports.

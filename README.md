@@ -134,7 +134,7 @@ uv run whiscode --asr-backend mlx-vibevoice \
   --external-audio-inbox smb://192.168.4.21/NAS_1/whiscode/inbox
 ```
 
-When `--external-transcript-outbox` is omitted, WhisCode writes results to a sibling `outbox` folder next to the inbox. For the SMB example above, the default outbox is `smb://192.168.4.21/NAS_1/whiscode/outbox`. The same settings can be supplied with environment variables:
+When `--external-transcript-outbox` is omitted, WhisCode writes results to a sibling `outbox` folder next to the inbox. For the SMB example above, the default outbox is `smb://192.168.4.21/NAS_1/whiscode/outbox`. Keep these settings in a repo-local `.env.1password.whiscode-smb` file copied from `.env.1password.whiscode-smb.example`, not in `~/.zshrc`:
 
 ```bash
 WHISCODE_EXTERNAL_AUDIO_INBOX=smb://192.168.4.21/NAS_1/whiscode/inbox
@@ -142,15 +142,15 @@ WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX=smb://192.168.4.21/NAS_1/whiscode/outbox
 WHISCODE_EXTERNAL_EXTENSIONS=.wav,.mp3,.flac,.ogg,.opus,.m4a,.aac
 WHISCODE_EXTERNAL_POLL_SECONDS=2
 WHISCODE_EXTERNAL_STABLE_SECONDS=5
-WHISCODE_EXTERNAL_SMB_USERNAME="op://Private/WhisCode NAS/username"
-WHISCODE_EXTERNAL_SMB_PASSWORD="op://Private/WhisCode NAS/password"
+WHISCODE_EXTERNAL_SMB_USERNAME="op://<vault>/<item>/username"
+WHISCODE_EXTERNAL_SMB_PASSWORD="op://<vault>/<item>/password"
 WHISCODE_EXTERNAL_SMB_DOMAIN=WORKGROUP
 ```
 
-Run with 1Password so SMB credentials are injected only into the WhisCode process:
+The real `.env.1password.whiscode-smb` file is ignored by Git. It should contain 1Password reference pointers such as `op://...`, not plaintext SMB credentials. Run with 1Password so the referenced SMB credentials are resolved and injected only into the WhisCode process:
 
 ```bash
-op run --env-file .env.whiscode-smb -- \
+op run --env-file .env.1password.whiscode-smb -- \
   uv run whiscode --asr-backend mlx-vibevoice
 ```
 

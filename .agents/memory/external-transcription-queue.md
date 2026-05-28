@@ -12,3 +12,7 @@
 - SMB credentials are read from `WHISCODE_EXTERNAL_SMB_USERNAME`, `WHISCODE_EXTERNAL_SMB_PASSWORD`, and optional `WHISCODE_EXTERNAL_SMB_DOMAIN`, intended to be supplied by `op run`. Credentials embedded in SMB URLs are rejected.
 - SMB audio files are streamed to a temporary local file with the original suffix before MLX-Audio decoding. SMB result sidecars are written to temporary remote files and then published with SMB replace/rename.
 - Routine telemetry records only bounded storage scheme and file/job metadata; it must not include SMB credentials, full SMB URLs, transcript text, or raw audio.
+
+## 2026-05-27 Repo-Local 1Password Env Pointer File
+- The repo standardizes SMB launch configuration on a local ignored `.env.1password.whiscode-smb` file, copied from tracked `.env.1password.whiscode-smb.example`.
+- The env file is a 1Password pointer file for `op run --env-file`: credential values should be `op://...` references, not plaintext secrets, and should not be placed in `~/.zshrc`.

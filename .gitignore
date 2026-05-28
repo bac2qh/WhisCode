@@ -4,6 +4,11 @@ __pycache__/
 *.pyo
 .DS_Store
 
+# Repo-local environment files. Track only example templates.
+.env
+.env.*
+!.env*.example
+
 # Local agent runtime state. Durable project state under .agents/plans,
 # .agents/checkpoints, and .agents/memory is intentionally tracked.
 .agents/worktree/
