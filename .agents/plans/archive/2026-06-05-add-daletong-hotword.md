@@ -1,3 +1,13 @@
+# Closeout Note
+
+- Final status: complete.
+- Related checkpoint: .agents/checkpoints/2026-06-05-add-daletong-hotword-checkpoints.md.
+- Implementation commits: 46dd6d6 (tracked hotword example and task state), e21db34 (checkpoint bookkeeping).
+- Merge result: fast-forward local main to e21db34; no merge commit.
+- Verification performed: uv run --with pytest python -m pytest tests/test_hotwords.py passed with 6 tests; parser check confirmed 达乐通 is a plain hotword in both the tracked example and runtime config; git diff --check passed.
+- Worktree/branch cleanup: removed task worktree; deleted local branch task/add-daletong-hotword.
+- Shipped summary: added 达乐通 to WhisCode hotwords.
+
 # Add Daletong Hotword
 
 Date: 2026-06-05
