@@ -26,4 +26,5 @@ Plan: `.agents/plans/2026-06-05-add-daletong-hotword.md`
   - `git diff --check` passed.
 - VC-001 passed.
 - VC-002 passed.
-- Immediate next step: commit the tracked example plus task state, then close out to local `main`.
+- Implementation commit: `46dd6d6` (`Add Daletong hotword`).
+- Immediate next step: commit checkpoint bookkeeping, then close out to local `main`.
