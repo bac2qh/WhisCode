@@ -11,6 +11,7 @@
 #    Applied case-insensitively before other post-processing.
 
 # --- Hot words ---
+达乐通
 # Kubernetes
 # PostgreSQL
 # FastAPI
