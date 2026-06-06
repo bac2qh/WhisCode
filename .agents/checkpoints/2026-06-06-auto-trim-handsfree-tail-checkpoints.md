@@ -11,6 +11,7 @@
 - Immediate next step: inspect current `whiscode/handsfree.py`, `whiscode/main.py`, README, and focused tests, then implement the resolver/helper and tests.
 
 ## 2026-06-06 Implementation
+- Implementation commit: `6624420` (`Infer hands-free end tail from references`)
 - Added `HandsFreeTailResolution`, `active_span_seconds`, `reference_active_span_seconds`, `infer_hands_free_tail_seconds`, and `resolve_hands_free_tail_seconds` in `whiscode/handsfree.py`.
 - Tail inference reads enrolled end reference WAVs as 16-bit PCM, computes each valid active span from first through last sample where `abs(audio) >= active_level`, and uses the median valid span.
 - Fallback behavior returns `DEFAULT_TAIL_SECONDS` with source `fallback` and reason `no_valid_references` when no valid active span can be computed.
