@@ -54,3 +54,10 @@
   - VC-007 passed.
 - Residual risk noted by validator: live microphone hands-free flow was not exercised; validator judged this acceptable because the changed logic is setup-time tail resolution plus existing session tail handling covered by focused tests and probes.
 - Immediate next step: commit implementation and bookkeeping, then close out the task branch/worktree.
+
+## 2026-06-06 Closeout
+- Fast-forward merged  into local  at ; no merge commit.
+- Removed task worktree .
+- Deleted local branch .
+- Archived plan to .
+- Closeout bookkeeping committed on local  after archive/checkpoint update.

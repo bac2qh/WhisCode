@@ -1,3 +1,13 @@
+# Closeout Note
+
+- Final status: complete.
+- Related checkpoint: .agents/checkpoints/2026-06-06-auto-trim-handsfree-tail-checkpoints.md.
+- Implementation commits: 6624420 (implementation, tests, docs, memory, plan/checkpoint), de109f4 (checkpoint bookkeeping).
+- Merge result: fast-forward local main to de109f4; no merge commit.
+- Verification performed: git diff --check passed; uv run --with pytest pytest tests/test_handsfree.py tests/test_main_cli.py passed with 56 tests; mission_validator 019e9b5c-6240-7b53-ad0f-33c500906a38 approved all validation assertions and ran an ad hoc resolver/session probe.
+- Worktree/branch cleanup: removed task worktree .agents/worktrees/auto-trim-handsfree-tail; deleted local branch feature/auto-trim-handsfree-tail.
+- Shipped summary: omitted --hands-free-tail-seconds now infers end-tail trim from enrolled end reference WAV active spans, preserves explicit overrides, falls back to 1.0s when needed, and emits bounded setup telemetry.
+
 # Auto-Trim Hands-Free End Phrase Tail
 
 ## Status
