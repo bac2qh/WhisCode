@@ -1,5 +1,15 @@
 # Fix Overlay Process Table Decode
 
+## Closeout Note
+- Final status: completed and merged into local `main` on 2026-06-06.
+- Related checkpoint: `.agents/checkpoints/2026-06-06-fix-overlay-ps-decode-checkpoints.md`
+- Implementation commit: `a532d71` (`Harden overlay process table decoding`).
+- Checkpoint/bookkeeping commit: `4ac4419` (`Record overlay decode checkpoint`).
+- Merge result: fast-forward merge into local `main` from `5e8ede2` to `4ac4419`; no merge commit.
+- Verification performed: `uv run --with pytest python -m pytest tests/test_recording_overlay.py` (`20 passed`), `git diff --check`, sanitized live `overlay_helper_processes()` smoke check with helper count/PID/PPID output only, and independent `mission_validator` approval with `VC-001` through `VC-005` passed.
+- Worktree/branch cleanup: removed `.agents/worktrees/fix-overlay-ps-decode` and deleted local branch `task/fix-overlay-ps-decode` under the main-branch mutex.
+- Shipped summary: overlay helper discovery now reads live `ps` output as bytes and decodes with UTF-8 replacement semantics, so malformed non-helper process command bytes cannot crash orphan cleanup before hands-free overlay startup. Helper detection and `--cleanup-orphans` filtering remain unchanged.
+
 ## Status
 - Created: 2026-06-06
 - Branch: `task/fix-overlay-ps-decode`

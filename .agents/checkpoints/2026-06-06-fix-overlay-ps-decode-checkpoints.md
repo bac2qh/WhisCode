@@ -1,7 +1,7 @@
 # Fix Overlay Process Table Decode Checkpoints
 
 ## 2026-06-06 Initial Checkpoint
-- Plan: `.agents/plans/2026-06-06-fix-overlay-ps-decode.md`
+- Plan: `.agents/plans/archive/2026-06-06-fix-overlay-ps-decode.md`
 - Branch/worktree: `task/fix-overlay-ps-decode` at `.agents/worktrees/fix-overlay-ps-decode`
 - Main-project root: `/Users/xin/Documents/repos/WhisCode`
 - Source state: fresh worktree created from clean local `main` at `5e8ede2`.
@@ -17,6 +17,10 @@
 - Added a regression test for invalid `ps` bytes that preserves helper detection and cleanup-command filtering.
 - Updated recording overlay wiki and memory with the durable process-table scan behavior.
 - Implementation commit: `a532d71` (`Harden overlay process table decoding`).
+- Checkpoint/bookkeeping commit: `4ac4419` (`Record overlay decode checkpoint`).
+- Fast-forward merged into local `main` from `5e8ede2` to `4ac4419`.
+- Removed task worktree `.agents/worktrees/fix-overlay-ps-decode` and deleted local branch `task/fix-overlay-ps-decode`.
+- Archived the plan to `.agents/plans/archive/2026-06-06-fix-overlay-ps-decode.md`.
 
 ## Validation Contract
 - `VC-001` critical: malformed non-helper `ps` command bytes cannot crash hands-free overlay startup.
@@ -26,7 +30,7 @@
 - `VC-005` advisory: a live sanitized process-table smoke check completes without printing command lines.
 
 ## Immediate Next Step
-Record durable wiki/memory notes, commit implementation, then perform closeout.
+None. Closeout is complete.
 
 ## Decisions And Reasoning
 - Keep the fix narrow: tolerate malformed process table bytes with UTF-8 replacement semantics and leave helper filtering unchanged.
