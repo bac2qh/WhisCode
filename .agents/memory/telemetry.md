@@ -12,3 +12,6 @@
 ## 2026-05-25
 - The optional `mlx-vibevoice` backend emits bounded `mlx_vibevoice.model_load_*` and `mlx_vibevoice.transcription_*` telemetry. These events use safe model labels, durations, audio length, hotword counts, prompt presence, context length, output length, and error types.
 - MLX VibeVoice telemetry intentionally excludes raw audio, transcript text, prompts, hotword contents, full model paths, tokenizer payloads, and raw model output.
+
+## 2026-06-06
+- Hands-free setup emits `handsfree.tail_seconds_resolved` after resolving end-tail trim length. The payload is bounded to source (`inferred`, `explicit`, or `fallback`), rounded resolved seconds, reference counts, valid active-span counts, and a small fallback reason enum; it excludes raw audio, phrase text, transcripts, sample data, and paths.

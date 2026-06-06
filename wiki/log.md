@@ -46,3 +46,6 @@
 
 ## 2026-05-27
 - Added repo-local 1Password env pointer file guidance for SMB NAS launch config. The tracked template is `.env.1password.whiscode-smb.example`; the real `.env.1password.whiscode-smb` remains ignored and is used with `op run --env-file`.
+
+## 2026-06-06
+- Documented hands-free end-tail auto-inference from enrolled end-phrase WAV active spans, the explicit `--hands-free-tail-seconds` override, the `1.0` second fallback, and bounded tail-resolution telemetry.

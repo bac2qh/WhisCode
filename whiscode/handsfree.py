@@ -5,6 +5,7 @@ import queue
 import sys
 import threading
 import time
+import wave
 from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
@@ -138,6 +139,92 @@ def reference_sample_count(path: Path) -> int:
     return len(list(Path(path).glob("*.wav"))) if Path(path).exists() else 0
 
 
+@dataclass(frozen=True)
+class HandsFreeTailResolution:
+    seconds: float
+    source: str
+    reference_count: int
+    valid_reference_count: int
+    fallback_reason: str | None = None
+
+
+def active_span_seconds(
+    audio: np.ndarray,
+    *,
+    sample_rate: int = SAMPLE_RATE,
+    active_level: float = DEFAULT_ACTIVE_LEVEL,
+) -> float | None:
+    audio = np.asarray(audio, dtype=np.float32).flatten()
+    if len(audio) == 0 or sample_rate <= 0:
+        return None
+
+    active_indices = np.flatnonzero(np.abs(audio) >= active_level)
+    if len(active_indices) == 0:
+        return None
+    return float((int(active_indices[-1]) - int(active_indices[0]) + 1) / sample_rate)
+
+
+def reference_active_span_seconds(
+    path: Path,
+    *,
+    active_level: float = DEFAULT_ACTIVE_LEVEL,
+) -> float | None:
+    try:
+        audio, sample_rate = _read_reference_wav(path)
+    except (EOFError, OSError, ValueError, wave.Error):
+        return None
+    return active_span_seconds(audio, sample_rate=sample_rate, active_level=active_level)
+
+
+def infer_hands_free_tail_seconds(
+    reference_dir: Path,
+    *,
+    active_level: float = DEFAULT_ACTIVE_LEVEL,
+    fallback_seconds: float = DEFAULT_TAIL_SECONDS,
+) -> HandsFreeTailResolution:
+    wavs = _reference_wav_paths(reference_dir)
+    spans = [
+        span
+        for path in wavs
+        if (span := reference_active_span_seconds(path, active_level=active_level)) is not None
+    ]
+    if spans:
+        return HandsFreeTailResolution(
+            seconds=float(np.median(spans)),
+            source="inferred",
+            reference_count=len(wavs),
+            valid_reference_count=len(spans),
+        )
+    return HandsFreeTailResolution(
+        seconds=float(fallback_seconds),
+        source="fallback",
+        reference_count=len(wavs),
+        valid_reference_count=0,
+        fallback_reason="no_valid_references",
+    )
+
+
+def resolve_hands_free_tail_seconds(
+    explicit_tail_seconds: float | None,
+    reference_dir: Path,
+    *,
+    active_level: float = DEFAULT_ACTIVE_LEVEL,
+    fallback_seconds: float = DEFAULT_TAIL_SECONDS,
+) -> HandsFreeTailResolution:
+    if explicit_tail_seconds is not None:
+        return HandsFreeTailResolution(
+            seconds=float(explicit_tail_seconds),
+            source="explicit",
+            reference_count=len(_reference_wav_paths(reference_dir)),
+            valid_reference_count=0,
+        )
+    return infer_hands_free_tail_seconds(
+        reference_dir,
+        active_level=active_level,
+        fallback_seconds=fallback_seconds,
+    )
+
+
 def missing_reference_messages(
     wake_dir: Path,
     end_dir: Path,
@@ -267,7 +354,8 @@ class HandsFreeSession:
         self.window_samples = max(1, int(window_seconds * sample_rate))
         self.slide_samples = max(1, int(slide_seconds * sample_rate))
         self.max_samples = int(max_seconds * sample_rate) if max_seconds > 0 else 0
-        self.tail_samples = max(1, int((tail_seconds or DEFAULT_TAIL_SECONDS) * sample_rate))
+        resolved_tail_seconds = DEFAULT_TAIL_SECONDS if tail_seconds is None else tail_seconds
+        self.tail_samples = max(0, int(resolved_tail_seconds * sample_rate))
         self.debug = debug
         self.telemetry = telemetry
         self.distance_summary_seconds = distance_summary_seconds
@@ -832,6 +920,32 @@ def _audio_metrics(audio: np.ndarray, active_level: float) -> tuple[float, float
     rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float32))))
     active_ratio = float(np.mean(np.abs(audio) >= active_level))
     return rms, active_ratio
+
+
+def _reference_wav_paths(reference_dir: Path) -> tuple[Path, ...]:
+    try:
+        return tuple(sorted(Path(reference_dir).glob("*.wav")))
+    except OSError:
+        return ()
+
+
+def _read_reference_wav(path: Path) -> tuple[np.ndarray, int]:
+    with wave.open(str(path), "rb") as f:
+        channels = f.getnchannels()
+        sample_width = f.getsampwidth()
+        sample_rate = f.getframerate()
+        frames = f.getnframes()
+        data = f.readframes(frames)
+
+    if channels <= 0:
+        raise ValueError("WAV must have at least one channel.")
+    if sample_width != 2:
+        raise ValueError(f"Expected 16-bit PCM WAV; got sample width {sample_width}.")
+
+    audio = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32767.0
+    if channels > 1:
+        audio = audio.reshape(-1, channels).mean(axis=1)
+    return audio.astype(np.float32), sample_rate
 
 
 def _level_from_audio(audio: np.ndarray) -> float:

@@ -1,9 +1,19 @@
 import queue
 import threading
+import wave
 
 import numpy as np
 
-from whiscode.handsfree import AudioChunk, Detection, HandsFreeAudioLoop, HandsFreeEvent, HandsFreeSession
+from whiscode.handsfree import (
+    DEFAULT_TAIL_SECONDS,
+    AudioChunk,
+    Detection,
+    HandsFreeAudioLoop,
+    HandsFreeEvent,
+    HandsFreeSession,
+    reference_active_span_seconds,
+    resolve_hands_free_tail_seconds,
+)
 
 
 class FakeDetector:
@@ -39,6 +49,65 @@ class ThresholdDetector:
 
 def chunk(value):
     return np.array([value], dtype=np.float32)
+
+
+def write_pcm_wav(path, samples, *, sample_rate=10):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    audio = np.asarray(samples, dtype=np.float32)
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767.0).astype("<i2")
+    with wave.open(str(path), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(sample_rate)
+        f.writeframes(pcm.tobytes())
+
+
+def test_reference_active_span_seconds_uses_first_and_last_active_sample(tmp_path):
+    path = tmp_path / "end-01.wav"
+    write_pcm_wav(path, [0.0, 0.0, 0.02, 0.5, -0.02, 0.0, 0.0], sample_rate=10)
+
+    span = reference_active_span_seconds(path, active_level=0.01)
+
+    assert span is not None
+    assert round(span, 6) == 0.3
+
+
+def test_tail_seconds_inference_uses_median_valid_active_span(tmp_path):
+    write_pcm_wav(tmp_path / "end-01.wav", [0.0, 0.5, 0.5, 0.0], sample_rate=10)
+    write_pcm_wav(tmp_path / "end-02.wav", [0.0, 0.5, 0.5, 0.5, 0.0], sample_rate=10)
+    write_pcm_wav(tmp_path / "end-03.wav", [0.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0], sample_rate=10)
+
+    resolution = resolve_hands_free_tail_seconds(None, tmp_path, active_level=0.01)
+
+    assert resolution.source == "inferred"
+    assert round(resolution.seconds, 6) == 0.3
+    assert resolution.reference_count == 3
+    assert resolution.valid_reference_count == 3
+    assert resolution.fallback_reason is None
+
+
+def test_tail_seconds_inference_falls_back_without_valid_active_spans(tmp_path):
+    write_pcm_wav(tmp_path / "silent.wav", [0.0, 0.0, 0.0], sample_rate=10)
+    (tmp_path / "broken.wav").write_text("not a wav")
+
+    resolution = resolve_hands_free_tail_seconds(None, tmp_path, active_level=0.01)
+
+    assert resolution.source == "fallback"
+    assert resolution.seconds == DEFAULT_TAIL_SECONDS
+    assert resolution.reference_count == 2
+    assert resolution.valid_reference_count == 0
+    assert resolution.fallback_reason == "no_valid_references"
+
+
+def test_explicit_tail_seconds_override_wins_over_reference_inference(tmp_path):
+    write_pcm_wav(tmp_path / "end-01.wav", [0.0, 0.5, 0.5, 0.5, 0.0], sample_rate=10)
+
+    resolution = resolve_hands_free_tail_seconds(0.75, tmp_path, active_level=0.01)
+
+    assert resolution.source == "explicit"
+    assert resolution.seconds == 0.75
+    assert resolution.reference_count == 1
+    assert resolution.valid_reference_count == 0
 
 
 def test_wake_detection_starts_recording_without_capturing_wake_audio():

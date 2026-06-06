@@ -69,3 +69,7 @@
 
 ## 2026-05-27
 - Standardized the external SMB launch config on an ignored repo-local `.env.1password.whiscode-smb` pointer file copied from tracked `.env.1password.whiscode-smb.example`; values should be 1Password `op://...` references and not plaintext secrets or `~/.zshrc` exports.
+
+## 2026-06-06
+- Added hands-free tail inference memory after changing omitted `--hands-free-tail-seconds` to use the median active span from enrolled end reference WAVs, with explicit override and `1.0s` fallback behavior.
+- Added telemetry memory for the bounded `handsfree.tail_seconds_resolved` setup event.

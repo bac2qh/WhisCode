@@ -30,6 +30,7 @@ from whiscode.handsfree import (
     DEFAULT_WAKE_CONFIRMATIONS,
     DEFAULT_WINDOW_SECONDS,
     CommandConfigError,
+    HandsFreeTailResolution,
     HandsFreeAudioLoop,
     HandsFreeSession,
     LocalWakeDetector,
@@ -38,6 +39,7 @@ from whiscode.handsfree import (
     command_reference_dirs,
     missing_reference_messages,
     reference_sample_count,
+    resolve_hands_free_tail_seconds,
 )
 from whiscode.asr_engine_manager import AsrEngineManager
 from whiscode.enroll import DEFAULT_ENROLL_SECONDS, record_guided_samples
@@ -136,7 +138,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-command-threshold", type=float, default=None, help=f"Command keyword detection threshold (default: {DEFAULT_COMMAND_THRESHOLD})")
     parser.add_argument("--hands-free-window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, help=f"Detector window size in seconds (default: {DEFAULT_WINDOW_SECONDS})")
     parser.add_argument("--hands-free-slide-seconds", type=float, default=DEFAULT_SLIDE_SECONDS, help=f"Detector slide size in seconds (default: {DEFAULT_SLIDE_SECONDS})")
-    parser.add_argument("--hands-free-tail-seconds", type=float, default=DEFAULT_TAIL_SECONDS, help=f"Audio tail to discard when the end phrase is detected (default: {DEFAULT_TAIL_SECONDS})")
+    parser.add_argument("--hands-free-tail-seconds", type=float, default=None, help=f"Audio tail to discard when the end phrase is detected (default: auto-inferred from end references; fallback: {DEFAULT_TAIL_SECONDS})")
     parser.add_argument("--max-recording-seconds", type=float, default=DEFAULT_MAX_SECONDS, help=f"Maximum recording length before timeout; 0 disables (default: {DEFAULT_MAX_SECONDS})")
     parser.add_argument("--hands-free-max-seconds", type=float, default=None, help="Legacy hands-free-only recording length limit; overrides --max-recording-seconds for hands-free when set")
     parser.add_argument("--hands-free-audio-queue-seconds", type=float, default=DEFAULT_AUDIO_QUEUE_SECONDS, help=f"Queued hands-free audio between mic capture and detection before oldest chunks are dropped (default: {DEFAULT_AUDIO_QUEUE_SECONDS})")
@@ -193,6 +195,8 @@ def parse_args(argv: list[str] | None = None):
         args.hands_free_command_threshold = args.hands_free_threshold if wake_threshold_supplied else DEFAULT_COMMAND_THRESHOLD
     if args.hands_free_max_seconds is None:
         args.hands_free_max_seconds = args.max_recording_seconds
+    if args.hands_free_tail_seconds is not None and args.hands_free_tail_seconds < 0:
+        parser.error("--hands-free-tail-seconds must be non-negative")
     args.external_extensions = parse_external_extensions(os.environ.get("WHISCODE_EXTERNAL_EXTENSIONS"))
     if args.external_poll_seconds <= 0:
         parser.error("--external-poll-seconds must be greater than 0")
@@ -306,6 +310,18 @@ def resolve_active_command_slots(args, *, telemetry=None):
             disabled_command_count=len(command_reference_dirs(args.hands_free_command_dir)) - len(slots),
         )
     return slots
+
+
+def _emit_hands_free_tail_resolution(telemetry, resolution: HandsFreeTailResolution) -> None:
+    if telemetry:
+        telemetry.emit(
+            "handsfree.tail_seconds_resolved",
+            source=resolution.source,
+            resolved_seconds=round(resolution.seconds, 6),
+            reference_count=resolution.reference_count,
+            valid_reference_count=resolution.valid_reference_count,
+            fallback_reason=resolution.fallback_reason,
+        )
 
 
 def ensure_hands_free_references(
@@ -1098,6 +1114,12 @@ def main():
                 command_threshold=args.hands_free_command_threshold,
                 command_count=len(active_slots),
             )
+            tail_resolution = resolve_hands_free_tail_seconds(
+                args.hands_free_tail_seconds,
+                args.hands_free_end_dir,
+                active_level=args.hands_free_active_level,
+            )
+            _emit_hands_free_tail_resolution(telemetry, tail_resolution)
             wake_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)
             end_detector = LocalWakeDetector(args.hands_free_end_dir, args.hands_free_end_threshold)
             command_detectors = {
@@ -1115,7 +1137,7 @@ def main():
             end_detector,
             window_seconds=args.hands_free_window_seconds,
             slide_seconds=args.hands_free_slide_seconds,
-            tail_seconds=args.hands_free_tail_seconds,
+            tail_seconds=tail_resolution.seconds,
             max_seconds=args.hands_free_max_seconds,
             debug=args.hands_free_debug,
             telemetry=telemetry,

@@ -38,3 +38,7 @@
 ## 2026-05-24
 - Hands-free wake/end recordings now enqueue for transcription instead of suspending the detector until transcription completes. After an end phrase, timeout, or manual stop, the session resets to idle and can accept another wake phrase while the transcription worker drains prior jobs.
 - Hands-free command detection is disabled only while actively recording; it can run while earlier audio is queued or transcribing.
+
+## 2026-06-06
+- Omitted `--hands-free-tail-seconds` now auto-infers the end-phrase trim tail from enrolled end reference WAVs. Each readable reference contributes the active span from first through last sample where `abs(audio) >= --hands-free-active-level`; runtime uses the median valid span and falls back to `1.0s` when none can be computed.
+- Explicit `--hands-free-tail-seconds FLOAT` still wins. End-phrase stops trim the resolved pending tail, while manual/Right Shift stops and timeout stops keep pending tail audio.

@@ -58,7 +58,7 @@ uv run whiscode --hands-free
 | `--hands-free-end-threshold FLOAT` | `0.055` | Detection threshold for end phrase matching |
 | `--hands-free-command-threshold FLOAT` | `0.055` | Detection threshold for hands-free key command matching |
 | `--hands-free-command-config PATH` | `~/.config/whiscode/commands.ini` | Hands-free command enablement config |
-| `--hands-free-tail-seconds FLOAT` | `1.0` | Audio tail to discard when the end phrase is detected |
+| `--hands-free-tail-seconds FLOAT` | auto, fallback `1.0` | Audio tail to discard when the end phrase is detected; omitted values are inferred from end phrase references |
 | `--hands-free-audio-queue-seconds FLOAT` | `10.0` | Queued hands-free audio allowed between mic capture and detection before oldest chunks are dropped |
 | `--hands-free-min-rms FLOAT` | `0.006` | Minimum detector-window RMS before keyword matching |
 | `--hands-free-min-active-ratio FLOAT` | `0.05` | Minimum ratio of active samples before keyword matching |

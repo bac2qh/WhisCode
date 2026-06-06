@@ -2,9 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from whiscode.handsfree import command_reference_dirs
+from whiscode.handsfree import HandsFreeTailResolution, command_reference_dirs
 from whiscode.main import (
     _default_whisper_processor_source,
+    _emit_hands_free_tail_resolution,
     _format_transcript_for_stdout,
     _print_transcript_for_stdout,
     ensure_hands_free_references,
@@ -68,6 +69,7 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.hands_free_command_config.name == "commands.ini"
     assert args.max_recording_seconds == 600.0
     assert args.hands_free_max_seconds == 600.0
+    assert args.hands_free_tail_seconds is None
     assert args.hands_free_audio_queue_seconds == 10.0
     assert args.model == "mlx-community/whisper-large-v3-mlx"
     assert args.llama_port == 8091
@@ -112,6 +114,19 @@ def test_help_marks_crispasr_as_legacy(capsys):
     assert "mlx-vibevoice" in output
     assert "VibeVoice" in output
     assert "crispasr is legacy" in output
+
+
+def test_help_describes_hands_free_tail_auto_inference(capsys):
+    try:
+        parse_args(["--help"])
+    except SystemExit as e:
+        assert e.code == 0
+
+    output = capsys.readouterr().out
+    assert "--hands-free-tail-seconds" in output
+    assert "auto-inferred from end references" in output
+    assert "fallback:" in output
+    assert "1.0" in output
 
 
 def test_parse_args_llama_cpp_options():
@@ -364,6 +379,44 @@ def test_parse_args_zero_disables_shared_max_recording_seconds():
 
     assert args.max_recording_seconds == 0
     assert args.hands_free_max_seconds == 0
+
+
+def test_parse_args_rejects_negative_hands_free_tail_seconds():
+    with pytest.raises(SystemExit):
+        parse_args(["--hands-free-tail-seconds", "-0.1"])
+
+
+def test_emit_hands_free_tail_resolution_uses_bounded_payload():
+    telemetry = FakeTelemetry()
+    resolution = HandsFreeTailResolution(
+        seconds=0.3456789,
+        source="inferred",
+        reference_count=3,
+        valid_reference_count=2,
+    )
+
+    _emit_hands_free_tail_resolution(telemetry, resolution)
+
+    assert telemetry.events == [
+        (
+            "handsfree.tail_seconds_resolved",
+            {
+                "source": "inferred",
+                "resolved_seconds": 0.345679,
+                "reference_count": 3,
+                "valid_reference_count": 2,
+                "fallback_reason": None,
+            },
+        )
+    ]
+    keys = set(telemetry.events[0][1])
+    assert keys == {
+        "source",
+        "resolved_seconds",
+        "reference_count",
+        "valid_reference_count",
+        "fallback_reason",
+    }
 
 
 def test_default_whisper_processor_source_maps_mlx_default_to_openai_model():
