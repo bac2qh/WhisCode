@@ -15,6 +15,8 @@
 - Saved this plan/checkpoint before source edits.
 - Implemented tolerant process-table decoding for overlay helper discovery.
 - Added a regression test for invalid `ps` bytes that preserves helper detection and cleanup-command filtering.
+- Updated recording overlay wiki and memory with the durable process-table scan behavior.
+- Implementation commit: `a532d71` (`Harden overlay process table decoding`).
 
 ## Validation Contract
 - `VC-001` critical: malformed non-helper `ps` command bytes cannot crash hands-free overlay startup.
@@ -35,4 +37,4 @@ Record durable wiki/memory notes, commit implementation, then perform closeout.
 - Passed: `uv run --with pytest python -m pytest tests/test_recording_overlay.py` (`20 passed`).
 - Passed: `git diff --check`.
 - Passed: sanitized live smoke check printed only `{'helper_count': 0, 'helpers': []}`.
-- Passed: independent `mission_validator` review returned `APPROVE` with `VC-001` through `VC-005` passed.
+- Passed: independent `mission_validator` review returned `APPROVE` with `VC-001` through `VC-005` passed and no findings.
