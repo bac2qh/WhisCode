@@ -56,8 +56,9 @@
 - Immediate next step: commit implementation and bookkeeping, then close out the task branch/worktree.
 
 ## 2026-06-06 Closeout
-- Fast-forward merged  into local  at ; no merge commit.
-- Removed task worktree .
-- Deleted local branch .
-- Archived plan to .
-- Closeout bookkeeping committed on local  after archive/checkpoint update.
+- Fast-forward merged feature/auto-trim-handsfree-tail into local main at de109f4; no merge commit.
+- Removed task worktree .agents/worktrees/auto-trim-handsfree-tail.
+- Deleted local branch feature/auto-trim-handsfree-tail.
+- Archived plan to .agents/plans/archive/2026-06-06-auto-trim-handsfree-tail.md.
+- Archive closeout commit: c840587.
+- Corrected this closeout checkpoint wording after shell command substitution stripped the original backticked values.
