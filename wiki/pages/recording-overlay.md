@@ -18,7 +18,7 @@ For backends without an in-flight progress source, the overlay still shows queue
 
 The overlay is implemented as a separate AppKit helper process controlled by the main WhisCode process through newline-delimited JSON commands. Runtime recording/transcription cards use stable job ids so a card can move from recording to queued to transcribing before it disappears. If the helper cannot start, recording and transcription continue without the overlay. If the parent command stream closes, the helper treats EOF as a stop command so orphaned panels do not remain on screen. The helper also monitors its parent PID and exits if the parent process disappears before stdin reaches EOF.
 
-Before launching a new helper, WhisCode removes stale orphan helpers whose parent process is already gone. Manual cleanup is available with `python -m whiscode.recording_overlay --cleanup-orphans`.
+Before launching a new helper, WhisCode removes stale orphan helpers whose parent process is already gone. The process-table scan tolerates malformed non-UTF-8 command bytes and still filters only WhisCode overlay helper commands. Manual cleanup is available with `python -m whiscode.recording_overlay --cleanup-orphans`.
 
 If the helper exits unexpectedly after startup, WhisCode disables the overlay for the current process and reports bounded diagnostic metadata through `recording_overlay.disabled` telemetry and stderr. Orphan cleanup emits `recording_overlay.orphan_cleanup` with helper counts only. Diagnostics include lifecycle stage, return code, and counts only; they do not include audio or transcribed text.
 

@@ -17,6 +17,7 @@ from whiscode.recording_overlay import (
     _watch_parent,
     cleanup_orphan_helpers,
     main,
+    overlay_helper_processes,
 )
 
 
@@ -343,6 +344,29 @@ def test_parse_overlay_helper_processes_finds_helper_commands():
             10,
             "/usr/bin/python -m whiscode.recording_overlay --helper --parent-pid 10",
         ),
+    ]
+
+
+def test_overlay_helper_processes_tolerates_invalid_process_table_bytes():
+    ps_output = (
+        b"      111     1 /usr/bin/python -m whiscode.recording_overlay --helper --parent-pid 10\n"
+        b"      222     1 /usr/bin/python -m whiscode.recording_overlay --cleanup-orphans\n"
+        b"      333     1 /usr/bin/python unrelated-\xff-command\n"
+    )
+
+    with patch("whiscode.recording_overlay.subprocess.check_output", return_value=ps_output) as check_output:
+        processes = overlay_helper_processes()
+
+    check_output.assert_called_once_with(
+        ["ps", "-axo", "pid=,ppid=,command="],
+        stderr=subprocess.DEVNULL,
+    )
+    assert processes == [
+        OverlayHelperProcess(
+            111,
+            1,
+            "/usr/bin/python -m whiscode.recording_overlay --helper --parent-pid 10",
+        )
     ]
 
 

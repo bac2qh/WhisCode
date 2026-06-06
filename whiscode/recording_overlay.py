@@ -399,13 +399,14 @@ def _parse_overlay_helper_processes(ps_output: str) -> list[OverlayHelperProcess
     return processes
 
 
-def overlay_helper_processes(*, ps_output: str | None = None) -> list[OverlayHelperProcess]:
+def overlay_helper_processes(*, ps_output: str | bytes | None = None) -> list[OverlayHelperProcess]:
     if ps_output is None:
         ps_output = subprocess.check_output(
             ["ps", "-axo", "pid=,ppid=,command="],
-            text=True,
             stderr=subprocess.DEVNULL,
         )
+    if isinstance(ps_output, bytes):
+        ps_output = ps_output.decode("utf-8", errors="replace")
     return _parse_overlay_helper_processes(ps_output)
 
 

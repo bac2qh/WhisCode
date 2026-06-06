@@ -29,6 +29,7 @@
 - Helpers now receive the parent WhisCode PID and schedule their normal stop path if the parent disappears before stdin EOF is delivered.
 - WhisCode also performs startup cleanup of stale orphan helpers only when their PPID is `1`, leaving helpers with a live WhisCode parent alone.
 - Added `python -m whiscode.recording_overlay --cleanup-orphans` for manual cleanup and bounded `recording_overlay.orphan_cleanup` telemetry that reports only found/terminated/failed counts.
+- The startup orphan-helper scan now reads raw `ps` output and decodes command bytes with UTF-8 replacement semantics. Malformed non-helper command bytes no longer disable hands-free overlay startup, while helper detection and `--cleanup-orphans` filtering remain unchanged.
 
 ## 2026-05-24
 - Runtime recording/transcription now uses stacked overlay cards keyed by transcription job id. New recordings appear at the top, older queued/transcribing cards shift down, and each card moves from recording to queued to transcribing before disappearing.
