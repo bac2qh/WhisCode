@@ -28,6 +28,22 @@ Two install options:
 
 ## Usage
 
+### Recommended daily workflow
+
+For regular dictation, the recommended current workflow is:
+
+```bash
+uv run whiscode --hands-free --asr-backend mlx-vibevoice
+```
+
+This is not a change to the CLI defaults. `uv` runs WhisCode in the project-managed environment, `--hands-free` keeps interaction natural with local phrase detection, and `--asr-backend mlx-vibevoice` selects the preferred local VibeVoice ASR backend.
+
+Say your wake phrase to start recording. While recording, say the wake phrase again to Send Chunk: WhisCode queues the current chunk, types a blank line after that transcript, and immediately starts the next recording. Use Send Chunk for long messages because smaller chunks transcribe sooner, the queue keeps moving, and the pause gives you a moment to breathe, recollect details, and organize the next thought.
+
+Say your end phrase to finish the message. **Right Shift** remains available as a fallback start/stop control, and **Right Option** + **Right Shift** remains available as a manual Send Chunk fallback while recording. Queued chunks and completed recordings type at your cursor in order.
+
+### Hotkey flow
+
 ```bash
 uv run whiscode
 ```

@@ -52,3 +52,4 @@
 - Chunk phrase stops trim a chunk-specific inferred active-span tail plus `--hands-free-tail-extra-seconds`, independent of the end-phrase tail. Manual Send Chunk uses manual-stop audio and keeps pending tail audio.
 - `whiscode-enroll chunk ...` imports chunk phrase samples, and guided enrollment records them only when `--include-chunk` is passed.
 - Retired the separate hands-free Send Chunk phrase. Hands-free Send Chunk now reuses the wake/start phrase during recording, uses the wake threshold and wake confirmation count, and trims the Send Chunk tail from wake references plus `--hands-free-tail-extra-seconds`. Existing user chunk sample folders are ignored, not deleted.
+- README daily-driver guidance now recommends `uv run whiscode --hands-free --asr-backend mlx-vibevoice` for regular dictation while explicitly keeping hands-free mode and MLX VibeVoice as opt-in choices rather than CLI defaults.
