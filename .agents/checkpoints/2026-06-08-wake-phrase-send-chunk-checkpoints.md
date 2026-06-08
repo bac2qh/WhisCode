@@ -57,4 +57,5 @@
   - Full suite -> 268 passed.
   - `git diff --check b3bf370bd107ae3a13d4cd5b1398ddfd400c0f05` -> clean.
   - Removed API/doc search -> no runtime/docs matches for removed chunk flags or `wake/chunk`; only negative tests mention removed flags.
-- Immediate next step: commit the implementation and then close out to local `main`.
+- Implementation commit: `6cc3369d1216f8333287090defac1afca3977b7e` (`Reuse wake phrase for hands-free send chunk`).
+- Immediate next step: commit this checkpoint update and then close out to local `main`.
