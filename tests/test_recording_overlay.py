@@ -32,6 +32,11 @@ def sent_commands(process):
     return [json.loads(line) for line in process.stdin.getvalue().splitlines()]
 
 
+def send_one_level_tick(client):
+    with patch("whiscode.recording_overlay.time.sleep", side_effect=lambda interval: client._stop_event.set()):
+        client._send_levels()
+
+
 def test_overlay_client_sends_show_hide_stop_commands():
     process = make_process()
 
@@ -132,6 +137,72 @@ def test_overlay_client_sends_stacked_item_commands():
         {"command": "show_transcribing", "item_id": "job-1", "audio_seconds": 1.5},
         {"command": "transcription_progress", "item_id": "job-1", "current_frames": 4, "total_frames": 8},
         {"command": "remove_item", "item_id": "job-1"},
+    ]
+
+
+def test_overlay_client_keeps_ticking_recording_when_other_item_transcribes():
+    process = make_process()
+
+    with (
+        patch("subprocess.Popen", return_value=process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+        patch.object(RecordingOverlayClient, "_ensure_sender_thread"),
+    ):
+        client = RecordingOverlayClient(update_interval=999)
+        client.show_recording_item("recording-job")
+        client.update_level(0.42)
+        client.show_transcribing_item("older-job", total_frames=10)
+        send_one_level_tick(client)
+
+    assert sent_commands(process) == [
+        {"command": "show_recording", "item_id": "recording-job"},
+        {"command": "show_transcribing", "item_id": "older-job", "total_frames": 10},
+        {"command": "level", "item_id": "recording-job", "level": 0.42},
+    ]
+
+
+def test_overlay_client_stops_ticking_recording_item_after_queue_or_remove():
+    queued_process = make_process()
+    removed_process = make_process()
+
+    with (
+        patch("subprocess.Popen", return_value=queued_process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+        patch.object(RecordingOverlayClient, "_ensure_sender_thread"),
+    ):
+        queued_client = RecordingOverlayClient(update_interval=999)
+        queued_client.show_recording_item("job")
+        queued_client.update_level(0.8)
+        queued_client.show_queued_item("job")
+        send_one_level_tick(queued_client)
+
+    with (
+        patch("subprocess.Popen", return_value=removed_process),
+        patch(
+            "whiscode.recording_overlay.cleanup_orphan_helpers",
+            return_value=OverlayCleanupResult(0, 0, 0),
+        ),
+        patch.object(RecordingOverlayClient, "_ensure_sender_thread"),
+    ):
+        removed_client = RecordingOverlayClient(update_interval=999)
+        removed_client.show_recording_item("job")
+        removed_client.update_level(0.8)
+        removed_client.remove_item("job")
+        send_one_level_tick(removed_client)
+
+    assert sent_commands(queued_process) == [
+        {"command": "show_recording", "item_id": "job"},
+        {"command": "show_queued", "item_id": "job"},
+    ]
+    assert sent_commands(removed_process) == [
+        {"command": "show_recording", "item_id": "job"},
+        {"command": "remove_item", "item_id": "job"},
     ]
 
 

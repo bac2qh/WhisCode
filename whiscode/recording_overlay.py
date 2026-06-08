@@ -166,6 +166,7 @@ class RecordingOverlayClient:
         with self._lock:
             self._visible = False
             self._mode = None
+            self._active_recording_item_id = None
         self._stop_event.set()
         self._send({"command": "stop"})
         if self._process and self._process.poll() is None:
@@ -237,10 +238,9 @@ class RecordingOverlayClient:
         while not self._stop_event.is_set():
             with self._lock:
                 visible = self._visible
-                mode = self._mode
                 level = self._latest_level
                 item_id = self._active_recording_item_id
-            if visible and mode == "recording" and item_id is not None:
+            if visible and item_id is not None:
                 self._send({"command": "level", "item_id": item_id, "level": level})
             time.sleep(self.update_interval)
 
@@ -274,6 +274,7 @@ class RecordingOverlayClient:
         with self._lock:
             self._visible = False
             self._mode = None
+            self._active_recording_item_id = None
         self._stop_event.set()
         properties = {"reason": reason, "stage": stage}
         if returncode is not None:

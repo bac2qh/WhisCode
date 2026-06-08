@@ -38,3 +38,6 @@
 
 ## 2026-05-25
 - Documentation now clarifies that the recording overlay always shows queued/transcribing state, but concrete percentage/FPS progress is backend-dependent. The current CrispASR/VibeVoice warm-server path does not provide in-flight progress, so VibeVoice cards cannot show meaningful percent progress yet.
+
+## 2026-06-08
+- Fixed a stacked overlay client state bug where showing an older item as transcribing could stop level tick commands for a newer active recording card. The sender loop now keys live level ticks off the active recording item id instead of the global client mode, while queueing, removing, stopping, or disabling clears that active recording id.
