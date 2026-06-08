@@ -72,4 +72,4 @@
 - Final implementation commits on merged branch:
   - `638b980` (`Implement send chunk recording wrapper`)
   - `7e79ed2` (`Record send chunk implementation checkpoint`)
-- Closeout archival commit: pending.
+- Closeout archival commit: `eb445b9` (`Archive send chunk plan`).
