@@ -53,7 +53,7 @@ Immediate next step:
 - Commit implementation and bookkeeping, then run closeout to merge back to local `main` under the repo mutex.
 
 Implementation commit:
-- Pending.
+- `9182b90` (`Add extra hands-free tail trim buffer`).
 
 Important backtracks:
 - A formatting-only indentation cleanup was made in `tests/test_main_cli.py` after the first successful pytest run, then focused verification was rerun successfully.
