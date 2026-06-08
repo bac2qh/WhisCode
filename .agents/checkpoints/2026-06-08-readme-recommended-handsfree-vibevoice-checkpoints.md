@@ -59,3 +59,20 @@
 
 - Commit this checkpoint hash update.
 - Run closeout: merge to local `main`, archive the active plan, remove the task worktree, and delete the local task branch under the main-branch mutex.
+
+## 2026-06-08 Closeout Preparation
+
+### Done
+
+- Moved the completed plan to `.agents/plans/archive/2026-06-08-readme-recommended-handsfree-vibevoice.md`.
+- Added a closeout note to the archived plan with final status, checkpoint link, implementation commits, verification, and the closeout-command deviation.
+
+### Deviation
+
+- Attempted to start an interactive shell under `.agents/scripts/main-branch-lock.sh` to keep the mutex held while editing main closeout bookkeeping. The escalation reviewer rejected that as too broad.
+- Safer fallback: archive plan/checkpoint state on the task branch, then run a single concrete non-interactive mutex command to fast-forward local `main`, remove the task worktree, and delete the merged branch.
+
+### Next Step
+
+- Commit the closeout-preparation archive move.
+- Run the non-interactive mutex closeout command from the main checkout.

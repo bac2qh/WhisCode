@@ -1,5 +1,15 @@
 # README Recommended Hands-Free VibeVoice Update
 
+## Closeout Note
+
+- Final status: complete.
+- Related checkpoint: `.agents/checkpoints/2026-06-08-readme-recommended-handsfree-vibevoice-checkpoints.md`.
+- Implementation commits: `c0c9f54` (`Document recommended hands-free VibeVoice workflow`) and `9952e0b` (`Record README workflow checkpoint commit`).
+- Merge commit hash: none expected; the task branch is prepared for a fast-forward merge into local `main`.
+- Verification performed: `git diff --check`; exact recommended-command count in `README.md`; retired chunk-flag README search; `mlx-whisper` default row search; opt-in/recommended VibeVoice wording search.
+- Worktree/branch cleanup result: pending the final non-interactive mutex closeout command. The interactive lock-shell approach was rejected by the escalation reviewer as too broad, so cleanup is recorded here as pending and the final command result is reported in chat after it runs.
+- Shipped summary: README Usage now recommends `uv run whiscode --hands-free --asr-backend mlx-vibevoice` for regular dictation, explains wake/end and Send Chunk behavior, and keeps hands-free mode and MLX VibeVoice documented as opt-in rather than CLI defaults.
+
 ## Summary
 
 Update `README.md` to make the current recommended daily-driver command clear:
