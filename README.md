@@ -34,6 +34,8 @@ uv run whiscode
 
 Press **Right Shift** to start recording, press again to stop. The transcribed text is typed at your cursor position. If a prior recording is still transcribing, WhisCode queues the new recording and keeps transcriptions typed in order.
 
+Hold **Right Option** and press **Right Shift** while recording to Send Chunk: WhisCode stops the current recording, queues it to type with a blank line after the transcript, and immediately starts the next recording.
+
 For the v2 hands-free flow, start with:
 
 ```bash
@@ -56,6 +58,8 @@ uv run whiscode --hands-free
 | `--hands-free` | off | Use local start/end phrase detection instead of Right Shift as the primary trigger |
 | `--hands-free-threshold FLOAT` | `0.055` | Detection threshold for wake phrase matching |
 | `--hands-free-end-threshold FLOAT` | `0.055` | Detection threshold for end phrase matching |
+| `--hands-free-chunk` | off | Enable optional Send Chunk phrase setup even when no chunk samples exist yet |
+| `--hands-free-chunk-dir PATH` | `~/.config/whiscode/wake/chunk` | Send Chunk phrase reference WAV folder |
 | `--hands-free-command-threshold FLOAT` | `0.055` | Detection threshold for hands-free key command matching |
 | `--hands-free-command-config PATH` | `~/.config/whiscode/commands.ini` | Hands-free command enablement config |
 | `--hands-free-tail-seconds FLOAT` | auto, fallback `1.0` | Audio tail to discard when the end phrase is detected; omitted values are inferred from end phrase references |
@@ -278,6 +282,7 @@ Existing audio files can still be imported manually:
 ```bash
 uv run whiscode-enroll wake wake1.m4a wake2.m4a wake3.m4a
 uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
+uv run whiscode-enroll chunk chunk1.m4a chunk2.m4a chunk3.m4a
 uv run whiscode-enroll page-up pageup1.m4a pageup2.m4a pageup3.m4a
 uv run whiscode-enroll shift-enter shiftenter1.m4a shiftenter2.m4a shiftenter3.m4a
 uv run whiscode-enroll shift-tab shifttab1.m4a shifttab2.m4a shifttab3.m4a
@@ -287,6 +292,12 @@ uv run whiscode-enroll arrow-down arrowdown1.m4a arrowdown2.m4a arrowdown3.m4a
 ```
 
 Hands-free mode also supports eight trained key command slots while not actively recording: `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, and `arrow-down`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, Enter, Shift+Enter, Shift+Tab, Tab, Arrow Up, or Arrow Down key action. Command detection is disabled while recording so dictated speech cannot press keys, but it can run while earlier recordings are queued or transcribing.
+
+The optional Send Chunk phrase is different from idle key commands: it is only active while recording. When detected, WhisCode trims the chunk phrase tail using the active span inferred from `~/.config/whiscode/wake/chunk` plus `--hands-free-tail-extra-seconds`, queues the chunk to type with a blank line after it, and immediately starts a new recording. Existing users are not prompted for chunk samples unless `--hands-free-chunk` is set or the chunk reference folder already contains WAV files. Add it to guided enrollment with:
+
+```bash
+uv run whiscode-enroll --record --include-chunk
+```
 
 You can selectively enable key command slots with `~/.config/whiscode/commands.ini`:
 
@@ -324,7 +335,7 @@ WhisCode writes local JSONL telemetry by default to:
 ~/Library/Logs/WhisCode/events.jsonl
 ```
 
-Use it to inspect app startup, selected ASR backend, recording durations, queue depth, transcription outcomes, backend failures, wake/end/command detections, detector distances, key-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
+Use it to inspect app startup, selected ASR backend, recording durations, queue depth, Send Chunk request/queue/restart outcomes, transcription outcomes, backend failures, wake/end/chunk/command detections, detector distances, key-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
 
 `handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. WhisCode keeps microphone capture lightweight and uses a bounded detector queue to reduce this. If detector processing still falls behind, `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` show how much queued audio was dropped and how long detection took. These diagnostics do not include raw audio or transcript text.
 

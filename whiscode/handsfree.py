@@ -17,6 +17,7 @@ from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 
 DEFAULT_WAKE_DIR = Path.home() / ".config" / "whiscode" / "wake" / "wake"
 DEFAULT_END_DIR = Path.home() / ".config" / "whiscode" / "wake" / "end"
+DEFAULT_CHUNK_DIR = Path.home() / ".config" / "whiscode" / "wake" / "chunk"
 DEFAULT_COMMAND_DIR = Path.home() / ".config" / "whiscode" / "wake" / "commands"
 DEFAULT_COMMAND_CONFIG_PATH = Path.home() / ".config" / "whiscode" / "commands.ini"
 DEFAULT_THRESHOLD = 0.055
@@ -254,6 +255,7 @@ def missing_reference_messages(
     end_dir: Path,
     minimum: int = MIN_REFERENCE_FILES,
     *,
+    chunk_dir: Path | None = None,
     command_dirs: dict[str, Path] | None = None,
 ) -> list[str]:
     messages = []
@@ -261,6 +263,10 @@ def missing_reference_messages(
         count = reference_sample_count(path)
         if count < minimum:
             messages.append(f"{label}: {count}/{minimum} WAV samples in {path}")
+    if chunk_dir is not None:
+        count = reference_sample_count(chunk_dir)
+        if count < minimum:
+            messages.append(f"chunk: {count}/{minimum} WAV samples in {chunk_dir}")
     if command_dirs:
         for name, path in command_dirs.items():
             count = reference_sample_count(path)
@@ -360,6 +366,7 @@ class HandsFreeSession:
         slide_seconds: float = DEFAULT_SLIDE_SECONDS,
         max_seconds: float = DEFAULT_MAX_SECONDS,
         tail_seconds: float | None = None,
+        chunk_tail_seconds: float | None = None,
         debug: bool = False,
         telemetry: Any | None = None,
         distance_summary_seconds: float = 5.0,
@@ -368,18 +375,23 @@ class HandsFreeSession:
         active_level: float = DEFAULT_ACTIVE_LEVEL,
         wake_confirmations: int = DEFAULT_WAKE_CONFIRMATIONS,
         command_detectors: dict[str, Detector] | None = None,
+        chunk_detector: Detector | None = None,
         command_confirmations: int = DEFAULT_COMMAND_CONFIRMATIONS,
         level_callback: Any | None = None,
     ):
         self.wake_detector = wake_detector
         self.end_detector = end_detector
         self.command_detectors = dict(command_detectors or {})
+        self.chunk_detector = chunk_detector
         self.sample_rate = sample_rate
         self.window_samples = max(1, int(window_seconds * sample_rate))
         self.slide_samples = max(1, int(slide_seconds * sample_rate))
         self.max_samples = int(max_seconds * sample_rate) if max_seconds > 0 else 0
         resolved_tail_seconds = DEFAULT_TAIL_SECONDS if tail_seconds is None else tail_seconds
         self.tail_samples = max(0, int(resolved_tail_seconds * sample_rate))
+        resolved_chunk_tail_seconds = resolved_tail_seconds if chunk_tail_seconds is None else chunk_tail_seconds
+        self.chunk_tail_samples = max(0, int(resolved_chunk_tail_seconds * sample_rate))
+        self._retained_tail_samples = max(self.tail_samples, self.chunk_tail_samples)
         self.debug = debug
         self.telemetry = telemetry
         self.distance_summary_seconds = distance_summary_seconds
@@ -394,13 +406,16 @@ class HandsFreeSession:
         self.suspended = False
         self._wake_buffer = np.zeros(self.window_samples, dtype=np.float32)
         self._end_buffer = np.zeros(self.window_samples, dtype=np.float32)
+        self._chunk_buffer = np.zeros(self.window_samples, dtype=np.float32)
         self._pending_tail = np.array([], dtype=np.float32)
         self._captured: list[np.ndarray] = []
         self._recorded_samples = 0
         self._wake_filled_samples = 0
         self._end_filled_samples = 0
+        self._chunk_filled_samples = 0
         self._wake_confirmation_count = 0
         self._end_confirmation_count = 0
+        self._chunk_confirmation_count = 0
         self._command_confirmation_counts = {name: 0 for name in self.command_detectors}
         self._distance_stats: dict[str, dict[str, float]] = {}
         self._gate_stats: dict[str, dict[str, float | str]] = {}
@@ -421,13 +436,16 @@ class HandsFreeSession:
         self.state = "idle"
         self._wake_buffer = np.zeros(self.window_samples, dtype=np.float32)
         self._end_buffer = np.zeros(self.window_samples, dtype=np.float32)
+        self._chunk_buffer = np.zeros(self.window_samples, dtype=np.float32)
         self._pending_tail = np.array([], dtype=np.float32)
         self._captured = []
         self._recorded_samples = 0
         self._wake_filled_samples = 0
         self._end_filled_samples = 0
+        self._chunk_filled_samples = 0
         self._wake_confirmation_count = 0
         self._end_confirmation_count = 0
+        self._chunk_confirmation_count = 0
         self._command_confirmation_counts = {name: 0 for name in self.command_detectors}
 
     def manual_start(self) -> HandsFreeEvent:
@@ -471,6 +489,25 @@ class HandsFreeSession:
             event = self._finish_recording("end.detected", include_pending=False)
             return [HandsFreeEvent(event.kind, event.audio, detection, event.duration_seconds)]
 
+        if self.chunk_detector is not None:
+            self._chunk_buffer = _shift_append(self._chunk_buffer, chunk)
+            self._chunk_filled_samples = min(self.window_samples, self._chunk_filled_samples + len(chunk))
+            chunk_detection = self._maybe_detect(
+                self.chunk_detector,
+                self._chunk_buffer,
+                "chunk",
+                self._chunk_filled_samples,
+            )
+            chunk_detection = self._confirm_detection(chunk_detection, "chunk", 1)
+            if chunk_detection:
+                event = self._finish_recording_with_trim(
+                    "chunk.detected",
+                    trim_tail_samples=self.chunk_tail_samples,
+                    included_tail=False,
+                    tail_kind="chunk",
+                )
+                return [HandsFreeEvent(event.kind, event.audio, chunk_detection, event.duration_seconds)]
+
         if self.max_samples and self._recorded_samples >= self.max_samples:
             return [self._finish_recording("timeout", include_pending=True)]
 
@@ -509,12 +546,15 @@ class HandsFreeSession:
     def _start_recording(self, *, source: str) -> None:
         self.state = "recording"
         self._end_buffer = np.zeros(self.window_samples, dtype=np.float32)
+        self._chunk_buffer = np.zeros(self.window_samples, dtype=np.float32)
         self._pending_tail = np.array([], dtype=np.float32)
         self._captured = []
         self._recorded_samples = 0
         self._end_filled_samples = 0
+        self._chunk_filled_samples = 0
         self._wake_confirmation_count = 0
         self._end_confirmation_count = 0
+        self._chunk_confirmation_count = 0
         self._command_confirmation_counts = {name: 0 for name in self.command_detectors}
         self._emit("handsfree.session_started_recording", source=source)
 
@@ -543,18 +583,41 @@ class HandsFreeSession:
 
     def _append_recording_chunk(self, chunk: np.ndarray) -> None:
         pending = np.concatenate([self._pending_tail, chunk])
-        if len(pending) > self.tail_samples:
-            split = len(pending) - self.tail_samples
+        if self._retained_tail_samples <= 0:
+            self._captured.append(pending.copy())
+            self._pending_tail = np.array([], dtype=np.float32)
+        elif len(pending) > self._retained_tail_samples:
+            split = len(pending) - self._retained_tail_samples
             self._captured.append(pending[:split].copy())
             self._pending_tail = pending[split:].copy()
         else:
             self._pending_tail = pending
 
     def _finish_recording(self, kind: str, *, include_pending: bool) -> HandsFreeEvent:
+        trim_tail_samples = 0 if include_pending else self.tail_samples
+        tail_kind = "none" if include_pending else "end"
+        return self._finish_recording_with_trim(
+            kind,
+            trim_tail_samples=trim_tail_samples,
+            included_tail=include_pending,
+            tail_kind=tail_kind,
+        )
+
+    def _finish_recording_with_trim(
+        self,
+        kind: str,
+        *,
+        trim_tail_samples: int,
+        included_tail: bool,
+        tail_kind: str,
+    ) -> HandsFreeEvent:
         parts = list(self._captured)
-        if include_pending and len(self._pending_tail):
+        if len(self._pending_tail):
             parts.append(self._pending_tail.copy())
         audio = np.concatenate(parts).astype(np.float32) if parts else np.array([], dtype=np.float32)
+        trimmed_samples = min(max(0, int(trim_tail_samples)), len(audio))
+        if trimmed_samples:
+            audio = audio[:-trimmed_samples].astype(np.float32, copy=False)
         duration = len(audio) / self.sample_rate
         self.reset_idle()
         self._emit(
@@ -562,7 +625,10 @@ class HandsFreeSession:
             reason=kind,
             duration_seconds=round(duration, 3),
             audio_samples=len(audio),
-            included_tail=include_pending,
+            included_tail=included_tail,
+            tail_kind=tail_kind,
+            trimmed_tail_samples=trimmed_samples,
+            trimmed_tail_seconds=round(trimmed_samples / self.sample_rate, 3),
         )
         return HandsFreeEvent(kind, audio=audio, duration_seconds=duration)
 

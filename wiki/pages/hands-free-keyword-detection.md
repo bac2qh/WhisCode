@@ -12,11 +12,18 @@ uv run whiscode-enroll --record
 
 This records three wake samples, three end samples, and three samples for each key command slot. The command slots are `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, and `arrow-down`; the spoken phrase for each slot is arbitrary and comes from the user's recorded samples. Enrollment trims leading and trailing silence with local VAD, pads each result to the detector window, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
 
+The optional Send Chunk phrase is not part of default guided enrollment. Add it explicitly with:
+
+```bash
+uv run whiscode-enroll --record --include-chunk
+```
+
 Existing audio files can still be imported manually:
 
 ```bash
 uv run whiscode-enroll wake wake1.m4a wake2.m4a wake3.m4a
 uv run whiscode-enroll end end1.m4a end2.m4a end3.m4a
+uv run whiscode-enroll chunk chunk1.m4a chunk2.m4a chunk3.m4a
 uv run whiscode-enroll page-up pageup1.m4a pageup2.m4a pageup3.m4a
 uv run whiscode-enroll shift-enter shiftenter1.m4a shiftenter2.m4a shiftenter3.m4a
 uv run whiscode-enroll shift-tab shifttab1.m4a shifttab2.m4a shifttab3.m4a
@@ -41,6 +48,10 @@ WhisCode waits until a detector window is fully populated and has enough speech-
 
 While not actively recording, WhisCode also checks the eight trained command slots. A confirmed `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, or `arrow-down` command taps the corresponding physical key or key combo through `pynput`. Command detection is disabled while recording so dictated text cannot inject keys, but it can run while earlier recordings are queued or transcribing. Tune commands separately with `--hands-free-command-threshold` and `--hands-free-command-confirmations`.
 
+While actively recording, WhisCode can also detect an optional Send Chunk phrase from `~/.config/whiscode/wake/chunk`. The phrase is enabled only when `--hands-free-chunk` is set or when that folder already contains WAV files, so existing users are not forced into chunk enrollment. A detected chunk trims the chunk phrase tail using the inferred active span of the chunk references plus `--hands-free-tail-extra-seconds`, queues the chunk to type with a blank line after the transcript, and immediately starts a new recording.
+
+Hotkey mode and the hands-free fallback hotkey also support Send Chunk manually: hold Right Option and press Right Shift while recording. That chord suppresses the plain Right Shift toggle for the press, queues the current recording with the same blank-line suffix, and immediately starts the next recording.
+
 The speech-energy gate can be tuned with `--hands-free-min-rms`, `--hands-free-min-active-ratio`, and `--hands-free-active-level`.
 
 When the end phrase stops a recording, WhisCode discards the buffered tail that contains the spoken end phrase before queueing audio for transcription. By default, the base tail length is inferred from the enrolled end-phrase WAVs: each readable reference is measured from the first through last sample whose absolute level is at least `--hands-free-active-level`, and the session uses the median valid active span. `--hands-free-tail-seconds FLOAT` remains an explicit base-tail override. If no valid active span can be computed, WhisCode falls back to a `1.0` second base tail. WhisCode then adds `--hands-free-tail-extra-seconds`, which defaults to `1.0` second, as an end-detection lag buffer. Set `--hands-free-tail-extra-seconds 0` to restore the previous base-only trim. Right Shift/manual stops and timeout stops still keep the pending tail.
@@ -63,7 +74,7 @@ WhisCode runtime and guided enrollment write local JSONL telemetry by default:
 ~/Library/Logs/WhisCode/events.jsonl
 ```
 
-The telemetry records app lifecycle, selected ASR backend, enrollment progress, reference counts, detector load results, tail-trim resolution source and counts, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/command detections, key-command injection outcomes, recording durations, transcription queue depth, transcription outcomes, backend failure shape diagnostics, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. Routine telemetry does not record raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. CrispASR malformed-response debugging is the exception: when VibeVoice chunk parsing fails or needs recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl`, which can contain transcript or provider output text. Successful transcripts remain visible in stdout for local copying instead of being copied into telemetry.
+The telemetry records app lifecycle, selected ASR backend, enrollment progress, reference counts, detector load results, end and chunk tail-trim resolution source and counts, Send Chunk request/queue/restart/reject outcomes, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/chunk/command detections, key-command injection outcomes, recording durations, transcription queue depth, transcription outcomes, backend failure shape diagnostics, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. Routine telemetry does not record raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. CrispASR malformed-response debugging is the exception: when VibeVoice chunk parsing fails or needs recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl`, which can contain transcript or provider output text. Successful transcripts remain visible in stdout for local copying instead of being copied into telemetry.
 
 `handsfree.audio_overflow` means PortAudio reported that the microphone read loop fell behind. `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` help determine whether detector work is falling behind the live microphone stream. These are not direct macOS swap or memory-overflow signals.
 

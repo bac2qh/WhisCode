@@ -1,15 +1,22 @@
 from pathlib import Path
 
 import pytest
+from pynput.keyboard import Key
 
 from whiscode.handsfree import HandsFreeTailResolution, command_reference_dirs
 from whiscode.main import (
+    HOTKEY_SEND_CHUNK_EVENT,
+    HOTKEY_TOGGLE_EVENT,
+    HotkeyChordRouter,
+    _apply_transcription_text_suffix,
     _default_whisper_processor_source,
+    _emit_hands_free_chunk_tail_resolution,
     _emit_hands_free_tail_resolution,
     _format_transcript_for_stdout,
     _print_transcript_for_stdout,
     ensure_hands_free_references,
     ensure_whisper_processor,
+    hands_free_chunk_enabled,
     parse_args,
     runtime_telemetry_enabled_by_default,
     validate_external_intake_args,
@@ -55,6 +62,27 @@ def test_print_transcript_for_stdout_uses_copy_friendly_block(capsys):
     assert capsys.readouterr().out == "\nhello world\n\n"
 
 
+def test_apply_transcription_text_suffix_appends_after_processing():
+    assert _apply_transcription_text_suffix("hello world", "\n\n") == "hello world\n\n"
+
+
+def test_hotkey_router_sends_chunk_for_right_option_right_shift_chord():
+    router = HotkeyChordRouter(Key.shift_r)
+
+    assert router.press(Key.alt_r) is None
+    assert router.press(Key.shift_r) == HOTKEY_SEND_CHUNK_EVENT
+    assert router.press(Key.shift_r) is None
+    router.release(Key.shift_r)
+    router.release(Key.alt_r)
+
+
+def test_hotkey_router_plain_right_shift_remains_toggle():
+    router = HotkeyChordRouter(Key.shift_r)
+
+    assert router.press(Key.shift_r) == HOTKEY_TOGGLE_EVENT
+    router.release(Key.shift_r)
+
+
 def test_parse_args_defaults_to_hotkey_mode():
     args = parse_args([])
 
@@ -63,6 +91,8 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.asr_backend == "mlx-whisper"
     assert args.hands_free_threshold == 0.055
     assert args.hands_free_end_threshold == 0.055
+    assert args.hands_free_chunk is False
+    assert args.hands_free_chunk_dir.name == "chunk"
     assert args.hands_free_wake_confirmations == 2
     assert args.hands_free_command_threshold == 0.055
     assert args.hands_free_command_confirmations == 2
@@ -287,6 +317,9 @@ def test_parse_args_hands_free_options():
         "/tmp/wake",
         "--hands-free-end-dir",
         "/tmp/end",
+        "--hands-free-chunk",
+        "--hands-free-chunk-dir",
+        "/tmp/chunk",
         "--hands-free-command-dir",
         "/tmp/commands",
         "--hands-free-command-config",
@@ -337,6 +370,8 @@ def test_parse_args_hands_free_options():
     assert args.hands_free is True
     assert args.hands_free_wake_dir == Path("/tmp/wake")
     assert args.hands_free_end_dir == Path("/tmp/end")
+    assert args.hands_free_chunk is True
+    assert args.hands_free_chunk_dir == Path("/tmp/chunk")
     assert args.hands_free_command_dir == Path("/tmp/commands")
     assert args.hands_free_command_config == Path("/tmp/commands.ini")
     assert args.hands_free_threshold == 0.2
@@ -433,6 +468,35 @@ def test_emit_hands_free_tail_resolution_uses_bounded_payload():
         "valid_reference_count",
         "fallback_reason",
     }
+
+
+def test_emit_hands_free_chunk_tail_resolution_uses_bounded_payload():
+    telemetry = FakeTelemetry()
+    resolution = HandsFreeTailResolution(
+        seconds=0.5,
+        source="inferred",
+        reference_count=4,
+        valid_reference_count=3,
+        base_seconds=0.25,
+        extra_seconds=0.25,
+    )
+
+    _emit_hands_free_chunk_tail_resolution(telemetry, resolution)
+
+    assert telemetry.events == [
+        (
+            "handsfree.chunk_tail_seconds_resolved",
+            {
+                "source": "inferred",
+                "base_seconds": 0.25,
+                "extra_seconds": 0.25,
+                "resolved_seconds": 0.5,
+                "reference_count": 4,
+                "valid_reference_count": 3,
+                "fallback_reason": None,
+            },
+        )
+    ]
 
 
 def test_default_whisper_processor_source_maps_mlx_default_to_openai_model():
@@ -535,6 +599,98 @@ def test_ensure_hands_free_references_returns_true_when_samples_exist(tmp_path):
     ])
 
     assert ensure_hands_free_references(args) is True
+    assert hands_free_chunk_enabled(args) is False
+
+
+def test_ensure_hands_free_references_auto_enables_existing_chunk_samples(tmp_path):
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    chunk_dir = tmp_path / "chunk"
+    command_dir = tmp_path / "commands"
+    write_reference_samples(wake_dir, "wake")
+    write_reference_samples(end_dir, "end")
+    write_reference_samples(chunk_dir, "chunk")
+    for name, path in command_reference_dirs(command_dir).items():
+        write_reference_samples(path, name)
+    args = parse_args([
+        "--hands-free",
+        "--hands-free-wake-dir",
+        str(wake_dir),
+        "--hands-free-end-dir",
+        str(end_dir),
+        "--hands-free-chunk-dir",
+        str(chunk_dir),
+        "--hands-free-command-dir",
+        str(command_dir),
+        "--hands-free-command-config",
+        str(tmp_path / "missing-config.ini"),
+    ])
+
+    assert hands_free_chunk_enabled(args) is True
+    assert ensure_hands_free_references(args) is True
+
+
+def test_ensure_hands_free_references_chunk_telemetry_omits_chunk_path(tmp_path):
+    telemetry = FakeTelemetry()
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    chunk_dir = tmp_path / "chunk"
+    command_dir = tmp_path / "commands"
+    write_reference_samples(wake_dir, "wake")
+    write_reference_samples(end_dir, "end")
+    write_reference_samples(chunk_dir, "chunk")
+    for name, path in command_reference_dirs(command_dir).items():
+        write_reference_samples(path, name)
+    args = parse_args([
+        "--hands-free",
+        "--hands-free-wake-dir",
+        str(wake_dir),
+        "--hands-free-end-dir",
+        str(end_dir),
+        "--hands-free-chunk-dir",
+        str(chunk_dir),
+        "--hands-free-command-dir",
+        str(command_dir),
+        "--hands-free-command-config",
+        str(tmp_path / "missing-config.ini"),
+    ])
+
+    assert ensure_hands_free_references(args, telemetry=telemetry) is True
+
+    event = next(properties for name, properties in telemetry.events if name == "handsfree.reference_check_started")
+    assert event["chunk_enabled"] is True
+    assert event["chunk_count"] == 3
+    assert "chunk_dir" not in event
+
+
+def test_ensure_hands_free_references_requires_chunk_when_forced(tmp_path):
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    command_dir = tmp_path / "commands"
+    write_reference_samples(wake_dir, "wake")
+    write_reference_samples(end_dir, "end")
+    for name, path in command_reference_dirs(command_dir).items():
+        write_reference_samples(path, name)
+    args = parse_args([
+        "--hands-free",
+        "--hands-free-chunk",
+        "--no-enroll-prompt",
+        "--hands-free-wake-dir",
+        str(wake_dir),
+        "--hands-free-end-dir",
+        str(end_dir),
+        "--hands-free-chunk-dir",
+        str(tmp_path / "chunk"),
+        "--hands-free-command-dir",
+        str(command_dir),
+        "--hands-free-command-config",
+        str(tmp_path / "missing-config.ini"),
+    ])
+
+    assert ensure_hands_free_references(
+        args,
+        input_fn=lambda prompt: (_ for _ in ()).throw(AssertionError("prompted")),
+    ) is False
 
 
 def test_ensure_hands_free_references_decline_prompt_exits(tmp_path):

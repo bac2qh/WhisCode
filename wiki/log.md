@@ -53,3 +53,4 @@
 
 ## 2026-06-08
 - Documented the extra hands-free end-detection lag buffer, its `1.0` second default, and `--hands-free-tail-extra-seconds 0` as the previous base-only trim behavior.
+- Documented Send Chunk support: the Right Option + Right Shift recording chord, optional hands-free chunk phrase, chunk enrollment/import paths, chunk-specific tail trimming, blank-line transcript suffix, and bounded telemetry.

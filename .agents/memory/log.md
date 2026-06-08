@@ -77,3 +77,4 @@
 
 ## 2026-06-08
 - Added hands-free tail extra-buffer memory after adding the default `1.0s` `--hands-free-tail-extra-seconds` detector-lag trim on top of inferred, explicit, or fallback base tails.
+- Added Send Chunk memory after implementing the Right Option + Right Shift chunk chord, optional hands-free chunk phrase, chunk-specific tail trim, queue text suffix, enrollment support, and bounded telemetry.

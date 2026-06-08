@@ -15,3 +15,7 @@
 
 ## 2026-06-06
 - Hands-free setup emits `handsfree.tail_seconds_resolved` after resolving end-tail trim length. The payload is bounded to source (`inferred`, `explicit`, or `fallback`), rounded resolved seconds, reference counts, valid active-span counts, and a small fallback reason enum; it excludes raw audio, phrase text, transcripts, sample data, and paths.
+
+## 2026-06-08
+- Send Chunk emits bounded `send_chunk.requested`, `send_chunk.queued`, `send_chunk.restarted`, and `send_chunk.rejected` events with mode/source, local job IDs, queue depth, timing, and suffix length only. It does not emit raw audio, transcript text, prompts, hotwords, provider payloads, or typed content.
+- Hands-free chunk support emits bounded `handsfree.chunk_detected` and `handsfree.chunk_tail_seconds_resolved` events. The tail-resolution payload mirrors end-tail resolution fields and excludes phrase text, sample paths, raw audio, transcripts, and typed text.

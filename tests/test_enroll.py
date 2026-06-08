@@ -42,6 +42,13 @@ def test_parse_args_accepts_command_samples():
     assert args.command_dir == Path("/tmp/commands")
 
 
+def test_parse_args_accepts_chunk_samples():
+    args = parse_args(["chunk", "one.m4a", "two.m4a", "three.m4a", "--chunk-dir", "/tmp/chunk"])
+
+    assert args.kind == "chunk"
+    assert args.chunk_dir == Path("/tmp/chunk")
+
+
 def test_parse_args_accepts_record_mode():
     args = parse_args([
         "--record",
@@ -51,6 +58,9 @@ def test_parse_args_accepts_record_mode():
         "1.5",
         "--telemetry-path",
         "/tmp/events.jsonl",
+        "--include-chunk",
+        "--chunk-dir",
+        "/tmp/chunk",
         "--command-dir",
         "/tmp/commands",
         "--command-config",
@@ -63,6 +73,8 @@ def test_parse_args_accepts_record_mode():
     assert args.sample_count == 4
     assert args.seconds == 1.5
     assert args.telemetry_path == Path("/tmp/events.jsonl")
+    assert args.include_chunk is True
+    assert args.chunk_dir == Path("/tmp/chunk")
     assert args.command_dir == Path("/tmp/commands")
     assert args.command_config == Path("/tmp/commands.ini")
     assert args.recording_overlay is False
@@ -123,6 +135,26 @@ def test_import_samples_uses_end_folder(tmp_path):
         )
 
     assert written[0] == end_dir / "end-01.wav"
+
+
+def test_import_samples_uses_chunk_folder(tmp_path):
+    samples = make_samples(tmp_path)
+    chunk_dir = tmp_path / "chunk"
+
+    def fake_run(command, check):
+        write_wav(Path(command[2]), np.array([0.25, -0.25], dtype=np.float32))
+
+    with patch("subprocess.run", side_effect=fake_run):
+        written = import_samples(
+            "chunk",
+            samples,
+            wake_dir=tmp_path / "wake",
+            end_dir=tmp_path / "end",
+            chunk_dir=chunk_dir,
+            preprocess_fn=lambda audio: audio,
+        )
+
+    assert written[0] == chunk_dir / "chunk-01.wav"
 
 
 def test_import_samples_uses_command_folder(tmp_path):
@@ -228,6 +260,27 @@ def test_record_guided_samples_accepts_enabled_command_slots(tmp_path):
     assert written[0] == tmp_path / "wake" / "wake-01.wav"
     assert written[3] == tmp_path / "end" / "end-01.wav"
     assert not (tmp_path / "commands").exists()
+
+
+def test_record_guided_samples_can_include_chunk_phrase(tmp_path):
+    audio = np.array([0.1, -0.1], dtype=np.float32)
+
+    written = record_guided_samples(
+        wake_dir=tmp_path / "wake",
+        end_dir=tmp_path / "end",
+        chunk_dir=tmp_path / "chunk",
+        command_dir=tmp_path / "commands",
+        input_fn=lambda prompt: None,
+        capture_fn=lambda seconds: audio,
+        preprocess_fn=lambda audio: audio,
+        command_slots=(),
+        include_chunk=True,
+    )
+
+    assert len(written) == 9
+    assert written[0] == tmp_path / "wake" / "wake-01.wav"
+    assert written[3] == tmp_path / "end" / "end-01.wav"
+    assert written[6] == tmp_path / "chunk" / "chunk-01.wav"
 
 
 class FakeTelemetry:

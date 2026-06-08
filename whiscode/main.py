@@ -17,6 +17,7 @@ from whiscode.handsfree import (
     DEFAULT_COMMAND_DIR,
     DEFAULT_COMMAND_CONFIRMATIONS,
     DEFAULT_COMMAND_THRESHOLD,
+    DEFAULT_CHUNK_DIR,
     DEFAULT_END_DIR,
     DEFAULT_END_THRESHOLD,
     DEFAULT_ACTIVE_LEVEL,
@@ -108,6 +109,39 @@ class State(Enum):
     TRANSCRIBING = "transcribing"
 
 
+HOTKEY_TOGGLE_EVENT = "toggle"
+HOTKEY_TIMEOUT_EVENT = "timeout"
+HOTKEY_SEND_CHUNK_EVENT = "send_chunk"
+SEND_CHUNK_TEXT_SUFFIX = "\n\n"
+
+
+class HotkeyChordRouter:
+    def __init__(
+        self,
+        toggle_key,
+        *,
+        send_chunk_modifier=keyboard.Key.alt_r,
+        send_chunk_key=keyboard.Key.shift_r,
+    ):
+        self.toggle_key = toggle_key
+        self.send_chunk_modifier = send_chunk_modifier
+        self.send_chunk_key = send_chunk_key
+        self._pressed = set()
+
+    def press(self, key) -> str | None:
+        if key in self._pressed:
+            return None
+        self._pressed.add(key)
+        if key == self.send_chunk_key and self.send_chunk_modifier in self._pressed:
+            return HOTKEY_SEND_CHUNK_EVENT
+        if key == self.toggle_key:
+            return HOTKEY_TOGGLE_EVENT
+        return None
+
+    def release(self, key) -> None:
+        self._pressed.discard(key)
+
+
 def _format_transcript_for_stdout(text: str) -> str:
     return " ".join(text.split())
 
@@ -116,6 +150,10 @@ def _print_transcript_for_stdout(text: str) -> None:
     print()
     print(_format_transcript_for_stdout(text))
     print()
+
+
+def _apply_transcription_text_suffix(processed: str, text_suffix: str) -> str:
+    return processed + text_suffix
 
 
 def parse_args(argv: list[str] | None = None):
@@ -132,6 +170,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free", action="store_true", help="Use local keyword detection instead of Right Shift as the primary trigger")
     parser.add_argument("--hands-free-wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake phrase reference WAV folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--hands-free-end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End phrase reference WAV folder (default: {DEFAULT_END_DIR})")
+    parser.add_argument("--hands-free-chunk", action="store_true", help="Enable the optional hands-free Send Chunk phrase and prompt for setup when samples are missing")
+    parser.add_argument("--hands-free-chunk-dir", type=Path, default=DEFAULT_CHUNK_DIR, help=f"Send Chunk phrase reference WAV folder (default: {DEFAULT_CHUNK_DIR})")
     parser.add_argument("--hands-free-command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command phrase reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--hands-free-command-config", type=Path, default=DEFAULT_COMMAND_CONFIG_PATH, help=f"Hands-free command enablement config (default: {DEFAULT_COMMAND_CONFIG_PATH})")
     parser.add_argument("--hands-free-threshold", type=float, default=None, help=f"Wake keyword detection threshold (default: {DEFAULT_THRESHOLD})")
@@ -316,10 +356,14 @@ def resolve_active_command_slots(args, *, telemetry=None):
     return slots
 
 
-def _emit_hands_free_tail_resolution(telemetry, resolution: HandsFreeTailResolution) -> None:
+def hands_free_chunk_enabled(args) -> bool:
+    return bool(args.hands_free_chunk or reference_sample_count(args.hands_free_chunk_dir) > 0)
+
+
+def _emit_tail_resolution_event(telemetry, event_name: str, resolution: HandsFreeTailResolution) -> None:
     if telemetry:
         telemetry.emit(
-            "handsfree.tail_seconds_resolved",
+            event_name,
             source=resolution.source,
             base_seconds=round(resolution.base_seconds, 6),
             extra_seconds=round(resolution.extra_seconds, 6),
@@ -328,6 +372,14 @@ def _emit_hands_free_tail_resolution(telemetry, resolution: HandsFreeTailResolut
             valid_reference_count=resolution.valid_reference_count,
             fallback_reason=resolution.fallback_reason,
         )
+
+
+def _emit_hands_free_tail_resolution(telemetry, resolution: HandsFreeTailResolution) -> None:
+    _emit_tail_resolution_event(telemetry, "handsfree.tail_seconds_resolved", resolution)
+
+
+def _emit_hands_free_chunk_tail_resolution(telemetry, resolution: HandsFreeTailResolution) -> None:
+    _emit_tail_resolution_event(telemetry, "handsfree.chunk_tail_seconds_resolved", resolution)
 
 
 def ensure_hands_free_references(
@@ -342,6 +394,8 @@ def ensure_hands_free_references(
         command_slots = resolve_active_command_slots(args, telemetry=telemetry)
     wake_count = reference_sample_count(args.hands_free_wake_dir)
     end_count = reference_sample_count(args.hands_free_end_dir)
+    chunk_enabled = hands_free_chunk_enabled(args)
+    chunk_count = reference_sample_count(args.hands_free_chunk_dir)
     command_dirs = command_reference_dirs(args.hands_free_command_dir, slots=tuple(command_slots))
     command_counts = {name: reference_sample_count(path) for name, path in command_dirs.items()}
     if telemetry:
@@ -350,13 +404,21 @@ def ensure_hands_free_references(
             wake_count=wake_count,
             end_count=end_count,
             command_counts=command_counts,
+            chunk_count=chunk_count,
+            chunk_enabled=chunk_enabled,
             minimum_samples=3,
             wake_dir=args.hands_free_wake_dir,
             end_dir=args.hands_free_end_dir,
             command_dir=args.hands_free_command_dir,
             enabled_command_count=len(command_dirs),
         )
-    missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir, command_dirs=command_dirs)
+    chunk_dir = args.hands_free_chunk_dir if chunk_enabled else None
+    missing = missing_reference_messages(
+        args.hands_free_wake_dir,
+        args.hands_free_end_dir,
+        chunk_dir=chunk_dir,
+        command_dirs=command_dirs,
+    )
     if not missing:
         if telemetry:
             telemetry.emit("handsfree.reference_check_completed", outcome="complete")
@@ -369,6 +431,8 @@ def ensure_hands_free_references(
         print(f"  {message}")
 
     command = "uv run whiscode-enroll --record"
+    if chunk_enabled:
+        command += " --include-chunk"
     if args.no_enroll_prompt:
         if telemetry:
             telemetry.emit("handsfree.enrollment_prompt_skipped", reason="no_enroll_prompt")
@@ -386,17 +450,26 @@ def ensure_hands_free_references(
 
     if telemetry:
         telemetry.emit("handsfree.enrollment_prompt_accepted")
-    enroll_fn(
-        wake_dir=args.hands_free_wake_dir,
-        end_dir=args.hands_free_end_dir,
-        command_dir=args.hands_free_command_dir,
-        command_slots=tuple(command_slots),
-        sample_count=args.enroll_samples,
-        seconds=args.enroll_seconds,
-        telemetry=telemetry,
-    )
+    enroll_kwargs = {
+        "wake_dir": args.hands_free_wake_dir,
+        "end_dir": args.hands_free_end_dir,
+        "command_dir": args.hands_free_command_dir,
+        "command_slots": tuple(command_slots),
+        "sample_count": args.enroll_samples,
+        "seconds": args.enroll_seconds,
+        "telemetry": telemetry,
+    }
+    if chunk_enabled:
+        enroll_kwargs["chunk_dir"] = args.hands_free_chunk_dir
+        enroll_kwargs["include_chunk"] = True
+    enroll_fn(**enroll_kwargs)
 
-    missing = missing_reference_messages(args.hands_free_wake_dir, args.hands_free_end_dir, command_dirs=command_dirs)
+    missing = missing_reference_messages(
+        args.hands_free_wake_dir,
+        args.hands_free_end_dir,
+        chunk_dir=chunk_dir,
+        command_dirs=command_dirs,
+    )
     if missing:
         if telemetry:
             telemetry.emit("handsfree.reference_check_after_enrollment", outcome="missing", missing_count=len(missing))
@@ -438,8 +511,10 @@ def main():
         sys.exit(1)
 
     active_slots = ()
+    chunk_enabled = False
     if args.hands_free:
         try:
+            chunk_enabled = hands_free_chunk_enabled(args)
             active_slots = resolve_active_command_slots(args, telemetry=telemetry)
             references_complete = ensure_hands_free_references(args, command_slots=active_slots, telemetry=telemetry)
         except CommandConfigError as e:
@@ -625,7 +700,7 @@ def main():
     recorder = Recorder(
         level_callback=overlay.update_level,
         max_seconds=args.max_recording_seconds,
-        timeout_callback=lambda: hotkey_queue.put_nowait("timeout"),
+        timeout_callback=lambda: hotkey_queue.put_nowait(HOTKEY_TIMEOUT_EVENT),
     )
     handsfree_session = None
     handsfree_loop = None
@@ -634,6 +709,7 @@ def main():
     DEBOUNCE_SECONDS = 0.3
     LOOP_WINDOW_SECONDS = 30.0
     LOOP_EVENT_COUNT = 3
+    hotkey_router = HotkeyChordRouter(hotkey)
 
     def transition_to(new_state, source, **properties):
         nonlocal state
@@ -674,8 +750,20 @@ def main():
             return None
         return reservation
 
-    def enqueue_recording(audio, audio_seconds: float, job_id: str, *, timeout_event: str | None = None) -> TranscriptionJob | None:
-        job = transcription_jobs.finish_recording(audio=audio, audio_seconds=audio_seconds, job_id=job_id)
+    def enqueue_recording(
+        audio,
+        audio_seconds: float,
+        job_id: str,
+        *,
+        timeout_event: str | None = None,
+        text_suffix: str = "",
+    ) -> TranscriptionJob | None:
+        job = transcription_jobs.finish_recording(
+            audio=audio,
+            audio_seconds=audio_seconds,
+            job_id=job_id,
+            text_suffix=text_suffix,
+        )
         if job is None:
             overlay.remove_item(job_id)
             reject_recording_start("enqueue")
@@ -687,6 +775,7 @@ def main():
             source=job.source,
             queue_depth=transcription_jobs.queue_depth_for_telemetry(),
             audio_seconds=round(job.audio_seconds, 3),
+            text_suffix_chars=len(job.text_suffix),
         )
         if timeout_event == "hotkey":
             print(f"Recording limit reached at {audio_seconds:.2f}s.")
@@ -699,6 +788,47 @@ def main():
         print(f"Queued recording {job.job_id} ({audio_seconds:.2f}s).")
         refresh_state_from_queue("recording.queued")
         return job
+
+    def emit_send_chunk_requested(mode: str, source: str, *, job_id: str | None = None) -> None:
+        telemetry.emit(
+            "send_chunk.requested",
+            mode=mode,
+            source=source,
+            state=state.value,
+            job_id=job_id,
+            queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+        )
+
+    def emit_send_chunk_rejected(mode: str, source: str, reason: str) -> None:
+        telemetry.emit(
+            "send_chunk.rejected",
+            mode=mode,
+            source=source,
+            reason=reason,
+            state=state.value,
+            queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+        )
+
+    def emit_send_chunk_queued(mode: str, source: str, job: TranscriptionJob) -> None:
+        telemetry.emit(
+            "send_chunk.queued",
+            mode=mode,
+            source=source,
+            job_id=job.job_id,
+            audio_seconds=round(job.audio_seconds, 3),
+            queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+            text_suffix_chars=len(job.text_suffix),
+        )
+
+    def emit_send_chunk_restarted(mode: str, source: str, previous_job_id: str, new_job_id: str) -> None:
+        telemetry.emit(
+            "send_chunk.restarted",
+            mode=mode,
+            source=source,
+            previous_job_id=previous_job_id,
+            new_job_id=new_job_id,
+            queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+        )
 
     def record_handsfree_cycle(reason: str, duration_seconds: float) -> None:
         now = time.monotonic()
@@ -716,13 +846,17 @@ def main():
 
     def on_press(key):
         nonlocal last_hotkey_time
-        if key != hotkey:
+        event = hotkey_router.press(key)
+        if event is None:
             return
         now = time.monotonic()
         if now - last_hotkey_time < DEBOUNCE_SECONDS:
             return
         last_hotkey_time = now
-        hotkey_queue.put_nowait("toggle")
+        hotkey_queue.put_nowait(event)
+
+    def on_release(key):
+        hotkey_router.release(key)
 
     def show_recording_status(job_id: str) -> None:
         overlay.show_recording_item(job_id)
@@ -772,7 +906,7 @@ def main():
                 word_count = len(processed.split())
                 stats.record(word_count, job.audio_seconds)
                 _print_transcript_for_stdout(processed)
-                type_text(processed)
+                type_text(_apply_transcription_text_suffix(processed, job.text_suffix))
                 duration_seconds = round(time.monotonic() - started, 3)
                 telemetry.emit(
                     "transcription.completed",
@@ -938,12 +1072,16 @@ def main():
                 continue
 
             with state_lock:
-                if event == "timeout" and state != State.RECORDING:
+                if event == HOTKEY_TIMEOUT_EVENT and state != State.RECORDING:
                     telemetry.emit("recording.timeout_ignored", reason=state.value)
                     continue
 
                 if state in {State.IDLE, State.TRANSCRIBING}:
-                    if event == "timeout":
+                    if event == HOTKEY_TIMEOUT_EVENT:
+                        continue
+                    if event == HOTKEY_SEND_CHUNK_EVENT:
+                        emit_send_chunk_requested("hotkey", "hotkey")
+                        emit_send_chunk_rejected("hotkey", "hotkey", "not_recording")
                         continue
                     reservation = reserve_recording("hotkey")
                     if reservation is None:
@@ -958,7 +1096,36 @@ def main():
                     if job_id is None:
                         telemetry.emit("recording.stop_ignored", reason="missing_reservation")
                         continue
-                    transition_to(State.TRANSCRIBING, "recording_timeout" if event == "timeout" else "hotkey")
+                    if event == HOTKEY_SEND_CHUNK_EVENT:
+                        emit_send_chunk_requested("hotkey", "hotkey", job_id=job_id)
+                        transition_to(State.TRANSCRIBING, "send_chunk_hotkey")
+                        audio = recorder.stop()
+                        audio_seconds = len(audio) / SAMPLE_RATE
+                        notify_recording_stopped()
+                        job = enqueue_recording(
+                            audio,
+                            audio_seconds,
+                            job_id,
+                            text_suffix=SEND_CHUNK_TEXT_SUFFIX,
+                        )
+                        if job is None:
+                            emit_send_chunk_rejected("hotkey", "hotkey", "enqueue_failed")
+                            refresh_state_from_queue("send_chunk.enqueue_failed")
+                            continue
+                        emit_send_chunk_queued("hotkey", "hotkey", job)
+                        reservation = reserve_recording("hotkey")
+                        if reservation is None:
+                            emit_send_chunk_rejected("hotkey", "hotkey", "restart_unavailable")
+                            refresh_state_from_queue("send_chunk.restart_unavailable")
+                            continue
+                        transition_to(State.RECORDING, "send_chunk_restarted")
+                        recorder.start()
+                        show_recording_status(reservation.job_id)
+                        emit_send_chunk_restarted("hotkey", "hotkey", job.job_id, reservation.job_id)
+                        print("Recording...")
+                        continue
+
+                    transition_to(State.TRANSCRIBING, "recording_timeout" if event == HOTKEY_TIMEOUT_EVENT else "hotkey")
                     audio = recorder.stop()
                     audio_seconds = len(audio) / SAMPLE_RATE
                     notify_recording_stopped()
@@ -966,16 +1133,19 @@ def main():
                         audio,
                         audio_seconds,
                         job_id,
-                        timeout_event="hotkey" if event == "timeout" else None,
+                        timeout_event="hotkey" if event == HOTKEY_TIMEOUT_EVENT else None,
                     )
 
     def handsfree_worker():
         while not shutdown_event.is_set():
             handled = False
             try:
-                hotkey_queue.get(timeout=0.05)
+                event = hotkey_queue.get(timeout=0.05)
                 handled = True
-                handle_handsfree_hotkey()
+                if event == HOTKEY_SEND_CHUNK_EVENT:
+                    handle_handsfree_send_chunk()
+                elif event == HOTKEY_TOGGLE_EVENT:
+                    handle_handsfree_hotkey()
             except queue.Empty:
                 pass
 
@@ -988,6 +1158,41 @@ def main():
 
             if not handled:
                 time.sleep(0.01)
+
+    def restart_handsfree_recording(mode: str, source: str, previous_job_id: str) -> None:
+        reservation = reserve_recording(source)
+        if reservation is None:
+            emit_send_chunk_rejected(mode, source, "restart_unavailable")
+            refresh_state_from_queue("send_chunk.restart_unavailable")
+            return
+        transition_to(State.RECORDING, "send_chunk_restarted")
+        handsfree_session.manual_start()
+        show_recording_status(reservation.job_id)
+        emit_send_chunk_restarted(mode, source, previous_job_id, reservation.job_id)
+        print("Recording...")
+
+    def handle_completed_send_chunk_audio(
+        *,
+        mode: str,
+        source: str,
+        job_id: str,
+        audio,
+        audio_seconds: float,
+    ) -> TranscriptionJob | None:
+        transition_to(State.TRANSCRIBING, f"send_chunk_{mode}", audio_seconds=round(audio_seconds, 3))
+        notify_recording_stopped()
+        job = enqueue_recording(
+            audio,
+            audio_seconds,
+            job_id,
+            text_suffix=SEND_CHUNK_TEXT_SUFFIX,
+        )
+        if job is None:
+            emit_send_chunk_rejected(mode, source, "enqueue_failed")
+            refresh_state_from_queue("send_chunk.enqueue_failed")
+            return None
+        emit_send_chunk_queued(mode, source, job)
+        return job
 
     def handle_handsfree_hotkey():
         nonlocal state
@@ -1010,6 +1215,31 @@ def main():
                 transition_to(State.TRANSCRIBING, "manual_handsfree_hotkey", audio_seconds=round(event.duration_seconds, 3))
                 notify_recording_stopped()
                 enqueue_recording(event.audio, event.duration_seconds, job_id)
+
+    def handle_handsfree_send_chunk():
+        nonlocal state
+        with state_lock:
+            if state != State.RECORDING:
+                emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey")
+                emit_send_chunk_rejected("handsfree_hotkey", "manual_handsfree_hotkey", "not_recording")
+                return
+            job_id = transcription_jobs.reserved_job_id()
+            if job_id is None:
+                emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey")
+                telemetry.emit("recording.stop_ignored", reason="missing_reservation")
+                emit_send_chunk_rejected("handsfree_hotkey", "manual_handsfree_hotkey", "missing_reservation")
+                return
+            emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey", job_id=job_id)
+            event = handsfree_session.manual_stop()
+            job = handle_completed_send_chunk_audio(
+                mode="handsfree_hotkey",
+                source="manual_handsfree_hotkey",
+                job_id=job_id,
+                audio=event.audio,
+                audio_seconds=event.duration_seconds,
+            )
+            if job is not None:
+                restart_handsfree_recording("handsfree_hotkey", "manual_handsfree_hotkey", job.job_id)
 
     def handle_handsfree_event(event):
         nonlocal state
@@ -1057,6 +1287,37 @@ def main():
                         rms=round(event.detection.rms, 6) if event.detection and event.detection.rms is not None else None,
                         active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                     )
+                return
+
+            if event.kind == "chunk.detected":
+                if state == State.RECORDING:
+                    job_id = transcription_jobs.reserved_job_id()
+                    if job_id is None:
+                        emit_send_chunk_requested("handsfree_voice", "handsfree_chunk")
+                        telemetry.emit("recording.stop_ignored", reason="missing_reservation")
+                        emit_send_chunk_rejected("handsfree_voice", "handsfree_chunk", "missing_reservation")
+                        handsfree_session.reset_idle()
+                        refresh_state_from_queue("handsfree_chunk_missing_reservation")
+                        return
+                    emit_send_chunk_requested("handsfree_voice", "handsfree_chunk", job_id=job_id)
+                    print(f"handsfree.chunk.detected distance={event.detection.distance:.4f}")
+                    telemetry.emit(
+                        "handsfree.chunk_detected",
+                        distance=round(event.detection.distance, 6) if event.detection else None,
+                        threshold=args.hands_free_end_threshold,
+                        audio_seconds=round(event.duration_seconds, 3),
+                        rms=round(event.detection.rms, 6) if event.detection and event.detection.rms is not None else None,
+                        active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
+                    )
+                    job = handle_completed_send_chunk_audio(
+                        mode="handsfree_voice",
+                        source="handsfree_chunk",
+                        job_id=job_id,
+                        audio=event.audio,
+                        audio_seconds=event.duration_seconds,
+                    )
+                    if job is not None:
+                        restart_handsfree_recording("handsfree_voice", "handsfree_chunk", job.job_id)
                 return
 
             if event.kind in {"end.detected", "timeout"}:
@@ -1119,6 +1380,7 @@ def main():
                 end_threshold=args.hands_free_end_threshold,
                 command_threshold=args.hands_free_command_threshold,
                 command_count=len(active_slots),
+                chunk_enabled=chunk_enabled,
             )
             tail_resolution = resolve_hands_free_tail_seconds(
                 args.hands_free_tail_seconds,
@@ -1127,8 +1389,22 @@ def main():
                 extra_seconds=args.hands_free_tail_extra_seconds,
             )
             _emit_hands_free_tail_resolution(telemetry, tail_resolution)
+            chunk_tail_resolution = None
+            if chunk_enabled:
+                chunk_tail_resolution = resolve_hands_free_tail_seconds(
+                    None,
+                    args.hands_free_chunk_dir,
+                    active_level=args.hands_free_active_level,
+                    extra_seconds=args.hands_free_tail_extra_seconds,
+                )
+                _emit_hands_free_chunk_tail_resolution(telemetry, chunk_tail_resolution)
             wake_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)
             end_detector = LocalWakeDetector(args.hands_free_end_dir, args.hands_free_end_threshold)
+            chunk_detector = (
+                LocalWakeDetector(args.hands_free_chunk_dir, args.hands_free_end_threshold)
+                if chunk_enabled
+                else None
+            )
             command_detectors = {
                 name: LocalWakeDetector(path, args.hands_free_command_threshold)
                 for name, path in command_reference_dirs(args.hands_free_command_dir, slots=tuple(active_slots)).items()
@@ -1153,6 +1429,8 @@ def main():
             active_level=args.hands_free_active_level,
             wake_confirmations=args.hands_free_wake_confirmations,
             command_detectors=command_detectors,
+            chunk_detector=chunk_detector,
+            chunk_tail_seconds=chunk_tail_resolution.seconds if chunk_tail_resolution else None,
             command_confirmations=args.hands_free_command_confirmations,
             level_callback=overlay.update_level,
         )
@@ -1169,7 +1447,7 @@ def main():
     else:
         threading.Thread(target=hotkey_worker, daemon=True).start()
 
-    listener = keyboard.Listener(on_press=on_press)
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
 
     try:

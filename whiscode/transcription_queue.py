@@ -25,6 +25,7 @@ class TranscriptionJob:
     audio_seconds: float
     created_at: float
     queued_at: float
+    text_suffix: str = ""
 
 
 class TranscriptionJobQueue:
@@ -59,7 +60,14 @@ class TranscriptionJobQueue:
             self._reserved = None
             return reservation
 
-    def finish_recording(self, *, audio: np.ndarray, audio_seconds: float, job_id: str | None = None) -> TranscriptionJob | None:
+    def finish_recording(
+        self,
+        *,
+        audio: np.ndarray,
+        audio_seconds: float,
+        job_id: str | None = None,
+        text_suffix: str = "",
+    ) -> TranscriptionJob | None:
         with self._lock:
             if self._reserved is None:
                 return None
@@ -75,6 +83,7 @@ class TranscriptionJobQueue:
             audio_seconds=float(audio_seconds),
             created_at=reservation.created_at,
             queued_at=time.time(),
+            text_suffix=str(text_suffix),
         )
         try:
             self._pending.put_nowait(job)

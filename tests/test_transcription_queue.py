@@ -51,3 +51,19 @@ def test_transcription_job_queue_idle_includes_reserved_recording():
     assert reservation is not None
     assert jobs.has_transcription_work() is False
     assert jobs.is_idle() is False
+
+
+def test_transcription_job_queue_carries_text_suffix():
+    jobs = TranscriptionJobQueue(capacity=1)
+    reservation = jobs.try_reserve_recording(source="hotkey")
+
+    job = jobs.finish_recording(
+        audio=np.array([0.1], dtype=np.float32),
+        audio_seconds=0.5,
+        job_id=reservation.job_id,
+        text_suffix="\n\n",
+    )
+
+    assert job is not None
+    assert job.text_suffix == "\n\n"
+    assert jobs.get(timeout=0.01).text_suffix == "\n\n"
