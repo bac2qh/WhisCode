@@ -1,9 +1,9 @@
 # Add Extra Hands-Free End Trim Buffer Checkpoints
 
 Date: 2026-06-08
-Plan: `.agents/plans/2026-06-08-handsfree-tail-extra-buffer.md`
+Plan: `.agents/plans/archive/2026-06-08-handsfree-tail-extra-buffer.md`
 Branch/worktree: `handsfree-tail-extra-buffer` / `.agents/worktrees/handsfree-tail-extra-buffer`
-Status: active
+Status: closed
 
 ## Initial Checkpoint - 2026-06-08
 
@@ -57,3 +57,22 @@ Implementation commit:
 
 Important backtracks:
 - A formatting-only indentation cleanup was made in `tests/test_main_cli.py` after the first successful pytest run, then focused verification was rerun successfully.
+
+
+## Closeout Checkpoint - 2026-06-08
+
+Done:
+- Fast-forward merged `handsfree-tail-extra-buffer` into local `main`: `e2a449f` -> `31ebc2b`.
+- Archived plan to `.agents/plans/archive/2026-06-08-handsfree-tail-extra-buffer.md` with closeout note.
+- removed task worktree `.agents/worktrees/handsfree-tail-extra-buffer`; deleted local branch `handsfree-tail-extra-buffer`.
+
+Verification:
+- `uv run --with pytest python -m pytest tests/test_handsfree.py tests/test_main_cli.py` passed with 59 tests.
+- `git diff --check` passed.
+- Validator Workflow ended `APPROVE`.
+
+Final status:
+- Complete.
+
+Closeout commit:
+- Pending at checkpoint write time.

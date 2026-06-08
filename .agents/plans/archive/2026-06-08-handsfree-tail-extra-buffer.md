@@ -1,9 +1,21 @@
+# Closeout Note - 2026-06-08
+
+Final status: complete.
+Related checkpoint: `.agents/checkpoints/2026-06-08-handsfree-tail-extra-buffer-checkpoints.md`.
+Implementation commits: `9182b90` (`Add extra hands-free tail trim buffer`) and `31ebc2b` (`Record hands-free tail buffer checkpoint`).
+Merge result: fast-forward from `e2a449f` to `31ebc2b`; merge commit hash: none.
+Verification performed: `uv run --with pytest python -m pytest tests/test_handsfree.py tests/test_main_cli.py` passed with 59 tests; `git diff --check` passed; Validator Workflow ended `APPROVE`.
+Worktree/branch cleanup result: removed task worktree `.agents/worktrees/handsfree-tail-extra-buffer`; deleted local branch `handsfree-tail-extra-buffer`.
+Shipped summary: hands-free end phrase stops now trim the inferred/explicit/fallback base tail plus a default `1.0s` extra detection-lag buffer, with telemetry and docs updated.
+
+---
+
 # Add Extra Hands-Free End Trim Buffer
 
 Date: 2026-06-08
 Branch/worktree: `handsfree-tail-extra-buffer` / `.agents/worktrees/handsfree-tail-extra-buffer`
 Related checkpoint: `.agents/checkpoints/2026-06-08-handsfree-tail-extra-buffer-checkpoints.md`
-Status: active
+Status: closed
 
 ## Objective
 
