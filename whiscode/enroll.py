@@ -12,7 +12,6 @@ import numpy as np
 
 from whiscode.handsfree import (
     COMMAND_SLOTS,
-    DEFAULT_CHUNK_DIR,
     DEFAULT_COMMAND_CONFIG_PATH,
     DEFAULT_COMMAND_DIR,
     DEFAULT_END_DIR,
@@ -33,16 +32,14 @@ DEFAULT_REFERENCE_SECONDS = DEFAULT_WINDOW_SECONDS
 
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Import WhisCode hands-free trigger samples")
-    choices = ("wake", "end", "chunk", *(slot.name for slot in COMMAND_SLOTS))
+    choices = ("wake", "end", *(slot.name for slot in COMMAND_SLOTS))
     parser.add_argument("kind", nargs="?", choices=choices, help="Reference phrase set to update for file import")
     parser.add_argument("samples", nargs="*", help="Audio samples to import, such as Voice Memo .m4a files")
     parser.add_argument("--record", action="store_true", help="Record wake, end, and key-command samples directly from the microphone")
-    parser.add_argument("--include-chunk", action="store_true", help="Also record optional Send Chunk phrase samples during guided enrollment")
     parser.add_argument("--sample-count", "--samples", dest="sample_count", type=int, default=MIN_REFERENCE_FILES, help=f"Samples to record per phrase (default: {MIN_REFERENCE_FILES})")
     parser.add_argument("--seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds to record per sample (default: {DEFAULT_ENROLL_SECONDS})")
     parser.add_argument("--wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake reference folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End reference folder (default: {DEFAULT_END_DIR})")
-    parser.add_argument("--chunk-dir", type=Path, default=DEFAULT_CHUNK_DIR, help=f"Send Chunk reference folder (default: {DEFAULT_CHUNK_DIR})")
     parser.add_argument("--command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--command-config", type=Path, default=DEFAULT_COMMAND_CONFIG_PATH, help=f"Command enablement config for guided recording (default: {DEFAULT_COMMAND_CONFIG_PATH})")
     parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/Library/Logs/WhisCode/events.jsonl)")
@@ -132,7 +129,6 @@ def import_samples(
     wake_dir: Path = DEFAULT_WAKE_DIR,
     end_dir: Path = DEFAULT_END_DIR,
     *,
-    chunk_dir: Path = DEFAULT_CHUNK_DIR,
     command_dir: Path = DEFAULT_COMMAND_DIR,
     preprocess_fn=preprocess_reference_audio,
 ) -> list[Path]:
@@ -147,8 +143,6 @@ def import_samples(
         target_dir = wake_dir
     elif kind == "end":
         target_dir = end_dir
-    elif kind == "chunk":
-        target_dir = chunk_dir
     else:
         command_dirs = command_reference_dirs(command_dir)
         if kind not in command_dirs:
@@ -249,7 +243,6 @@ def record_guided_samples(
     *,
     wake_dir: Path = DEFAULT_WAKE_DIR,
     end_dir: Path = DEFAULT_END_DIR,
-    chunk_dir: Path = DEFAULT_CHUNK_DIR,
     command_dir: Path = DEFAULT_COMMAND_DIR,
     sample_count: int = MIN_REFERENCE_FILES,
     seconds: float = DEFAULT_ENROLL_SECONDS,
@@ -259,7 +252,6 @@ def record_guided_samples(
     telemetry: Any | None = None,
     overlay: Any | None = None,
     command_slots=None,
-    include_chunk: bool = False,
 ) -> list[Path]:
     validate_recording_options(sample_count, seconds)
     if command_slots is None:
@@ -269,7 +261,6 @@ def record_guided_samples(
         "enrollment.guided_started",
         sample_count=sample_count,
         seconds=seconds,
-        include_chunk=include_chunk,
         enabled_command_count=len(command_slots),
         enabled_commands=[slot.name for slot in command_slots],
     )
@@ -278,7 +269,6 @@ def record_guided_samples(
     phrase_sets = [
         ("wake", wake_dir, "wake phrase"),
         ("end", end_dir, "end phrase"),
-        *((("chunk", chunk_dir, "Send Chunk phrase"),) if include_chunk else ()),
         *(
             (slot.name, command_dirs[slot.name], f"command phrase for {slot.label}")
             for slot in command_slots
@@ -324,14 +314,12 @@ def main(argv: list[str] | None = None) -> int:
             written = record_guided_samples(
                 wake_dir=args.wake_dir,
                 end_dir=args.end_dir,
-                chunk_dir=args.chunk_dir,
                 command_dir=args.command_dir,
                 sample_count=args.sample_count,
                 seconds=args.seconds,
                 telemetry=telemetry,
                 overlay=overlay,
                 command_slots=command_slots,
-                include_chunk=args.include_chunk,
             )
         else:
             written = import_samples(
@@ -339,7 +327,6 @@ def main(argv: list[str] | None = None) -> int:
                 [Path(p) for p in args.samples],
                 args.wake_dir,
                 args.end_dir,
-                chunk_dir=args.chunk_dir,
                 command_dir=args.command_dir,
             )
     except (FileNotFoundError, ValueError, CommandConfigError, subprocess.CalledProcessError, RuntimeError) as e:

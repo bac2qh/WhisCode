@@ -16,7 +16,6 @@ from whiscode.main import (
     _print_transcript_for_stdout,
     ensure_hands_free_references,
     ensure_whisper_processor,
-    hands_free_chunk_enabled,
     parse_args,
     runtime_telemetry_enabled_by_default,
     validate_external_intake_args,
@@ -91,8 +90,6 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.asr_backend == "mlx-whisper"
     assert args.hands_free_threshold == 0.055
     assert args.hands_free_end_threshold == 0.055
-    assert args.hands_free_chunk is False
-    assert args.hands_free_chunk_dir.name == "chunk"
     assert args.hands_free_wake_confirmations == 2
     assert args.hands_free_command_threshold == 0.055
     assert args.hands_free_command_confirmations == 2
@@ -317,9 +314,6 @@ def test_parse_args_hands_free_options():
         "/tmp/wake",
         "--hands-free-end-dir",
         "/tmp/end",
-        "--hands-free-chunk",
-        "--hands-free-chunk-dir",
-        "/tmp/chunk",
         "--hands-free-command-dir",
         "/tmp/commands",
         "--hands-free-command-config",
@@ -370,8 +364,6 @@ def test_parse_args_hands_free_options():
     assert args.hands_free is True
     assert args.hands_free_wake_dir == Path("/tmp/wake")
     assert args.hands_free_end_dir == Path("/tmp/end")
-    assert args.hands_free_chunk is True
-    assert args.hands_free_chunk_dir == Path("/tmp/chunk")
     assert args.hands_free_command_dir == Path("/tmp/commands")
     assert args.hands_free_command_config == Path("/tmp/commands.ini")
     assert args.hands_free_threshold == 0.2
@@ -397,6 +389,18 @@ def test_parse_args_hands_free_options():
     assert args.no_telemetry is True
     assert args.recording_overlay is False
     assert args.recording_notifications is True
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--hands-free-chunk"],
+        ["--hands-free-chunk-dir", "/tmp/chunk"],
+    ],
+)
+def test_parse_args_rejects_removed_chunk_options(argv):
+    with pytest.raises(SystemExit):
+        parse_args(argv)
 
 
 def test_parse_args_legacy_threshold_applies_to_end_when_end_threshold_omitted():
@@ -487,6 +491,7 @@ def test_emit_hands_free_chunk_tail_resolution_uses_bounded_payload():
         (
             "handsfree.chunk_tail_seconds_resolved",
             {
+                "reference_source": "wake",
                 "source": "inferred",
                 "base_seconds": 0.25,
                 "extra_seconds": 0.25,
@@ -599,46 +604,16 @@ def test_ensure_hands_free_references_returns_true_when_samples_exist(tmp_path):
     ])
 
     assert ensure_hands_free_references(args) is True
-    assert hands_free_chunk_enabled(args) is False
 
 
-def test_ensure_hands_free_references_auto_enables_existing_chunk_samples(tmp_path):
-    wake_dir = tmp_path / "wake"
-    end_dir = tmp_path / "end"
-    chunk_dir = tmp_path / "chunk"
-    command_dir = tmp_path / "commands"
-    write_reference_samples(wake_dir, "wake")
-    write_reference_samples(end_dir, "end")
-    write_reference_samples(chunk_dir, "chunk")
-    for name, path in command_reference_dirs(command_dir).items():
-        write_reference_samples(path, name)
-    args = parse_args([
-        "--hands-free",
-        "--hands-free-wake-dir",
-        str(wake_dir),
-        "--hands-free-end-dir",
-        str(end_dir),
-        "--hands-free-chunk-dir",
-        str(chunk_dir),
-        "--hands-free-command-dir",
-        str(command_dir),
-        "--hands-free-command-config",
-        str(tmp_path / "missing-config.ini"),
-    ])
-
-    assert hands_free_chunk_enabled(args) is True
-    assert ensure_hands_free_references(args) is True
-
-
-def test_ensure_hands_free_references_chunk_telemetry_omits_chunk_path(tmp_path):
+def test_ensure_hands_free_references_ignores_existing_chunk_samples(tmp_path):
     telemetry = FakeTelemetry()
     wake_dir = tmp_path / "wake"
     end_dir = tmp_path / "end"
-    chunk_dir = tmp_path / "chunk"
     command_dir = tmp_path / "commands"
     write_reference_samples(wake_dir, "wake")
     write_reference_samples(end_dir, "end")
-    write_reference_samples(chunk_dir, "chunk")
+    write_reference_samples(tmp_path / "chunk", "chunk")
     for name, path in command_reference_dirs(command_dir).items():
         write_reference_samples(path, name)
     args = parse_args([
@@ -647,8 +622,6 @@ def test_ensure_hands_free_references_chunk_telemetry_omits_chunk_path(tmp_path)
         str(wake_dir),
         "--hands-free-end-dir",
         str(end_dir),
-        "--hands-free-chunk-dir",
-        str(chunk_dir),
         "--hands-free-command-dir",
         str(command_dir),
         "--hands-free-command-config",
@@ -658,39 +631,12 @@ def test_ensure_hands_free_references_chunk_telemetry_omits_chunk_path(tmp_path)
     assert ensure_hands_free_references(args, telemetry=telemetry) is True
 
     event = next(properties for name, properties in telemetry.events if name == "handsfree.reference_check_started")
-    assert event["chunk_enabled"] is True
-    assert event["chunk_count"] == 3
+    assert "wake_dir" not in event
+    assert "end_dir" not in event
+    assert "command_dir" not in event
+    assert "chunk_enabled" not in event
+    assert "chunk_count" not in event
     assert "chunk_dir" not in event
-
-
-def test_ensure_hands_free_references_requires_chunk_when_forced(tmp_path):
-    wake_dir = tmp_path / "wake"
-    end_dir = tmp_path / "end"
-    command_dir = tmp_path / "commands"
-    write_reference_samples(wake_dir, "wake")
-    write_reference_samples(end_dir, "end")
-    for name, path in command_reference_dirs(command_dir).items():
-        write_reference_samples(path, name)
-    args = parse_args([
-        "--hands-free",
-        "--hands-free-chunk",
-        "--no-enroll-prompt",
-        "--hands-free-wake-dir",
-        str(wake_dir),
-        "--hands-free-end-dir",
-        str(end_dir),
-        "--hands-free-chunk-dir",
-        str(tmp_path / "chunk"),
-        "--hands-free-command-dir",
-        str(command_dir),
-        "--hands-free-command-config",
-        str(tmp_path / "missing-config.ini"),
-    ])
-
-    assert ensure_hands_free_references(
-        args,
-        input_fn=lambda prompt: (_ for _ in ()).throw(AssertionError("prompted")),
-    ) is False
 
 
 def test_ensure_hands_free_references_decline_prompt_exits(tmp_path):

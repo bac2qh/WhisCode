@@ -19,3 +19,4 @@
 ## 2026-06-08
 - Send Chunk emits bounded `send_chunk.requested`, `send_chunk.queued`, `send_chunk.restarted`, and `send_chunk.rejected` events with mode/source, local job IDs, queue depth, timing, and suffix length only. It does not emit raw audio, transcript text, prompts, hotwords, provider payloads, or typed content.
 - Hands-free chunk support emits bounded `handsfree.chunk_detected` and `handsfree.chunk_tail_seconds_resolved` events. The tail-resolution payload mirrors end-tail resolution fields and excludes phrase text, sample paths, raw audio, transcripts, and typed text.
+- Hands-free Send Chunk telemetry now reports wake-as-chunk semantics: `handsfree.chunk_detected` uses the wake threshold and a bounded `reference_source="wake"` field, while chunk-tail resolution is inferred from wake references without logging paths, phrase text, audio, transcripts, or typed text.

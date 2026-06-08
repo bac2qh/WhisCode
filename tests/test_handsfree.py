@@ -231,11 +231,15 @@ def test_end_detection_excludes_base_plus_extra_tail(tmp_path):
     assert session.state == "idle"
 
 
-def test_chunk_detection_excludes_chunk_tail_not_end_tail():
+def test_chunk_detection_excludes_wake_chunk_tail_not_end_tail():
     session = HandsFreeSession(
         FakeDetector([]),
         FakeDetector([None, None, None]),
-        chunk_detector=FakeDetector([None, None, Detection("chunk-01.wav", 0.04)]),
+        chunk_detector=FakeDetector([
+            None,
+            Detection("wake-01.wav", 0.04),
+            Detection("wake-02.wav", 0.03),
+        ]),
         sample_rate=10,
         window_seconds=0.2,
         slide_seconds=0.1,
@@ -253,6 +257,30 @@ def test_chunk_detection_excludes_chunk_tail_not_end_tail():
     np.testing.assert_array_equal(events[0].audio, np.array([1, 2], dtype=np.float32))
     assert events[0].duration_seconds == 0.2
     assert session.state == "idle"
+
+
+def test_chunk_detection_defaults_to_wake_confirmations():
+    session = HandsFreeSession(
+        FakeDetector([]),
+        FakeDetector([None, None]),
+        chunk_detector=FakeDetector([
+            Detection("wake-01.wav", 0.04),
+            Detection("wake-02.wav", 0.03),
+        ]),
+        sample_rate=10,
+        window_seconds=0.1,
+        slide_seconds=0.1,
+        tail_seconds=0.0,
+        chunk_tail_seconds=0.0,
+        wake_confirmations=2,
+    )
+    session.manual_start()
+
+    assert session.feed(chunk(1)) == []
+    events = session.feed(chunk(2))
+
+    assert [event.kind for event in events] == ["chunk.detected"]
+    np.testing.assert_array_equal(events[0].audio, np.array([1, 2], dtype=np.float32))
 
 
 def test_manual_stop_includes_pending_tail():

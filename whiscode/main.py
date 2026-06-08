@@ -17,7 +17,6 @@ from whiscode.handsfree import (
     DEFAULT_COMMAND_DIR,
     DEFAULT_COMMAND_CONFIRMATIONS,
     DEFAULT_COMMAND_THRESHOLD,
-    DEFAULT_CHUNK_DIR,
     DEFAULT_END_DIR,
     DEFAULT_END_THRESHOLD,
     DEFAULT_ACTIVE_LEVEL,
@@ -170,8 +169,6 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free", action="store_true", help="Use local keyword detection instead of Right Shift as the primary trigger")
     parser.add_argument("--hands-free-wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake phrase reference WAV folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--hands-free-end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End phrase reference WAV folder (default: {DEFAULT_END_DIR})")
-    parser.add_argument("--hands-free-chunk", action="store_true", help="Enable the optional hands-free Send Chunk phrase and prompt for setup when samples are missing")
-    parser.add_argument("--hands-free-chunk-dir", type=Path, default=DEFAULT_CHUNK_DIR, help=f"Send Chunk phrase reference WAV folder (default: {DEFAULT_CHUNK_DIR})")
     parser.add_argument("--hands-free-command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command phrase reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--hands-free-command-config", type=Path, default=DEFAULT_COMMAND_CONFIG_PATH, help=f"Hands-free command enablement config (default: {DEFAULT_COMMAND_CONFIG_PATH})")
     parser.add_argument("--hands-free-threshold", type=float, default=None, help=f"Wake keyword detection threshold (default: {DEFAULT_THRESHOLD})")
@@ -356,14 +353,16 @@ def resolve_active_command_slots(args, *, telemetry=None):
     return slots
 
 
-def hands_free_chunk_enabled(args) -> bool:
-    return bool(args.hands_free_chunk or reference_sample_count(args.hands_free_chunk_dir) > 0)
-
-
-def _emit_tail_resolution_event(telemetry, event_name: str, resolution: HandsFreeTailResolution) -> None:
+def _emit_tail_resolution_event(
+    telemetry,
+    event_name: str,
+    resolution: HandsFreeTailResolution,
+    **extra_properties,
+) -> None:
     if telemetry:
         telemetry.emit(
             event_name,
+            **extra_properties,
             source=resolution.source,
             base_seconds=round(resolution.base_seconds, 6),
             extra_seconds=round(resolution.extra_seconds, 6),
@@ -378,8 +377,18 @@ def _emit_hands_free_tail_resolution(telemetry, resolution: HandsFreeTailResolut
     _emit_tail_resolution_event(telemetry, "handsfree.tail_seconds_resolved", resolution)
 
 
-def _emit_hands_free_chunk_tail_resolution(telemetry, resolution: HandsFreeTailResolution) -> None:
-    _emit_tail_resolution_event(telemetry, "handsfree.chunk_tail_seconds_resolved", resolution)
+def _emit_hands_free_chunk_tail_resolution(
+    telemetry,
+    resolution: HandsFreeTailResolution,
+    *,
+    reference_source: str = "wake",
+) -> None:
+    _emit_tail_resolution_event(
+        telemetry,
+        "handsfree.chunk_tail_seconds_resolved",
+        resolution,
+        reference_source=reference_source,
+    )
 
 
 def ensure_hands_free_references(
@@ -394,8 +403,6 @@ def ensure_hands_free_references(
         command_slots = resolve_active_command_slots(args, telemetry=telemetry)
     wake_count = reference_sample_count(args.hands_free_wake_dir)
     end_count = reference_sample_count(args.hands_free_end_dir)
-    chunk_enabled = hands_free_chunk_enabled(args)
-    chunk_count = reference_sample_count(args.hands_free_chunk_dir)
     command_dirs = command_reference_dirs(args.hands_free_command_dir, slots=tuple(command_slots))
     command_counts = {name: reference_sample_count(path) for name, path in command_dirs.items()}
     if telemetry:
@@ -404,19 +411,12 @@ def ensure_hands_free_references(
             wake_count=wake_count,
             end_count=end_count,
             command_counts=command_counts,
-            chunk_count=chunk_count,
-            chunk_enabled=chunk_enabled,
             minimum_samples=3,
-            wake_dir=args.hands_free_wake_dir,
-            end_dir=args.hands_free_end_dir,
-            command_dir=args.hands_free_command_dir,
             enabled_command_count=len(command_dirs),
         )
-    chunk_dir = args.hands_free_chunk_dir if chunk_enabled else None
     missing = missing_reference_messages(
         args.hands_free_wake_dir,
         args.hands_free_end_dir,
-        chunk_dir=chunk_dir,
         command_dirs=command_dirs,
     )
     if not missing:
@@ -431,8 +431,6 @@ def ensure_hands_free_references(
         print(f"  {message}")
 
     command = "uv run whiscode-enroll --record"
-    if chunk_enabled:
-        command += " --include-chunk"
     if args.no_enroll_prompt:
         if telemetry:
             telemetry.emit("handsfree.enrollment_prompt_skipped", reason="no_enroll_prompt")
@@ -459,15 +457,11 @@ def ensure_hands_free_references(
         "seconds": args.enroll_seconds,
         "telemetry": telemetry,
     }
-    if chunk_enabled:
-        enroll_kwargs["chunk_dir"] = args.hands_free_chunk_dir
-        enroll_kwargs["include_chunk"] = True
     enroll_fn(**enroll_kwargs)
 
     missing = missing_reference_messages(
         args.hands_free_wake_dir,
         args.hands_free_end_dir,
-        chunk_dir=chunk_dir,
         command_dirs=command_dirs,
     )
     if missing:
@@ -511,10 +505,8 @@ def main():
         sys.exit(1)
 
     active_slots = ()
-    chunk_enabled = False
     if args.hands_free:
         try:
-            chunk_enabled = hands_free_chunk_enabled(args)
             active_slots = resolve_active_command_slots(args, telemetry=telemetry)
             references_complete = ensure_hands_free_references(args, command_slots=active_slots, telemetry=telemetry)
         except CommandConfigError as e:
@@ -1291,33 +1283,35 @@ def main():
 
             if event.kind == "chunk.detected":
                 if state == State.RECORDING:
+                    source = "handsfree_wake"
                     job_id = transcription_jobs.reserved_job_id()
                     if job_id is None:
-                        emit_send_chunk_requested("handsfree_voice", "handsfree_chunk")
+                        emit_send_chunk_requested("handsfree_voice", source)
                         telemetry.emit("recording.stop_ignored", reason="missing_reservation")
-                        emit_send_chunk_rejected("handsfree_voice", "handsfree_chunk", "missing_reservation")
+                        emit_send_chunk_rejected("handsfree_voice", source, "missing_reservation")
                         handsfree_session.reset_idle()
-                        refresh_state_from_queue("handsfree_chunk_missing_reservation")
+                        refresh_state_from_queue("handsfree_wake_chunk_missing_reservation")
                         return
-                    emit_send_chunk_requested("handsfree_voice", "handsfree_chunk", job_id=job_id)
+                    emit_send_chunk_requested("handsfree_voice", source, job_id=job_id)
                     print(f"handsfree.chunk.detected distance={event.detection.distance:.4f}")
                     telemetry.emit(
                         "handsfree.chunk_detected",
                         distance=round(event.detection.distance, 6) if event.detection else None,
-                        threshold=args.hands_free_end_threshold,
+                        threshold=args.hands_free_threshold,
+                        reference_source="wake",
                         audio_seconds=round(event.duration_seconds, 3),
                         rms=round(event.detection.rms, 6) if event.detection and event.detection.rms is not None else None,
                         active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                     )
                     job = handle_completed_send_chunk_audio(
                         mode="handsfree_voice",
-                        source="handsfree_chunk",
+                        source=source,
                         job_id=job_id,
                         audio=event.audio,
                         audio_seconds=event.duration_seconds,
                     )
                     if job is not None:
-                        restart_handsfree_recording("handsfree_voice", "handsfree_chunk", job.job_id)
+                        restart_handsfree_recording("handsfree_voice", source, job.job_id)
                 return
 
             if event.kind in {"end.detected", "timeout"}:
@@ -1380,7 +1374,9 @@ def main():
                 end_threshold=args.hands_free_end_threshold,
                 command_threshold=args.hands_free_command_threshold,
                 command_count=len(active_slots),
-                chunk_enabled=chunk_enabled,
+                chunk_source="wake",
+                chunk_threshold=args.hands_free_threshold,
+                chunk_confirmations=args.hands_free_wake_confirmations,
             )
             tail_resolution = resolve_hands_free_tail_seconds(
                 args.hands_free_tail_seconds,
@@ -1389,22 +1385,16 @@ def main():
                 extra_seconds=args.hands_free_tail_extra_seconds,
             )
             _emit_hands_free_tail_resolution(telemetry, tail_resolution)
-            chunk_tail_resolution = None
-            if chunk_enabled:
-                chunk_tail_resolution = resolve_hands_free_tail_seconds(
-                    None,
-                    args.hands_free_chunk_dir,
-                    active_level=args.hands_free_active_level,
-                    extra_seconds=args.hands_free_tail_extra_seconds,
-                )
-                _emit_hands_free_chunk_tail_resolution(telemetry, chunk_tail_resolution)
+            chunk_tail_resolution = resolve_hands_free_tail_seconds(
+                None,
+                args.hands_free_wake_dir,
+                active_level=args.hands_free_active_level,
+                extra_seconds=args.hands_free_tail_extra_seconds,
+            )
+            _emit_hands_free_chunk_tail_resolution(telemetry, chunk_tail_resolution)
             wake_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)
             end_detector = LocalWakeDetector(args.hands_free_end_dir, args.hands_free_end_threshold)
-            chunk_detector = (
-                LocalWakeDetector(args.hands_free_chunk_dir, args.hands_free_end_threshold)
-                if chunk_enabled
-                else None
-            )
+            chunk_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)
             command_detectors = {
                 name: LocalWakeDetector(path, args.hands_free_command_threshold)
                 for name, path in command_reference_dirs(args.hands_free_command_dir, slots=tuple(active_slots)).items()
@@ -1430,7 +1420,8 @@ def main():
             wake_confirmations=args.hands_free_wake_confirmations,
             command_detectors=command_detectors,
             chunk_detector=chunk_detector,
-            chunk_tail_seconds=chunk_tail_resolution.seconds if chunk_tail_resolution else None,
+            chunk_tail_seconds=chunk_tail_resolution.seconds,
+            chunk_confirmations=args.hands_free_wake_confirmations,
             command_confirmations=args.hands_free_command_confirmations,
             level_callback=overlay.update_level,
         )

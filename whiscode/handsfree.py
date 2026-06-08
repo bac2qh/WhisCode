@@ -17,7 +17,6 @@ from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 
 DEFAULT_WAKE_DIR = Path.home() / ".config" / "whiscode" / "wake" / "wake"
 DEFAULT_END_DIR = Path.home() / ".config" / "whiscode" / "wake" / "end"
-DEFAULT_CHUNK_DIR = Path.home() / ".config" / "whiscode" / "wake" / "chunk"
 DEFAULT_COMMAND_DIR = Path.home() / ".config" / "whiscode" / "wake" / "commands"
 DEFAULT_COMMAND_CONFIG_PATH = Path.home() / ".config" / "whiscode" / "commands.ini"
 DEFAULT_THRESHOLD = 0.055
@@ -255,7 +254,6 @@ def missing_reference_messages(
     end_dir: Path,
     minimum: int = MIN_REFERENCE_FILES,
     *,
-    chunk_dir: Path | None = None,
     command_dirs: dict[str, Path] | None = None,
 ) -> list[str]:
     messages = []
@@ -263,10 +261,6 @@ def missing_reference_messages(
         count = reference_sample_count(path)
         if count < minimum:
             messages.append(f"{label}: {count}/{minimum} WAV samples in {path}")
-    if chunk_dir is not None:
-        count = reference_sample_count(chunk_dir)
-        if count < minimum:
-            messages.append(f"chunk: {count}/{minimum} WAV samples in {chunk_dir}")
     if command_dirs:
         for name, path in command_dirs.items():
             count = reference_sample_count(path)
@@ -376,6 +370,7 @@ class HandsFreeSession:
         wake_confirmations: int = DEFAULT_WAKE_CONFIRMATIONS,
         command_detectors: dict[str, Detector] | None = None,
         chunk_detector: Detector | None = None,
+        chunk_confirmations: int | None = None,
         command_confirmations: int = DEFAULT_COMMAND_CONFIRMATIONS,
         level_callback: Any | None = None,
     ):
@@ -399,6 +394,11 @@ class HandsFreeSession:
         self.min_active_ratio = min_active_ratio
         self.active_level = active_level
         self.wake_confirmations = max(1, int(wake_confirmations))
+        self.chunk_confirmations = (
+            self.wake_confirmations
+            if chunk_confirmations is None
+            else max(1, int(chunk_confirmations))
+        )
         self.command_confirmations = max(1, int(command_confirmations))
         self.level_callback = level_callback
 
@@ -498,7 +498,7 @@ class HandsFreeSession:
                 "chunk",
                 self._chunk_filled_samples,
             )
-            chunk_detection = self._confirm_detection(chunk_detection, "chunk", 1)
+            chunk_detection = self._confirm_detection(chunk_detection, "chunk", self.chunk_confirmations)
             if chunk_detection:
                 event = self._finish_recording_with_trim(
                     "chunk.detected",
