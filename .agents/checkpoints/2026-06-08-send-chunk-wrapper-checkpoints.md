@@ -61,4 +61,5 @@
   - `git diff --check` -> clean.
   - Focused suite -> 101 passed.
   - Full suite -> 267 passed.
-- Immediate next step: commit implementation and workflow state on `feature/send-chunk-wrapper`, then close out to local `main`.
+- Implementation commit: `638b980` (`Implement send chunk recording wrapper`).
+- Immediate next step: commit this checkpoint update, then close out to local `main`.
