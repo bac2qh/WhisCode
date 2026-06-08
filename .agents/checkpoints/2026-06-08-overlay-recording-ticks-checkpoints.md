@@ -19,6 +19,7 @@
 - Done: `stop()` and overlay `_disable()` now clear `_active_recording_item_id` with the other client state.
 - Done: added focused regression tests for a recording item continuing to tick while a different item is transcribing, and for queue/remove clearing the active recording item so ticks stop.
 - Done: updated recording overlay project memory with the durable behavior fix.
+- Implementation commit: `3f760e2` (`Fix recording overlay ticks for stacked cards`).
 - Verification:
   - `uv run --with pytest pytest tests/test_recording_overlay.py` passed: 22 tests.
   - `uv run --with pytest pytest tests/test_recording_overlay.py tests/test_main_cli.py tests/test_recorder.py tests/test_handsfree.py` passed: 92 tests.
