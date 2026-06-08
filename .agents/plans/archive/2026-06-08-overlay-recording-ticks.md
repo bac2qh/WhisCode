@@ -1,5 +1,44 @@
 # Fix Recording Overlay Timer Freeze
 
+## Closeout
+- Final status: implemented, validated, merged to local , and archived.
+- Related checkpoint: .
+- Implementation commits:
+  -  ()
+  -  ()
+- Merge commit: none; local  was fast-forwarded from  to .
+- Verification performed:
+  - ============================= test session starts ==============================
+platform darwin -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/xin/Documents/repos/WhisCode
+configfile: pyproject.toml
+plugins: anyio-4.12.1
+collected 22 items
+
+tests/test_recording_overlay.py ......................                   [100%]
+
+============================== 22 passed in 0.06s ============================== -> 22 passed.
+  - ============================= test session starts ==============================
+platform darwin -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/xin/Documents/repos/WhisCode
+configfile: pyproject.toml
+plugins: anyio-4.12.1
+collected 92 items
+
+tests/test_recording_overlay.py ......................                   [ 23%]
+tests/test_main_cli.py ........................................          [ 67%]
+tests/test_recorder.py ..                                                [ 69%]
+tests/test_handsfree.py ............................                     [100%]
+
+============================== 92 passed in 0.29s ============================== -> 92 passed.
+  -  -> clean.
+  -  verdict: .
+- Worktree/branch cleanup result: removed ; deleted local branch .
+- Shipped summary: Recording overlay level ticks now follow the active recording item id, so a new recording card keeps animating while older queued/transcribing cards remain visible.
+
+## Status
+Closed and archived.
+
 ## Status
 - Active implementation plan.
 - Branch/worktree: `fix-overlay-recording-ticks` at `.agents/worktrees/fix-overlay-recording-ticks`.
