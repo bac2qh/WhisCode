@@ -37,6 +37,7 @@
 - Described wake phrase start, wake-as-Send-Chunk while recording, end phrase finish, Right Shift fallback, manual Send Chunk fallback, and FIFO typing order.
 - Framed Send Chunk as preferred for long messages because chunks transcribe sooner, keep the queue moving, and provide a natural pause.
 - Updated `.agents/memory/hands-free-keyword-detection.md` and `.agents/memory/log.md` with durable README guidance history.
+- Implementation commit: `c0c9f54` (`Document recommended hands-free VibeVoice workflow`).
 
 ### Verification
 
@@ -56,5 +57,5 @@
 
 ### Next Step
 
-- Commit the README, memory, plan, and checkpoint implementation state.
+- Commit this checkpoint hash update.
 - Run closeout: merge to local `main`, archive the active plan, remove the task worktree, and delete the local task branch under the main-branch mutex.
