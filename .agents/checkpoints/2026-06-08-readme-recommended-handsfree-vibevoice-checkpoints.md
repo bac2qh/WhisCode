@@ -76,3 +76,15 @@
 
 - Commit the closeout-preparation archive move.
 - Run the non-interactive mutex closeout command from the main checkout.
+
+## 2026-06-08 Final Closeout Result
+
+### Done
+
+- Local `main` fast-forwarded from `90d4a3e` to `9a23d08`; merge commit hash: none.
+- Removed task worktree `.agents/worktrees/readme-recommended-handsfree-vibevoice` under the main-branch mutex.
+- Deleted merged local branch `readme-recommended-handsfree-vibevoice` under the main-branch mutex.
+
+### Verification
+
+- `git log --oneline --decorate -5` on `main` showed `9a23d08` at `HEAD` after the fast-forward merge.
