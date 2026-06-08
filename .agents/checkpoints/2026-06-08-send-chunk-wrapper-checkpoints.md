@@ -63,3 +63,13 @@
   - Full suite -> 267 passed.
 - Implementation commit: `638b980` (`Implement send chunk recording wrapper`).
 - Immediate next step: commit this checkpoint update, then close out to local `main`.
+
+## 2026-06-08 Closeout
+- Local `main` fast-forwarded from `a278e3a` to `7e79ed2`; no merge commit was created.
+- Task worktree removed: `.agents/worktrees/send-chunk-wrapper`.
+- Local task branch deleted: `feature/send-chunk-wrapper`.
+- Active plan closed and archived to `.agents/plans/archive/2026-06-08-send-chunk-wrapper.md`.
+- Final implementation commits on merged branch:
+  - `638b980` (`Implement send chunk recording wrapper`)
+  - `7e79ed2` (`Record send chunk implementation checkpoint`)
+- Closeout archival commit: pending.

@@ -1,7 +1,22 @@
 # Send Chunk Wrapper
 
+## Closeout
+- Final status: implemented, validated, merged to local `main`, and archived.
+- Related checkpoint: `.agents/checkpoints/2026-06-08-send-chunk-wrapper-checkpoints.md`.
+- Implementation commits:
+  - `638b980` (`Implement send chunk recording wrapper`)
+  - `7e79ed2` (`Record send chunk implementation checkpoint`)
+- Merge commit: none; local `main` was fast-forwarded from `a278e3a` to `7e79ed2`.
+- Verification performed:
+  - `uv run --with pytest pytest tests/test_main_cli.py tests/test_handsfree.py tests/test_enroll.py tests/test_transcription_queue.py tests/test_injector.py tests/test_telemetry.py` -> 101 passed.
+  - `uv run --with pytest pytest` -> 267 passed.
+  - `git diff --check` -> clean.
+  - `mission_validator` final verdict: `APPROVE`.
+- Worktree/branch cleanup result: removed `.agents/worktrees/send-chunk-wrapper`; deleted local branch `feature/send-chunk-wrapper`.
+- Shipped summary: Send Chunk now works as a manual Right Option + Right Shift chord and as an optional hands-free chunk phrase; chunk recordings queue with a typed blank-line suffix and immediately restart recording, with chunk enrollment, docs, tests, and bounded telemetry.
+
 ## Status
-Active implementation plan.
+Closed and archived.
 
 ## Workflow
 - Use Validator Workflow with Goal Mode active.
