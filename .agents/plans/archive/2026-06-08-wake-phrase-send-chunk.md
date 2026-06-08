@@ -1,7 +1,24 @@
 # Wake Phrase Send Chunk
 
+## Closeout
+- Final status: implemented, validated, merged to local `main`, and archived.
+- Related checkpoint: `.agents/checkpoints/2026-06-08-wake-phrase-send-chunk-checkpoints.md`.
+- Implementation commits:
+  - `6cc3369` (`Reuse wake phrase for hands-free send chunk`)
+  - `9e75277` (`Record wake phrase send chunk validation`)
+- Merge commit: none; local `main` was fast-forwarded from `b3bf370` to `9e75277`.
+- Verification performed:
+  - `uv run --with pytest pytest tests/test_main_cli.py tests/test_handsfree.py tests/test_enroll.py tests/test_transcription_queue.py tests/test_injector.py tests/test_telemetry.py` -> 102 passed.
+  - `uv run --with pytest pytest` -> 268 passed.
+  - `git diff --check` -> clean.
+  - Removed API/doc `rg` checks for retired chunk flags, enrollment commands, and `wake/chunk` -> no runtime/current-doc matches.
+  - `mission_validator` verdict: `APPROVE`.
+- Worktree/branch cleanup result: removed `.agents/worktrees/wake-phrase-send-chunk`; deleted local branch `task/2026-06-08-wake-phrase-send-chunk`.
+- Shipped summary: Hands-free Send Chunk now reuses the wake phrase while recording, trims the chunk tail from wake references plus the configured extra buffer, removes the separate chunk CLI/enrollment/docs surface, and preserves manual Send Chunk plus end/manual/timeout stop behavior.
+
 ## Status
-Active.
+Closed and archived.
+
 
 ## Workflow
 - Use Validator Workflow with Goal Mode active.

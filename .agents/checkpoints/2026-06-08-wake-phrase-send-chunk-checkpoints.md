@@ -58,4 +58,18 @@
   - `git diff --check b3bf370bd107ae3a13d4cd5b1398ddfd400c0f05` -> clean.
   - Removed API/doc search -> no runtime/docs matches for removed chunk flags or `wake/chunk`; only negative tests mention removed flags.
 - Implementation commit: `6cc3369d1216f8333287090defac1afca3977b7e` (`Reuse wake phrase for hands-free send chunk`).
-- Immediate next step: commit this checkpoint update and then close out to local `main`.
+- Validation checkpoint commit: `9e752778b49ea9ba2f52137324f857b3198c8a6c` (`Record wake phrase send chunk validation`).
+
+## 2026-06-08 Closeout
+- Local `main` fast-forwarded from `b3bf370bd107ae3a13d4cd5b1398ddfd400c0f05` to `9e752778b49ea9ba2f52137324f857b3198c8a6c`; no merge commit was created.
+- Task worktree removed: `.agents/worktrees/wake-phrase-send-chunk`.
+- Local task branch deleted: `task/2026-06-08-wake-phrase-send-chunk`.
+- Active plan closed and archived to `.agents/plans/archive/2026-06-08-wake-phrase-send-chunk.md`.
+- Final implementation commits on merged branch:
+  - `6cc3369` (`Reuse wake phrase for hands-free send chunk`)
+  - `9e75277` (`Record wake phrase send chunk validation`)
+- Verification retained for closeout:
+  - Targeted suite -> 102 passed.
+  - Full suite -> 268 passed.
+  - `mission_validator` -> `APPROVE`.
+- Immediate next step: none; closeout bookkeeping is being committed on local `main`.
