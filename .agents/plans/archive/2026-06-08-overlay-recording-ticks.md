@@ -1,48 +1,22 @@
 # Fix Recording Overlay Timer Freeze
 
 ## Closeout
-- Final status: implemented, validated, merged to local , and archived.
-- Related checkpoint: .
+- Final status: implemented, validated, merged to local `main`, and archived.
+- Related checkpoint: `.agents/checkpoints/2026-06-08-overlay-recording-ticks-checkpoints.md`.
 - Implementation commits:
-  -  ()
-  -  ()
-- Merge commit: none; local  was fast-forwarded from  to .
+  - `3f760e2` (`Fix recording overlay ticks for stacked cards`)
+  - `7dabc66` (`Record overlay tick validation checkpoint`)
+- Merge commit: none; local `main` was fast-forwarded from `83da912` to `7dabc66`.
 - Verification performed:
-  - ============================= test session starts ==============================
-platform darwin -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
-rootdir: /Users/xin/Documents/repos/WhisCode
-configfile: pyproject.toml
-plugins: anyio-4.12.1
-collected 22 items
-
-tests/test_recording_overlay.py ......................                   [100%]
-
-============================== 22 passed in 0.06s ============================== -> 22 passed.
-  - ============================= test session starts ==============================
-platform darwin -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
-rootdir: /Users/xin/Documents/repos/WhisCode
-configfile: pyproject.toml
-plugins: anyio-4.12.1
-collected 92 items
-
-tests/test_recording_overlay.py ......................                   [ 23%]
-tests/test_main_cli.py ........................................          [ 67%]
-tests/test_recorder.py ..                                                [ 69%]
-tests/test_handsfree.py ............................                     [100%]
-
-============================== 92 passed in 0.29s ============================== -> 92 passed.
-  -  -> clean.
-  -  verdict: .
-- Worktree/branch cleanup result: removed ; deleted local branch .
+  - `uv run --with pytest pytest tests/test_recording_overlay.py` -> 22 passed.
+  - `uv run --with pytest pytest tests/test_recording_overlay.py tests/test_main_cli.py tests/test_recorder.py tests/test_handsfree.py` -> 92 passed.
+  - `git diff --check` -> clean.
+  - `mission_validator` verdict: `APPROVE`.
+- Worktree/branch cleanup result: removed `.agents/worktrees/fix-overlay-recording-ticks`; deleted local branch `fix-overlay-recording-ticks`.
 - Shipped summary: Recording overlay level ticks now follow the active recording item id, so a new recording card keeps animating while older queued/transcribing cards remain visible.
 
 ## Status
 Closed and archived.
-
-## Status
-- Active implementation plan.
-- Branch/worktree: `fix-overlay-recording-ticks` at `.agents/worktrees/fix-overlay-recording-ticks`.
-- Related checkpoint: `.agents/checkpoints/2026-06-08-overlay-recording-ticks-checkpoints.md`.
 
 ## Objective
 Fix the stacked overlay bug where a new recording card can freeze while an older transcription card is still active.

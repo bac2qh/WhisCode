@@ -31,16 +31,16 @@
 - Immediate next step: commit implementation and complete closeout into local `main`.
 
 ## 2026-06-08 Closeout
-- Local  fast-forwarded from  to ; no merge commit was created.
-- Task worktree removed: .
-- Local task branch deleted: .
-- Active plan closed and archived to .
+- Local `main` fast-forwarded from `83da912` to `7dabc66`; no merge commit was created.
+- Task worktree removed: `.agents/worktrees/fix-overlay-recording-ticks`.
+- Local task branch deleted: `fix-overlay-recording-ticks`.
+- Active plan closed and archived to `.agents/plans/archive/2026-06-08-overlay-recording-ticks.md`.
 - Final implementation commits on merged branch:
-  -  ()
-  -  ()
+  - `3f760e2` (`Fix recording overlay ticks for stacked cards`)
+  - `7dabc66` (`Record overlay tick validation checkpoint`)
 - Verification retained for closeout:
   - Overlay tests -> 22 passed.
   - Relevant suite -> 92 passed.
-  -  -> clean.
-  -  -> .
-- Immediate next step: none; closeout bookkeeping is being committed on local .
+  - `git diff --check` -> clean.
+  - `mission_validator` -> `APPROVE`.
+- Immediate next step: none; closeout bookkeeping is complete on local `main`.
