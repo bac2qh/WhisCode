@@ -50,3 +50,6 @@
 ## 2026-06-06
 - Documented hands-free end-tail auto-inference from enrolled end-phrase WAV active spans, the explicit `--hands-free-tail-seconds` override, the `1.0` second fallback, and bounded tail-resolution telemetry.
 - Documented that recording overlay orphan-helper scanning tolerates malformed process-table command bytes while keeping helper filtering unchanged.
+
+## 2026-06-08
+- Documented the extra hands-free end-detection lag buffer, its `1.0` second default, and `--hands-free-tail-extra-seconds 0` as the previous base-only trim behavior.

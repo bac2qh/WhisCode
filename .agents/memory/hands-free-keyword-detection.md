@@ -42,3 +42,8 @@
 ## 2026-06-06
 - Omitted `--hands-free-tail-seconds` now auto-infers the end-phrase trim tail from enrolled end reference WAVs. Each readable reference contributes the active span from first through last sample where `abs(audio) >= --hands-free-active-level`; runtime uses the median valid span and falls back to `1.0s` when none can be computed.
 - Explicit `--hands-free-tail-seconds FLOAT` still wins. End-phrase stops trim the resolved pending tail, while manual/Right Shift stops and timeout stops keep pending tail audio.
+
+## 2026-06-08
+- Hands-free end-tail resolution now separates base trim from extra detector-lag trim. `--hands-free-tail-seconds FLOAT` remains the explicit base override, omitted values still infer/fallback the base from end references, and `--hands-free-tail-extra-seconds` adds an extra buffer on top.
+- The extra hands-free tail buffer defaults to `1.0s`. Set `--hands-free-tail-extra-seconds 0` to restore the previous base-only trim behavior.
+- Tail-resolution telemetry now records `base_seconds`, `extra_seconds`, and total `resolved_seconds` while preserving source/reference/fallback fields. Manual/Right Shift stops and timeout stops still keep pending tail audio.

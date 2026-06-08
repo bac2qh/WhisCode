@@ -59,6 +59,7 @@ uv run whiscode --hands-free
 | `--hands-free-command-threshold FLOAT` | `0.055` | Detection threshold for hands-free key command matching |
 | `--hands-free-command-config PATH` | `~/.config/whiscode/commands.ini` | Hands-free command enablement config |
 | `--hands-free-tail-seconds FLOAT` | auto, fallback `1.0` | Audio tail to discard when the end phrase is detected; omitted values are inferred from end phrase references |
+| `--hands-free-tail-extra-seconds FLOAT` | `1.0` | Extra end-detection lag buffer added to the inferred or explicit hands-free tail; set to `0` for the previous base-only trim |
 | `--hands-free-audio-queue-seconds FLOAT` | `10.0` | Queued hands-free audio allowed between mic capture and detection before oldest chunks are dropped |
 | `--hands-free-min-rms FLOAT` | `0.006` | Minimum detector-window RMS before keyword matching |
 | `--hands-free-min-active-ratio FLOAT` | `0.05` | Minimum ratio of active samples before keyword matching |
@@ -312,6 +313,8 @@ uv run whiscode-calibrate
 The report compares wake samples against wake samples, end samples against end samples, command samples against their own command sets, cross-command samples, wake samples against end samples, and recent telemetry trigger distances. Use it to choose threshold changes after observing live runs rather than guessing from one false positive.
 
 Right Shift remains available as a fallback start/stop control while hands-free mode is running.
+
+When the end phrase stops a recording, WhisCode discards the inferred or explicit end-word tail plus an extra detection-lag buffer before queueing audio for transcription. The extra buffer defaults to `1.0` second through `--hands-free-tail-extra-seconds`; set it to `0` to restore the previous base-only end-tail trim. Right Shift/manual stops and timeout stops still keep the pending tail.
 
 WhisCode ignores partial detector windows and quiet windows before calling the keyword matcher. This prevents silence and microphone background noise from triggering wake/end phrases. Wake detection also requires two consecutive matching windows by default, which prevents a single noisy match from starting a recording. If your wake phrase is very quiet, lower `--hands-free-min-rms` or `--hands-free-min-active-ratio`, raise `--hands-free-threshold` slightly, or set `--hands-free-wake-confirmations 1`; if your end phrase is not detected, raise `--hands-free-end-threshold` slightly.
 

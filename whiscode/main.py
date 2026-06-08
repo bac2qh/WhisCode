@@ -24,6 +24,7 @@ from whiscode.handsfree import (
     DEFAULT_MIN_ACTIVE_RATIO,
     DEFAULT_MIN_RMS,
     DEFAULT_SLIDE_SECONDS,
+    DEFAULT_TAIL_EXTRA_SECONDS,
     DEFAULT_TAIL_SECONDS,
     DEFAULT_THRESHOLD,
     DEFAULT_WAKE_DIR,
@@ -139,6 +140,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hands-free-window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, help=f"Detector window size in seconds (default: {DEFAULT_WINDOW_SECONDS})")
     parser.add_argument("--hands-free-slide-seconds", type=float, default=DEFAULT_SLIDE_SECONDS, help=f"Detector slide size in seconds (default: {DEFAULT_SLIDE_SECONDS})")
     parser.add_argument("--hands-free-tail-seconds", type=float, default=None, help=f"Audio tail to discard when the end phrase is detected (default: auto-inferred from end references; fallback: {DEFAULT_TAIL_SECONDS})")
+    parser.add_argument("--hands-free-tail-extra-seconds", type=float, default=DEFAULT_TAIL_EXTRA_SECONDS, help=f"Extra end-detection lag buffer to discard after the base hands-free tail (default: {DEFAULT_TAIL_EXTRA_SECONDS})")
     parser.add_argument("--max-recording-seconds", type=float, default=DEFAULT_MAX_SECONDS, help=f"Maximum recording length before timeout; 0 disables (default: {DEFAULT_MAX_SECONDS})")
     parser.add_argument("--hands-free-max-seconds", type=float, default=None, help="Legacy hands-free-only recording length limit; overrides --max-recording-seconds for hands-free when set")
     parser.add_argument("--hands-free-audio-queue-seconds", type=float, default=DEFAULT_AUDIO_QUEUE_SECONDS, help=f"Queued hands-free audio between mic capture and detection before oldest chunks are dropped (default: {DEFAULT_AUDIO_QUEUE_SECONDS})")
@@ -197,6 +199,8 @@ def parse_args(argv: list[str] | None = None):
         args.hands_free_max_seconds = args.max_recording_seconds
     if args.hands_free_tail_seconds is not None and args.hands_free_tail_seconds < 0:
         parser.error("--hands-free-tail-seconds must be non-negative")
+    if args.hands_free_tail_extra_seconds < 0:
+        parser.error("--hands-free-tail-extra-seconds must be non-negative")
     args.external_extensions = parse_external_extensions(os.environ.get("WHISCODE_EXTERNAL_EXTENSIONS"))
     if args.external_poll_seconds <= 0:
         parser.error("--external-poll-seconds must be greater than 0")
@@ -317,6 +321,8 @@ def _emit_hands_free_tail_resolution(telemetry, resolution: HandsFreeTailResolut
         telemetry.emit(
             "handsfree.tail_seconds_resolved",
             source=resolution.source,
+            base_seconds=round(resolution.base_seconds, 6),
+            extra_seconds=round(resolution.extra_seconds, 6),
             resolved_seconds=round(resolution.seconds, 6),
             reference_count=resolution.reference_count,
             valid_reference_count=resolution.valid_reference_count,
@@ -1118,6 +1124,7 @@ def main():
                 args.hands_free_tail_seconds,
                 args.hands_free_end_dir,
                 active_level=args.hands_free_active_level,
+                extra_seconds=args.hands_free_tail_extra_seconds,
             )
             _emit_hands_free_tail_resolution(telemetry, tail_resolution)
             wake_detector = LocalWakeDetector(args.hands_free_wake_dir, args.hands_free_threshold)

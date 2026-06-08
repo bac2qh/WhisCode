@@ -74,3 +74,6 @@
 - Added hands-free tail inference memory after changing omitted `--hands-free-tail-seconds` to use the median active span from enrolled end reference WAVs, with explicit override and `1.0s` fallback behavior.
 - Added telemetry memory for the bounded `handsfree.tail_seconds_resolved` setup event.
 - Updated recording overlay memory after hardening orphan-helper process-table scanning against malformed non-helper command bytes without changing bounded cleanup telemetry.
+
+## 2026-06-08
+- Added hands-free tail extra-buffer memory after adding the default `1.0s` `--hands-free-tail-extra-seconds` detector-lag trim on top of inferred, explicit, or fallback base tails.

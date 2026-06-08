@@ -70,6 +70,7 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.max_recording_seconds == 600.0
     assert args.hands_free_max_seconds == 600.0
     assert args.hands_free_tail_seconds is None
+    assert args.hands_free_tail_extra_seconds == 1.0
     assert args.hands_free_audio_queue_seconds == 10.0
     assert args.model == "mlx-community/whisper-large-v3-mlx"
     assert args.llama_port == 8091
@@ -124,6 +125,7 @@ def test_help_describes_hands_free_tail_auto_inference(capsys):
 
     output = capsys.readouterr().out
     assert "--hands-free-tail-seconds" in output
+    assert "--hands-free-tail-extra-seconds" in output
     assert "auto-inferred from end references" in output
     assert "fallback:" in output
     assert "1.0" in output
@@ -301,6 +303,8 @@ def test_parse_args_hands_free_options():
         "0.1",
         "--hands-free-tail-seconds",
         "0.75",
+        "--hands-free-tail-extra-seconds",
+        "0.5",
         "--max-recording-seconds",
         "45",
         "--hands-free-max-seconds",
@@ -341,6 +345,7 @@ def test_parse_args_hands_free_options():
     assert args.hands_free_window_seconds == 1.5
     assert args.hands_free_slide_seconds == 0.1
     assert args.hands_free_tail_seconds == 0.75
+    assert args.hands_free_tail_extra_seconds == 0.5
     assert args.max_recording_seconds == 45
     assert args.hands_free_max_seconds == 30
     assert args.hands_free_audio_queue_seconds == 3.5
@@ -386,6 +391,11 @@ def test_parse_args_rejects_negative_hands_free_tail_seconds():
         parse_args(["--hands-free-tail-seconds", "-0.1"])
 
 
+def test_parse_args_rejects_negative_hands_free_tail_extra_seconds():
+    with pytest.raises(SystemExit):
+        parse_args(["--hands-free-tail-extra-seconds", "-0.1"])
+
+
 def test_emit_hands_free_tail_resolution_uses_bounded_payload():
     telemetry = FakeTelemetry()
     resolution = HandsFreeTailResolution(
@@ -393,6 +403,8 @@ def test_emit_hands_free_tail_resolution_uses_bounded_payload():
         source="inferred",
         reference_count=3,
         valid_reference_count=2,
+        base_seconds=0.2345678,
+        extra_seconds=0.1111111,
     )
 
     _emit_hands_free_tail_resolution(telemetry, resolution)
@@ -402,6 +414,8 @@ def test_emit_hands_free_tail_resolution_uses_bounded_payload():
             "handsfree.tail_seconds_resolved",
             {
                 "source": "inferred",
+                "base_seconds": 0.234568,
+                "extra_seconds": 0.111111,
                 "resolved_seconds": 0.345679,
                 "reference_count": 3,
                 "valid_reference_count": 2,
@@ -412,6 +426,8 @@ def test_emit_hands_free_tail_resolution_uses_bounded_payload():
     keys = set(telemetry.events[0][1])
     assert keys == {
         "source",
+        "base_seconds",
+        "extra_seconds",
         "resolved_seconds",
         "reference_count",
         "valid_reference_count",

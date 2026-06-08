@@ -26,6 +26,7 @@ DEFAULT_COMMAND_CONFIRMATIONS = DEFAULT_WAKE_CONFIRMATIONS
 DEFAULT_WINDOW_SECONDS = 2.0
 DEFAULT_SLIDE_SECONDS = 0.25
 DEFAULT_TAIL_SECONDS = 1.0
+DEFAULT_TAIL_EXTRA_SECONDS = 1.0
 DEFAULT_MAX_SECONDS = 600.0
 DEFAULT_AUDIO_QUEUE_SECONDS = 10.0
 DEFAULT_MIN_RMS = 0.006
@@ -146,6 +147,16 @@ class HandsFreeTailResolution:
     reference_count: int
     valid_reference_count: int
     fallback_reason: str | None = None
+    base_seconds: float | None = None
+    extra_seconds: float = 0.0
+
+    def __post_init__(self) -> None:
+        seconds = float(self.seconds)
+        extra_seconds = float(self.extra_seconds)
+        base_seconds = seconds if self.base_seconds is None else float(self.base_seconds)
+        object.__setattr__(self, "seconds", seconds)
+        object.__setattr__(self, "base_seconds", base_seconds)
+        object.__setattr__(self, "extra_seconds", extra_seconds)
 
 
 def active_span_seconds(
@@ -210,18 +221,31 @@ def resolve_hands_free_tail_seconds(
     *,
     active_level: float = DEFAULT_ACTIVE_LEVEL,
     fallback_seconds: float = DEFAULT_TAIL_SECONDS,
+    extra_seconds: float = 0.0,
 ) -> HandsFreeTailResolution:
+    if extra_seconds < 0:
+        raise ValueError("hands-free tail extra seconds must be non-negative")
     if explicit_tail_seconds is not None:
-        return HandsFreeTailResolution(
+        base_resolution = HandsFreeTailResolution(
             seconds=float(explicit_tail_seconds),
             source="explicit",
             reference_count=len(_reference_wav_paths(reference_dir)),
             valid_reference_count=0,
         )
-    return infer_hands_free_tail_seconds(
-        reference_dir,
-        active_level=active_level,
-        fallback_seconds=fallback_seconds,
+    else:
+        base_resolution = infer_hands_free_tail_seconds(
+            reference_dir,
+            active_level=active_level,
+            fallback_seconds=fallback_seconds,
+        )
+    return HandsFreeTailResolution(
+        seconds=base_resolution.seconds + float(extra_seconds),
+        source=base_resolution.source,
+        reference_count=base_resolution.reference_count,
+        valid_reference_count=base_resolution.valid_reference_count,
+        fallback_reason=base_resolution.fallback_reason,
+        base_seconds=base_resolution.seconds,
+        extra_seconds=float(extra_seconds),
     )
 
 

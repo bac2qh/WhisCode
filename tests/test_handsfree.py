@@ -81,31 +81,50 @@ def test_tail_seconds_inference_uses_median_valid_active_span(tmp_path):
 
     assert resolution.source == "inferred"
     assert round(resolution.seconds, 6) == 0.3
+    assert round(resolution.base_seconds, 6) == 0.3
+    assert resolution.extra_seconds == 0.0
     assert resolution.reference_count == 3
     assert resolution.valid_reference_count == 3
     assert resolution.fallback_reason is None
+
+
+def test_tail_seconds_inference_adds_extra_buffer_to_base(tmp_path):
+    write_pcm_wav(tmp_path / "end-01.wav", [0.0, 0.5, 0.5, 0.0], sample_rate=10)
+    write_pcm_wav(tmp_path / "end-02.wav", [0.0, 0.5, 0.5, 0.5, 0.0], sample_rate=10)
+    write_pcm_wav(tmp_path / "end-03.wav", [0.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0], sample_rate=10)
+
+    resolution = resolve_hands_free_tail_seconds(None, tmp_path, active_level=0.01, extra_seconds=0.4)
+
+    assert resolution.source == "inferred"
+    assert round(resolution.base_seconds, 6) == 0.3
+    assert resolution.extra_seconds == 0.4
+    assert round(resolution.seconds, 6) == 0.7
 
 
 def test_tail_seconds_inference_falls_back_without_valid_active_spans(tmp_path):
     write_pcm_wav(tmp_path / "silent.wav", [0.0, 0.0, 0.0], sample_rate=10)
     (tmp_path / "broken.wav").write_text("not a wav")
 
-    resolution = resolve_hands_free_tail_seconds(None, tmp_path, active_level=0.01)
+    resolution = resolve_hands_free_tail_seconds(None, tmp_path, active_level=0.01, extra_seconds=0.25)
 
     assert resolution.source == "fallback"
-    assert resolution.seconds == DEFAULT_TAIL_SECONDS
+    assert resolution.base_seconds == DEFAULT_TAIL_SECONDS
+    assert resolution.extra_seconds == 0.25
+    assert resolution.seconds == DEFAULT_TAIL_SECONDS + 0.25
     assert resolution.reference_count == 2
     assert resolution.valid_reference_count == 0
     assert resolution.fallback_reason == "no_valid_references"
 
 
-def test_explicit_tail_seconds_override_wins_over_reference_inference(tmp_path):
+def test_explicit_tail_seconds_override_is_base_before_extra(tmp_path):
     write_pcm_wav(tmp_path / "end-01.wav", [0.0, 0.5, 0.5, 0.5, 0.0], sample_rate=10)
 
-    resolution = resolve_hands_free_tail_seconds(0.75, tmp_path, active_level=0.01)
+    resolution = resolve_hands_free_tail_seconds(0.75, tmp_path, active_level=0.01, extra_seconds=0.5)
 
     assert resolution.source == "explicit"
-    assert resolution.seconds == 0.75
+    assert resolution.base_seconds == 0.75
+    assert resolution.extra_seconds == 0.5
+    assert resolution.seconds == 1.25
     assert resolution.reference_count == 1
     assert resolution.valid_reference_count == 0
 
@@ -181,6 +200,34 @@ def test_end_detection_stops_recording_and_excludes_pending_tail():
     assert [event.kind for event in events] == ["end.detected"]
     np.testing.assert_array_equal(events[0].audio, np.array([1, 2], dtype=np.float32))
     assert events[0].duration_seconds == 0.2
+    assert session.state == "idle"
+
+
+def test_end_detection_excludes_base_plus_extra_tail(tmp_path):
+    write_pcm_wav(tmp_path / "end-01.wav", [0.0, 0.5, 0.5, 0.0], sample_rate=10)
+    resolution = resolve_hands_free_tail_seconds(None, tmp_path, active_level=0.01, extra_seconds=0.1)
+    assert round(resolution.base_seconds, 6) == 0.2
+    assert round(resolution.seconds, 6) == 0.3
+    session = HandsFreeSession(
+        FakeDetector([Detection("wake-01.wav", 0.05)]),
+        FakeDetector([None, None, Detection("end-01.wav", 0.04)]),
+        sample_rate=10,
+        window_seconds=0.2,
+        slide_seconds=0.1,
+        tail_seconds=resolution.seconds,
+        wake_confirmations=1,
+    )
+    assert session.feed(chunk(1)) == []
+    session.feed(chunk(1))
+
+    session.feed(chunk(1))
+    session.feed(chunk(2))
+    session.feed(chunk(3))
+    events = session.feed(chunk(4))
+
+    assert [event.kind for event in events] == ["end.detected"]
+    np.testing.assert_array_equal(events[0].audio, np.array([1], dtype=np.float32))
+    assert events[0].duration_seconds == 0.1
     assert session.state == "idle"
 
 
