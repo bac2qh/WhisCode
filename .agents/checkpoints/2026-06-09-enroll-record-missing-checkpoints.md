@@ -4,7 +4,7 @@ Date: 2026-06-09
 Plan: `.agents/plans/2026-06-09-enroll-record-missing.md`
 Branch: `feature/enroll-record-missing`
 Worktree: `.agents/worktrees/enroll-record-missing`
-Status: implemented, implementation committed, pending closeout
+Status: closed; merged to local main and archived
 
 ## Initial State
 
@@ -20,6 +20,7 @@ See plan section `Validation Contract`.
 
 ## Done
 
+- Closeout: fast-forward merged to local `main` at `52acc10`, archived the plan, removed task worktree `.agents/worktrees/enroll-record-missing`, and deleted local branch `feature/enroll-record-missing`.
 - Created task worktree and branch.
 - Saved active plan and checkpoint before source edits.
 - Added `--record-missing` to `whiscode-enroll`, with argparse rejection unless `--record` is also present.
@@ -38,7 +39,7 @@ See plan section `Validation Contract`.
 
 ## Immediate Next Step
 
-Commit this checkpoint bookkeeping update, then run closeout/merge/archive if the branch remains clean.
+None. Task closed and archived.
 
 ## Decisions And Reasoning
 
@@ -69,4 +70,4 @@ Commit this checkpoint bookkeeping update, then run closeout/merge/archive if th
 
 ## Important Backtracks
 
-- None yet.
+- Closeout script initially failed after cleanup because of a malformed Perl expression; closeout was then completed from the partially archived state.

@@ -1,7 +1,16 @@
+## Closeout Note - 2026-06-09
+
+Final status: complete; fast-forward merged to local `main` at `52acc10` (no merge commit).
+Related checkpoint: `.agents/checkpoints/2026-06-09-enroll-record-missing-checkpoints.md`.
+Implementation commits: `195f807`, `52acc10`.
+Verification performed: focused pytest command passed with 80 tests; full pytest suite passed with 283 tests. Direct `python -m compileall whiscode tests` was blocked by pyenv because Python 3.13 was unavailable outside `uv`.
+Worktree/branch cleanup result: task worktree `.agents/worktrees/enroll-record-missing` removed and local branch `feature/enroll-record-missing` deleted.
+Shipped summary: `whiscode-enroll --record --record-missing` now tops up incomplete wake, end, and enabled command reference sets without overwriting existing WAVs; startup/docs recommend the top-up command.
+
 # Add `whiscode-enroll --record-missing`
 
 Date: 2026-06-09
-Status: active
+Status: archived
 Related checkpoint: `.agents/checkpoints/2026-06-09-enroll-record-missing-checkpoints.md`
 
 ## Objective
