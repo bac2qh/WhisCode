@@ -51,4 +51,5 @@
   - `git diff --check` passed.
 - Validator follow-up result: `APPROVE`.
 - Validator confirmed the README/wiki warning is fixed and `VC-001` through `VC-006` remain passed.
-- Immediate next step: commit the implementation milestone, then update this checkpoint with the commit hash before closeout.
+- Implementation commit: `0e0c5f9` (`Defer Send Chunk paste until final stop`).
+- Immediate next step: commit this checkpoint hash update, then close out to local `main`.
