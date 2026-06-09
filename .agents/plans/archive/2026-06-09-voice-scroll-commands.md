@@ -1,3 +1,17 @@
+# Closeout
+- Final status: implemented, validated, merged to local main, and archived.
+- Related checkpoint: .agents/checkpoints/2026-06-09-voice-scroll-commands-checkpoints.md.
+- Implementation commits:
+  - b1f9e0d (Add hands-free voice scroll commands)
+  - bcb7798 (Record voice scroll command checkpoint)
+- Merge commit: none; local main fast-forwarded from 4a10715 to bcb7798.
+- Verification performed:
+  - uv run --with pytest python -m pytest tests/test_command_config.py tests/test_injector.py tests/test_enroll.py tests/test_main_cli.py tests/test_calibrate.py tests/test_handsfree.py -> 112 passed.
+  - uv run --with pytest python -m pytest -> 278 passed.
+  - Manual live scroll smoke was not run because it would post native scroll input into the operator active frontmost app. Mocked Quartz tests verified direction and half-display pixel amount.
+- Worktree/branch cleanup result: removed .agents/worktrees/voice-scroll-commands; deleted local branch feature/voice-scroll-commands.
+- Shipped summary: hands-free mode now supports default-on scroll-up and scroll-down command slots. scroll-up reveals older terminal output, scroll-down moves toward newer output, and both use native Quartz pixel scroll-wheel events with bounded scroll injection telemetry.
+
 # Add Voice Scroll Commands
 
 ## Status
