@@ -67,3 +67,28 @@ def test_transcription_job_queue_carries_text_suffix():
     assert job is not None
     assert job.text_suffix == "\n\n"
     assert jobs.get(timeout=0.01).text_suffix == "\n\n"
+
+
+def test_transcription_job_queue_carries_delivery_metadata():
+    jobs = TranscriptionJobQueue(capacity=1)
+    reservation = jobs.try_reserve_recording(
+        source="hotkey",
+        delivery_batch_id="delivery-1",
+        defer_text=True,
+    )
+
+    job = jobs.finish_recording(
+        audio=np.array([0.1], dtype=np.float32),
+        audio_seconds=0.5,
+        job_id=reservation.job_id,
+        is_delivery_final=True,
+    )
+
+    assert job is not None
+    assert job.delivery_batch_id == "delivery-1"
+    assert job.defer_text is True
+    assert job.is_delivery_final is True
+    queued = jobs.get(timeout=0.01)
+    assert queued.delivery_batch_id == "delivery-1"
+    assert queued.defer_text is True
+    assert queued.is_delivery_final is True

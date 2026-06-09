@@ -53,3 +53,7 @@
 - `whiscode-enroll chunk ...` imports chunk phrase samples, and guided enrollment records them only when `--include-chunk` is passed.
 - Retired the separate hands-free Send Chunk phrase. Hands-free Send Chunk now reuses the wake/start phrase during recording, uses the wake threshold and wake confirmation count, and trims the Send Chunk tail from wake references plus `--hands-free-tail-extra-seconds`. Existing user chunk sample folders are ignored, not deleted.
 - README daily-driver guidance now recommends `uv run whiscode --hands-free --asr-backend mlx-vibevoice` for regular dictation while explicitly keeping hands-free mode and MLX VibeVoice as opt-in choices rather than CLI defaults.
+
+## 2026-06-09
+- Send Chunk delivery now defers clipboard copy and Cmd+V paste until the final non-chunk stop/end/timeout completes the session. Hotkey-only, hands-free voice, and hands-free manual Send Chunk all share the same in-memory delivery batch.
+- Intermediate chunks still transcribe through the existing FIFO queue and print to stdout as copy-friendly transcript blocks, but successful chunk text is appended in memory with the existing blank-line suffix. Empty or failed chunks are skipped; the final job flushes any successful prior chunk text.

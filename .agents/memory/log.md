@@ -81,3 +81,6 @@
 - Updated hands-free Send Chunk memory after replacing the separate chunk phrase with wake phrase reuse while recording. Wake references now drive recording-time chunk detection, confirmations, and chunk-tail inference; existing chunk sample folders are ignored rather than removed.
 - Updated recording overlay memory after fixing active recording level ticks while older stacked cards are transcribing.
 - Updated hands-free README guidance memory after documenting `uv run whiscode --hands-free --asr-backend mlx-vibevoice` as the recommended daily workflow without changing CLI defaults.
+
+## 2026-06-09
+- Updated hands-free and telemetry memory after changing Send Chunk delivery to buffer successful chunk text in memory and paste once on final stop/end/timeout.

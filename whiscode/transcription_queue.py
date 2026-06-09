@@ -15,6 +15,8 @@ class RecordingReservation:
     job_id: str
     source: str
     created_at: float
+    delivery_batch_id: str | None = None
+    defer_text: bool = False
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,9 @@ class TranscriptionJob:
     created_at: float
     queued_at: float
     text_suffix: str = ""
+    delivery_batch_id: str | None = None
+    defer_text: bool = False
+    is_delivery_final: bool = False
 
 
 class TranscriptionJobQueue:
@@ -37,7 +42,13 @@ class TranscriptionJobQueue:
         self._reserved: RecordingReservation | None = None
         self._active_job_id: str | None = None
 
-    def try_reserve_recording(self, *, source: str) -> RecordingReservation | None:
+    def try_reserve_recording(
+        self,
+        *,
+        source: str,
+        delivery_batch_id: str | None = None,
+        defer_text: bool = False,
+    ) -> RecordingReservation | None:
         with self._lock:
             if self._reserved is not None or self._pending.qsize() >= self.capacity:
                 return None
@@ -45,6 +56,8 @@ class TranscriptionJobQueue:
                 job_id=f"job-{self._next_id}",
                 source=source,
                 created_at=time.time(),
+                delivery_batch_id=delivery_batch_id,
+                defer_text=defer_text,
             )
             self._next_id += 1
             self._reserved = reservation
@@ -67,6 +80,9 @@ class TranscriptionJobQueue:
         audio_seconds: float,
         job_id: str | None = None,
         text_suffix: str = "",
+        delivery_batch_id: str | None = None,
+        defer_text: bool | None = None,
+        is_delivery_final: bool = False,
     ) -> TranscriptionJob | None:
         with self._lock:
             if self._reserved is None:
@@ -84,6 +100,9 @@ class TranscriptionJobQueue:
             created_at=reservation.created_at,
             queued_at=time.time(),
             text_suffix=str(text_suffix),
+            delivery_batch_id=reservation.delivery_batch_id if delivery_batch_id is None else delivery_batch_id,
+            defer_text=reservation.defer_text if defer_text is None else defer_text,
+            is_delivery_final=bool(is_delivery_final),
         )
         try:
             self._pending.put_nowait(job)

@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 from pynput.keyboard import Key
 
+from whiscode.deferred_delivery import DeferredTranscriptBuffer
 from whiscode.handsfree import HandsFreeTailResolution, command_reference_dirs
 from whiscode.main import (
     HOTKEY_SEND_CHUNK_EVENT,
@@ -10,10 +12,12 @@ from whiscode.main import (
     HotkeyChordRouter,
     _apply_transcription_text_suffix,
     _default_whisper_processor_source,
+    _deliver_processed_transcription_text,
     _emit_hands_free_chunk_tail_resolution,
     _emit_hands_free_tail_resolution,
     _format_transcript_for_stdout,
     _print_transcript_for_stdout,
+    _skip_deferred_transcription_text,
     ensure_hands_free_references,
     ensure_whisper_processor,
     parse_args,
@@ -21,6 +25,7 @@ from whiscode.main import (
     validate_external_intake_args,
 )
 from whiscode.telemetry import telemetry_from_args
+from whiscode.transcription_queue import TranscriptionJob
 
 
 WhisperModel = type("Model", (), {"__module__": "mlx_audio.stt.models.whisper.whisper"})
@@ -47,6 +52,36 @@ def write_reference_samples(path: Path, prefix: str, count: int = 3) -> None:
         (path / f"{prefix}-{i}.wav").write_text("x")
 
 
+class FakeTelemetry:
+    def __init__(self):
+        self.events = []
+
+    def emit(self, event, **properties):
+        self.events.append((event, properties))
+
+
+def make_transcription_job(
+    *,
+    job_id: str = "job-1",
+    text_suffix: str = "",
+    delivery_batch_id: str | None = None,
+    defer_text: bool = False,
+    is_delivery_final: bool = False,
+) -> TranscriptionJob:
+    return TranscriptionJob(
+        job_id=job_id,
+        source="hotkey",
+        audio=np.array([0.1], dtype=np.float32),
+        audio_seconds=0.5,
+        created_at=1.0,
+        queued_at=2.0,
+        text_suffix=text_suffix,
+        delivery_batch_id=delivery_batch_id,
+        defer_text=defer_text,
+        is_delivery_final=is_delivery_final,
+    )
+
+
 def test_format_transcript_for_stdout_collapses_multiline_text():
     assert _format_transcript_for_stdout("  first line\nsecond\tline  ") == "first line second line"
 
@@ -63,6 +98,152 @@ def test_print_transcript_for_stdout_uses_copy_friendly_block(capsys):
 
 def test_apply_transcription_text_suffix_appends_after_processing():
     assert _apply_transcription_text_suffix("hello world", "\n\n") == "hello world\n\n"
+
+
+def test_deliver_processed_text_types_immediately_without_deferral():
+    typed = []
+    telemetry = FakeTelemetry()
+    job = make_transcription_job(text_suffix="\n\n")
+
+    outcome = _deliver_processed_transcription_text(
+        job,
+        "hello",
+        deferred_delivery=DeferredTranscriptBuffer(),
+        telemetry=telemetry,
+        type_text_fn=typed.append,
+    )
+
+    assert outcome == "typed"
+    assert typed == ["hello\n\n"]
+    assert telemetry.events == []
+
+
+def test_deliver_processed_text_buffers_chunks_until_final_job():
+    typed = []
+    telemetry = FakeTelemetry()
+    deferred_delivery = DeferredTranscriptBuffer()
+
+    first = make_transcription_job(
+        job_id="job-1",
+        text_suffix="\n\n",
+        delivery_batch_id="delivery-1",
+        defer_text=True,
+    )
+    final = make_transcription_job(
+        job_id="job-2",
+        delivery_batch_id="delivery-1",
+        defer_text=True,
+        is_delivery_final=True,
+    )
+
+    first_outcome = _deliver_processed_transcription_text(
+        first,
+        "first",
+        deferred_delivery=deferred_delivery,
+        telemetry=telemetry,
+        type_text_fn=typed.append,
+    )
+    final_outcome = _deliver_processed_transcription_text(
+        final,
+        "second",
+        deferred_delivery=deferred_delivery,
+        telemetry=telemetry,
+        type_text_fn=typed.append,
+    )
+
+    assert first_outcome == "buffered"
+    assert final_outcome == "flushed"
+    assert typed == ["first\n\nsecond"]
+    event_names = [event for event, _ in telemetry.events]
+    assert event_names == [
+        "transcription.delivery_buffered",
+        "transcription.delivery_buffered",
+        "transcription.delivery_flushed",
+    ]
+    assert "first" not in str(telemetry.events)
+    assert "second" not in str(telemetry.events)
+
+
+def test_deferred_final_empty_flushes_successful_prior_chunks():
+    typed = []
+    telemetry = FakeTelemetry()
+    deferred_delivery = DeferredTranscriptBuffer()
+    first = make_transcription_job(
+        job_id="job-1",
+        text_suffix="\n\n",
+        delivery_batch_id="delivery-1",
+        defer_text=True,
+    )
+    final = make_transcription_job(
+        job_id="job-2",
+        delivery_batch_id="delivery-1",
+        defer_text=True,
+        is_delivery_final=True,
+    )
+
+    _deliver_processed_transcription_text(
+        first,
+        "first",
+        deferred_delivery=deferred_delivery,
+        telemetry=telemetry,
+        type_text_fn=typed.append,
+    )
+    outcome = _skip_deferred_transcription_text(
+        final,
+        reason="empty",
+        deferred_delivery=deferred_delivery,
+        telemetry=telemetry,
+        type_text_fn=typed.append,
+    )
+
+    assert outcome == "flushed"
+    assert typed == ["first\n\n"]
+
+
+def test_deferred_final_empty_with_no_successful_chunks_pastes_nothing():
+    typed = []
+    telemetry = FakeTelemetry()
+    final = make_transcription_job(
+        job_id="job-1",
+        delivery_batch_id="delivery-1",
+        defer_text=True,
+        is_delivery_final=True,
+    )
+
+    outcome = _skip_deferred_transcription_text(
+        final,
+        reason="empty",
+        deferred_delivery=DeferredTranscriptBuffer(),
+        telemetry=telemetry,
+        type_text_fn=typed.append,
+    )
+
+    assert outcome == "empty"
+    assert typed == []
+
+
+def test_marked_final_job_flushes_restart_unavailable_chunk():
+    typed = []
+    telemetry = FakeTelemetry()
+    deferred_delivery = DeferredTranscriptBuffer()
+    job = make_transcription_job(
+        job_id="job-1",
+        delivery_batch_id="delivery-1",
+        defer_text=True,
+        text_suffix="\n\n",
+    )
+    deferred_delivery.mark_final_job(job.job_id)
+
+    outcome = _deliver_processed_transcription_text(
+        job,
+        "first",
+        deferred_delivery=deferred_delivery,
+        telemetry=telemetry,
+        type_text_fn=typed.append,
+    )
+
+    assert outcome == "flushed"
+    assert typed == ["first\n\n"]
 
 
 def test_hotkey_router_sends_chunk_for_right_option_right_shift_chord():

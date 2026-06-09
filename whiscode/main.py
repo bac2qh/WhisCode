@@ -58,6 +58,7 @@ from whiscode.external_transcription import (
     process_external_transcription_job,
     watch_external_inbox,
 )
+from whiscode.deferred_delivery import DeferredTranscriptBuffer
 from whiscode.hotwords import load_hotwords
 from whiscode.injector import press_key_command, type_text
 from whiscode.crispasr_asr import (
@@ -153,6 +154,133 @@ def _print_transcript_for_stdout(text: str) -> None:
 
 def _apply_transcription_text_suffix(processed: str, text_suffix: str) -> str:
     return processed + text_suffix
+
+
+def _is_deferred_delivery_final(job: TranscriptionJob, deferred_delivery: DeferredTranscriptBuffer) -> bool:
+    marked_final = deferred_delivery.consume_final_job(job.job_id)
+    return job.is_delivery_final or marked_final
+
+
+def _flush_deferred_delivery(
+    job: TranscriptionJob,
+    *,
+    deferred_delivery: DeferredTranscriptBuffer,
+    telemetry,
+    type_text_fn=type_text,
+    queue_depth: int = 0,
+) -> str:
+    if not job.delivery_batch_id:
+        return "empty"
+    flush = deferred_delivery.flush(job.delivery_batch_id)
+    if not flush.text:
+        telemetry.emit(
+            "transcription.delivery_empty",
+            job_id=job.job_id,
+            source=job.source,
+            delivery_batch_id=flush.batch_id,
+            successful_chunks=flush.successful_chunks,
+            skipped_chunks=flush.skipped_chunks,
+            text_chars=flush.text_chars,
+            queue_depth=queue_depth,
+        )
+        return "empty"
+    type_text_fn(flush.text)
+    telemetry.emit(
+        "transcription.delivery_flushed",
+        job_id=job.job_id,
+        source=job.source,
+        delivery_batch_id=flush.batch_id,
+        successful_chunks=flush.successful_chunks,
+        skipped_chunks=flush.skipped_chunks,
+        text_chars=flush.text_chars,
+        queue_depth=queue_depth,
+    )
+    return "flushed"
+
+
+def _deliver_processed_transcription_text(
+    job: TranscriptionJob,
+    processed: str,
+    *,
+    deferred_delivery: DeferredTranscriptBuffer,
+    telemetry,
+    type_text_fn=type_text,
+    queue_depth: int = 0,
+) -> str:
+    text_to_type = _apply_transcription_text_suffix(processed, job.text_suffix)
+    if not job.defer_text:
+        type_text_fn(text_to_type)
+        return "typed"
+    if not job.delivery_batch_id:
+        type_text_fn(text_to_type)
+        telemetry.emit(
+            "transcription.delivery_fallback",
+            job_id=job.job_id,
+            source=job.source,
+            reason="missing_batch_id",
+            queue_depth=queue_depth,
+        )
+        return "typed"
+
+    is_final = _is_deferred_delivery_final(job, deferred_delivery)
+    state = deferred_delivery.append(job.delivery_batch_id, text_to_type)
+    telemetry.emit(
+        "transcription.delivery_buffered",
+        job_id=job.job_id,
+        source=job.source,
+        delivery_batch_id=state.batch_id,
+        is_final=is_final,
+        successful_chunks=state.successful_chunks,
+        skipped_chunks=state.skipped_chunks,
+        text_chars=state.text_chars,
+        queue_depth=queue_depth,
+    )
+    if is_final:
+        return _flush_deferred_delivery(
+            job,
+            deferred_delivery=deferred_delivery,
+            telemetry=telemetry,
+            type_text_fn=type_text_fn,
+            queue_depth=queue_depth,
+        )
+    return "buffered"
+
+
+def _skip_deferred_transcription_text(
+    job: TranscriptionJob,
+    *,
+    reason: str,
+    deferred_delivery: DeferredTranscriptBuffer,
+    telemetry,
+    type_text_fn=type_text,
+    queue_depth: int = 0,
+) -> str | None:
+    if not job.defer_text or not job.delivery_batch_id:
+        return None
+
+    is_final = _is_deferred_delivery_final(job, deferred_delivery)
+    state = deferred_delivery.skip(job.delivery_batch_id)
+    telemetry.emit(
+        "transcription.delivery_skipped",
+        job_id=job.job_id,
+        source=job.source,
+        delivery_batch_id=state.batch_id,
+        reason=reason,
+        is_final=is_final,
+        successful_chunks=state.successful_chunks,
+        skipped_chunks=state.skipped_chunks,
+        text_chars=state.text_chars,
+        queue_depth=queue_depth,
+    )
+    if is_final:
+        return _flush_deferred_delivery(
+            job,
+            deferred_delivery=deferred_delivery,
+            telemetry=telemetry,
+            type_text_fn=type_text_fn,
+            queue_depth=queue_depth,
+        )
+    return "buffered"
 
 
 def parse_args(argv: list[str] | None = None):
@@ -660,6 +788,9 @@ def main():
     start_reminders(stats)
     overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry)
     transcription_jobs = TranscriptionJobQueue(capacity=DEFAULT_TRANSCRIPTION_QUEUE_CAPACITY)
+    deferred_delivery = DeferredTranscriptBuffer()
+    active_delivery_batch_id: str | None = None
+    next_delivery_batch_number = 1
     external_storage = None
     if args.external_audio_inbox is not None:
         try:
@@ -735,12 +866,44 @@ def main():
         )
         print("Recording queue full; wait for transcription to catch up.")
 
-    def reserve_recording(source: str):
-        reservation = transcription_jobs.try_reserve_recording(source=source)
+    def reserve_recording(
+        source: str,
+        *,
+        delivery_batch_id: str | None = None,
+        defer_text: bool = False,
+    ):
+        reservation = transcription_jobs.try_reserve_recording(
+            source=source,
+            delivery_batch_id=delivery_batch_id,
+            defer_text=defer_text,
+        )
         if reservation is None:
             reject_recording_start(source)
             return None
         return reservation
+
+    def ensure_delivery_batch() -> str:
+        nonlocal active_delivery_batch_id, next_delivery_batch_number
+        if active_delivery_batch_id is None:
+            active_delivery_batch_id = f"delivery-{next_delivery_batch_number}"
+            next_delivery_batch_number += 1
+        return active_delivery_batch_id
+
+    def clear_delivery_batch(batch_id: str | None) -> None:
+        nonlocal active_delivery_batch_id
+        if batch_id is not None and active_delivery_batch_id == batch_id:
+            active_delivery_batch_id = None
+
+    def abandon_delivery_batch(batch_id: str | None, reason: str) -> None:
+        if batch_id is None:
+            return
+        clear_delivery_batch(batch_id)
+        telemetry.emit(
+            "transcription.delivery_abandoned",
+            delivery_batch_id=batch_id,
+            reason=reason,
+            queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+        )
 
     def enqueue_recording(
         audio,
@@ -749,12 +912,18 @@ def main():
         *,
         timeout_event: str | None = None,
         text_suffix: str = "",
+        delivery_batch_id: str | None = None,
+        defer_text: bool = False,
+        is_delivery_final: bool = False,
     ) -> TranscriptionJob | None:
         job = transcription_jobs.finish_recording(
             audio=audio,
             audio_seconds=audio_seconds,
             job_id=job_id,
             text_suffix=text_suffix,
+            delivery_batch_id=delivery_batch_id,
+            defer_text=defer_text,
+            is_delivery_final=is_delivery_final,
         )
         if job is None:
             overlay.remove_item(job_id)
@@ -768,6 +937,9 @@ def main():
             queue_depth=transcription_jobs.queue_depth_for_telemetry(),
             audio_seconds=round(job.audio_seconds, 3),
             text_suffix_chars=len(job.text_suffix),
+            defer_text=job.defer_text,
+            is_delivery_final=job.is_delivery_final,
+            delivery_batch_id=job.delivery_batch_id,
         )
         if timeout_event == "hotkey":
             print(f"Recording limit reached at {audio_seconds:.2f}s.")
@@ -810,6 +982,8 @@ def main():
             audio_seconds=round(job.audio_seconds, 3),
             queue_depth=transcription_jobs.queue_depth_for_telemetry(),
             text_suffix_chars=len(job.text_suffix),
+            defer_text=job.defer_text,
+            delivery_batch_id=job.delivery_batch_id,
         )
 
     def emit_send_chunk_restarted(mode: str, source: str, previous_job_id: str, new_job_id: str) -> None:
@@ -820,6 +994,7 @@ def main():
             previous_job_id=previous_job_id,
             new_job_id=new_job_id,
             queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+            delivery_batch_id=active_delivery_batch_id,
         )
 
     def record_handsfree_cycle(reason: str, duration_seconds: float) -> None:
@@ -877,6 +1052,9 @@ def main():
             source=job.source,
             queue_depth=queue_depth,
             audio_seconds=round(job.audio_seconds, 3),
+            defer_text=job.defer_text,
+            is_delivery_final=job.is_delivery_final,
+            delivery_batch_id=job.delivery_batch_id,
         )
         telemetry.emit("transcription.started", audio_seconds=round(job.audio_seconds, 3), audio_samples=len(job.audio))
         print(f"Transcribing {job.job_id}...")
@@ -898,11 +1076,17 @@ def main():
                 word_count = len(processed.split())
                 stats.record(word_count, job.audio_seconds)
                 _print_transcript_for_stdout(processed)
-                type_text(_apply_transcription_text_suffix(processed, job.text_suffix))
+                delivery_outcome = _deliver_processed_transcription_text(
+                    job,
+                    processed,
+                    deferred_delivery=deferred_delivery,
+                    telemetry=telemetry,
+                    queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+                )
                 duration_seconds = round(time.monotonic() - started, 3)
                 telemetry.emit(
                     "transcription.completed",
-                    outcome="typed",
+                    outcome=delivery_outcome,
                     duration_seconds=duration_seconds,
                     audio_seconds=round(job.audio_seconds, 3),
                     word_count=word_count,
@@ -912,16 +1096,23 @@ def main():
                     "transcription.queue_completed",
                     job_id=job.job_id,
                     source=job.source,
-                    outcome="typed",
+                    outcome=delivery_outcome,
                     duration_seconds=duration_seconds,
                     queue_depth=transcription_jobs.queue_depth_for_telemetry(),
                 )
             else:
                 print("  (no speech detected)")
+                delivery_outcome = _skip_deferred_transcription_text(
+                    job,
+                    reason="empty",
+                    deferred_delivery=deferred_delivery,
+                    telemetry=telemetry,
+                    queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+                ) or "empty"
                 duration_seconds = round(time.monotonic() - started, 3)
                 telemetry.emit(
                     "transcription.completed",
-                    outcome="empty",
+                    outcome=delivery_outcome,
                     duration_seconds=duration_seconds,
                     audio_seconds=round(job.audio_seconds, 3),
                 )
@@ -929,12 +1120,19 @@ def main():
                     "transcription.queue_completed",
                     job_id=job.job_id,
                     source=job.source,
-                    outcome="empty",
+                    outcome=delivery_outcome,
                     duration_seconds=duration_seconds,
                     queue_depth=transcription_jobs.queue_depth_for_telemetry(),
                 )
         except Exception as e:
             duration_seconds = round(time.monotonic() - started, 3)
+            _skip_deferred_transcription_text(
+                job,
+                reason="failed",
+                deferred_delivery=deferred_delivery,
+                telemetry=telemetry,
+                queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+            )
             telemetry.emit(
                 "transcription.failed",
                 duration_seconds=duration_seconds,
@@ -1090,6 +1288,7 @@ def main():
                         continue
                     if event == HOTKEY_SEND_CHUNK_EVENT:
                         emit_send_chunk_requested("hotkey", "hotkey", job_id=job_id)
+                        delivery_batch_id = ensure_delivery_batch()
                         transition_to(State.TRANSCRIBING, "send_chunk_hotkey")
                         audio = recorder.stop()
                         audio_seconds = len(audio) / SAMPLE_RATE
@@ -1099,14 +1298,23 @@ def main():
                             audio_seconds,
                             job_id,
                             text_suffix=SEND_CHUNK_TEXT_SUFFIX,
+                            delivery_batch_id=delivery_batch_id,
+                            defer_text=True,
                         )
                         if job is None:
+                            abandon_delivery_batch(delivery_batch_id, "enqueue_failed")
                             emit_send_chunk_rejected("hotkey", "hotkey", "enqueue_failed")
                             refresh_state_from_queue("send_chunk.enqueue_failed")
                             continue
                         emit_send_chunk_queued("hotkey", "hotkey", job)
-                        reservation = reserve_recording("hotkey")
+                        reservation = reserve_recording(
+                            "hotkey",
+                            delivery_batch_id=delivery_batch_id,
+                            defer_text=True,
+                        )
                         if reservation is None:
+                            deferred_delivery.mark_final_job(job.job_id)
+                            clear_delivery_batch(delivery_batch_id)
                             emit_send_chunk_rejected("hotkey", "hotkey", "restart_unavailable")
                             refresh_state_from_queue("send_chunk.restart_unavailable")
                             continue
@@ -1121,12 +1329,19 @@ def main():
                     audio = recorder.stop()
                     audio_seconds = len(audio) / SAMPLE_RATE
                     notify_recording_stopped()
+                    delivery_batch_id = active_delivery_batch_id
+                    is_delivery_final = delivery_batch_id is not None
                     enqueue_recording(
                         audio,
                         audio_seconds,
                         job_id,
                         timeout_event="hotkey" if event == HOTKEY_TIMEOUT_EVENT else None,
+                        delivery_batch_id=delivery_batch_id,
+                        defer_text=is_delivery_final,
+                        is_delivery_final=is_delivery_final,
                     )
+                    if is_delivery_final:
+                        clear_delivery_batch(delivery_batch_id)
 
     def handsfree_worker():
         while not shutdown_event.is_set():
@@ -1152,8 +1367,15 @@ def main():
                 time.sleep(0.01)
 
     def restart_handsfree_recording(mode: str, source: str, previous_job_id: str) -> None:
-        reservation = reserve_recording(source)
+        delivery_batch_id = active_delivery_batch_id
+        reservation = reserve_recording(
+            source,
+            delivery_batch_id=delivery_batch_id,
+            defer_text=delivery_batch_id is not None,
+        )
         if reservation is None:
+            deferred_delivery.mark_final_job(previous_job_id)
+            clear_delivery_batch(delivery_batch_id)
             emit_send_chunk_rejected(mode, source, "restart_unavailable")
             refresh_state_from_queue("send_chunk.restart_unavailable")
             return
@@ -1171,6 +1393,7 @@ def main():
         audio,
         audio_seconds: float,
     ) -> TranscriptionJob | None:
+        delivery_batch_id = ensure_delivery_batch()
         transition_to(State.TRANSCRIBING, f"send_chunk_{mode}", audio_seconds=round(audio_seconds, 3))
         notify_recording_stopped()
         job = enqueue_recording(
@@ -1178,8 +1401,11 @@ def main():
             audio_seconds,
             job_id,
             text_suffix=SEND_CHUNK_TEXT_SUFFIX,
+            delivery_batch_id=delivery_batch_id,
+            defer_text=True,
         )
         if job is None:
+            abandon_delivery_batch(delivery_batch_id, "enqueue_failed")
             emit_send_chunk_rejected(mode, source, "enqueue_failed")
             refresh_state_from_queue("send_chunk.enqueue_failed")
             return None
@@ -1206,7 +1432,18 @@ def main():
                 event = handsfree_session.manual_stop()
                 transition_to(State.TRANSCRIBING, "manual_handsfree_hotkey", audio_seconds=round(event.duration_seconds, 3))
                 notify_recording_stopped()
-                enqueue_recording(event.audio, event.duration_seconds, job_id)
+                delivery_batch_id = active_delivery_batch_id
+                is_delivery_final = delivery_batch_id is not None
+                enqueue_recording(
+                    event.audio,
+                    event.duration_seconds,
+                    job_id,
+                    delivery_batch_id=delivery_batch_id,
+                    defer_text=is_delivery_final,
+                    is_delivery_final=is_delivery_final,
+                )
+                if is_delivery_final:
+                    clear_delivery_batch(delivery_batch_id)
 
     def handle_handsfree_send_chunk():
         nonlocal state
@@ -1338,7 +1575,18 @@ def main():
                             active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                         )
                     record_handsfree_cycle(event.kind, event.duration_seconds)
-                    enqueue_recording(event.audio, event.duration_seconds, job_id)
+                    delivery_batch_id = active_delivery_batch_id
+                    is_delivery_final = delivery_batch_id is not None
+                    enqueue_recording(
+                        event.audio,
+                        event.duration_seconds,
+                        job_id,
+                        delivery_batch_id=delivery_batch_id,
+                        defer_text=is_delivery_final,
+                        is_delivery_final=is_delivery_final,
+                    )
+                    if is_delivery_final:
+                        clear_delivery_batch(delivery_batch_id)
                 return
 
             if event.kind == "detector.error":

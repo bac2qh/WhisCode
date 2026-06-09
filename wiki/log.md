@@ -55,3 +55,6 @@
 - Documented the extra hands-free end-detection lag buffer, its `1.0` second default, and `--hands-free-tail-extra-seconds 0` as the previous base-only trim behavior.
 - Documented Send Chunk support: the Right Option + Right Shift recording chord, optional hands-free chunk phrase, chunk enrollment/import paths, chunk-specific tail trimming, blank-line transcript suffix, and bounded telemetry.
 - Documented that hands-free Send Chunk now reuses the wake phrase during recording, with tail trimming inferred from wake references instead of a separate chunk phrase.
+
+## 2026-06-09
+- Documented deferred Send Chunk delivery: chunk transcripts print to stdout as they finish, but clipboard copy/paste waits until the final stop/end/timeout flushes the in-memory batch.
