@@ -1,3 +1,19 @@
+# Closeout
+- Final status: implemented, validated, merged to local main, and archived.
+- Related checkpoint: `.agents/checkpoints/2026-06-09-deferred-send-chunk-paste-checkpoints.md`.
+- Implementation commits:
+  - `0e0c5f9` (`Defer Send Chunk paste until final stop`)
+  - `e3f9f13` (`Record deferred Send Chunk checkpoint`)
+- Merge commit: none; local `main` fast-forwarded from `8a8f0bf35be9b156b3e002ccbd158f9391127627` to `e3f9f13f9bbd38191579ec5a46b86d36464a4150`.
+- Verification performed:
+  - `uv run --with pytest pytest tests/test_main_cli.py tests/test_transcription_queue.py tests/test_injector.py tests/test_telemetry.py tests/test_handsfree.py` -> 83 passed.
+  - `uv run --with pytest pytest` -> 276 passed.
+  - `uv run python -m compileall whiscode` -> passed.
+  - `git diff --check` -> passed.
+  - `mission_validator` final verdict: `APPROVE` after README warning fix.
+- Worktree/branch cleanup result: removed `.agents/worktrees/deferred-send-chunk-paste`; deleted local branch `feature/deferred-send-chunk-paste`.
+- Shipped summary: Send Chunk now buffers successful chunk transcripts in process memory, prints chunks to stdout as they finish, and copies/pastes one ordered batch only after final stop/end/timeout. Ordinary recordings still paste immediately.
+
 # Deferred Send Chunk Paste
 
 ## Summary

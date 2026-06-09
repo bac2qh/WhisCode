@@ -53,3 +53,11 @@
 - Validator confirmed the README/wiki warning is fixed and `VC-001` through `VC-006` remain passed.
 - Implementation commit: `0e0c5f9` (`Defer Send Chunk paste until final stop`).
 - Immediate next step: commit this checkpoint hash update, then close out to local `main`.
+
+## 2026-06-09 Closeout
+- Local `main` fast-forwarded from `8a8f0bf35be9b156b3e002ccbd158f9391127627` to `e3f9f13f9bbd38191579ec5a46b86d36464a4150`; no merge commit was created.
+- Task worktree removed: `.agents/worktrees/deferred-send-chunk-paste`.
+- Local task branch deleted: `feature/deferred-send-chunk-paste`.
+- Active plan closed and archived to `.agents/plans/archive/2026-06-09-deferred-send-chunk-paste.md`.
+- Final implementation commits on merged branch: `0e0c5f9` and `e3f9f13`.
+- Closeout archival commit: this commit (`Archive deferred Send Chunk plan`).
