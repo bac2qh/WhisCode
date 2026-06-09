@@ -50,3 +50,15 @@ Deviation:
 - `mission_validator` was not spawned because the available subagent tool is restricted to explicit user delegation requests. Validation was performed in the main thread against the saved validation contract.
 
 Immediate next step: commit the implementation branch, then perform local-main closeout/archival under the repo mutex if available.
+
+## 2026-06-09 Closeout
+
+- Local main fast-forwarded from 4a10715 to bcb7798; no merge commit was created.
+- Task worktree removed: .agents/worktrees/voice-scroll-commands.
+- Local task branch deleted: feature/voice-scroll-commands.
+- Active plan closed and archived to .agents/plans/archive/2026-06-09-voice-scroll-commands.md.
+- Final implementation commits on merged branch: b1f9e0d and bcb7798.
+- Closeout archival commit: 8e147a6 (Archive voice scroll command plan).
+- Final verification remained: focused suite 112 passed; full suite 278 passed.
+- Closeout note: mission_validator was not spawned because the available subagent tool was restricted to explicit delegation requests; validation was completed in the main thread against VC-001 through VC-006.
+
