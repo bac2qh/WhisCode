@@ -61,4 +61,3 @@ Immediate next step: commit the implementation branch, then perform local-main c
 - Closeout archival commit: 8e147a6 (Archive voice scroll command plan).
 - Final verification remained: focused suite 112 passed; full suite 278 passed.
 - Closeout note: mission_validator was not spawned because the available subagent tool was restricted to explicit delegation requests; validation was completed in the main thread against VC-001 through VC-006.
-
