@@ -1,7 +1,7 @@
 # Checkpoint: Add `whiscode-enroll --record-missing`
 
 Date: 2026-06-09
-Plan: `.agents/plans/2026-06-09-enroll-record-missing.md`
+Plan: `.agents/plans/archive/2026-06-09-enroll-record-missing.md`
 Branch: `feature/enroll-record-missing`
 Worktree: `.agents/worktrees/enroll-record-missing`
 Status: closed; merged to local main and archived
@@ -36,6 +36,8 @@ See plan section `Validation Contract`.
 - Updated README, hands-free wiki documentation, wiki log, and project memory for the top-up/scroll-only workflow.
 - Added tests for parse acceptance/rejection, full-record regression, missing-only top-up/no-overwrite behavior, disabled command skipping through `commands.ini`, and startup guidance.
 - Implementation commit: `195f807` (`Add missing-only hands-free enrollment`).
+- Checkpoint bookkeeping commit: `52acc10` (`Record enroll missing checkpoint`).
+- Closeout archive commit: `57aca58` (`Archive enroll missing plan`).
 
 ## Immediate Next Step
 
