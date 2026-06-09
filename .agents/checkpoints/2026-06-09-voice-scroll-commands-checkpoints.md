@@ -24,6 +24,8 @@ Decisions:
 
 Status: implementation and local validation completed in task worktree `.agents/worktrees/voice-scroll-commands`.
 
+Implementation commit: `b1f9e0d` (`Add hands-free voice scroll commands`).
+
 Completed work:
 - Added `scroll-up` and `scroll-down` to `COMMAND_SLOTS`, so missing `commands.ini` defaults them on and the existing config, enrollment, reference-check, detector, and calibration paths see them with the other slots.
 - Implemented scroll command injection in `whiscode/injector.py` using lazy-loaded Quartz pixel scroll-wheel events. `scroll-up` posts a positive half-display-height vertical wheel delta for older terminal output; `scroll-down` posts the inverse for newer output.
