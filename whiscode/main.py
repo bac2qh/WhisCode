@@ -558,7 +558,7 @@ def ensure_hands_free_references(
     for message in missing:
         print(f"  {message}")
 
-    command = "uv run whiscode-enroll --record"
+    command = "uv run whiscode-enroll --record --record-missing"
     if args.no_enroll_prompt:
         if telemetry:
             telemetry.emit("handsfree.enrollment_prompt_skipped", reason="no_enroll_prompt")

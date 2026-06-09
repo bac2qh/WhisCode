@@ -5,6 +5,7 @@ import inspect
 import subprocess
 import sys
 import wave
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from whiscode.handsfree import (
     CommandConfigError,
     active_command_slots,
     command_reference_dirs,
+    reference_sample_count,
 )
 from whiscode.recorder import SAMPLE_RATE, _resample, open_input_stream
 from whiscode.recording_overlay import RecordingOverlayClient
@@ -28,6 +30,7 @@ from whiscode.telemetry import telemetry_from_args
 
 DEFAULT_ENROLL_SECONDS = 2.0
 DEFAULT_REFERENCE_SECONDS = DEFAULT_WINDOW_SECONDS
+PhraseSet = tuple[str, Path, str]
 
 
 def parse_args(argv: list[str] | None = None):
@@ -36,6 +39,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("kind", nargs="?", choices=choices, help="Reference phrase set to update for file import")
     parser.add_argument("samples", nargs="*", help="Audio samples to import, such as Voice Memo .m4a files")
     parser.add_argument("--record", action="store_true", help="Record wake, end, and command samples directly from the microphone")
+    parser.add_argument("--record-missing", action="store_true", help="With --record, only record phrase sets with fewer than --sample-count WAV samples")
     parser.add_argument("--sample-count", "--samples", dest="sample_count", type=int, default=MIN_REFERENCE_FILES, help=f"Samples to record per phrase (default: {MIN_REFERENCE_FILES})")
     parser.add_argument("--seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds to record per sample (default: {DEFAULT_ENROLL_SECONDS})")
     parser.add_argument("--wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake reference folder (default: {DEFAULT_WAKE_DIR})")
@@ -48,6 +52,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay during guided recording (default)")
     parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay during guided recording")
     args = parser.parse_args(argv)
+    if args.record_missing and not args.record:
+        parser.error("--record-missing requires --record")
     if not args.record and args.kind is None:
         parser.error("kind is required unless --record is used")
     if not args.record and len(args.samples) < MIN_REFERENCE_FILES:
@@ -196,6 +202,27 @@ def write_wav(path: Path, audio: np.ndarray, sample_rate: int = SAMPLE_RATE) -> 
         f.writeframes(pcm.tobytes())
 
 
+def guided_phrase_sets(
+    wake_dir: Path = DEFAULT_WAKE_DIR,
+    end_dir: Path = DEFAULT_END_DIR,
+    command_dir: Path = DEFAULT_COMMAND_DIR,
+    *,
+    command_slots=None,
+) -> list[PhraseSet]:
+    if command_slots is None:
+        command_slots = COMMAND_SLOTS
+    command_slots = tuple(command_slots)
+    command_dirs = command_reference_dirs(command_dir, slots=command_slots)
+    return [
+        ("wake", wake_dir, "wake phrase"),
+        ("end", end_dir, "end phrase"),
+        *(
+            (slot.name, command_dirs[slot.name], f"command phrase for {slot.label}")
+            for slot in command_slots
+        ),
+    ]
+
+
 def record_one_sample(
     kind: str,
     index: int,
@@ -252,10 +279,12 @@ def record_guided_samples(
     telemetry: Any | None = None,
     overlay: Any | None = None,
     command_slots=None,
+    record_missing: bool = False,
 ) -> list[Path]:
     validate_recording_options(sample_count, seconds)
     if command_slots is None:
         command_slots = COMMAND_SLOTS
+    command_slots = tuple(command_slots)
     _emit(
         telemetry,
         "enrollment.guided_started",
@@ -265,18 +294,29 @@ def record_guided_samples(
         enabled_commands=[slot.name for slot in command_slots],
     )
     written = []
-    command_dirs = command_reference_dirs(command_dir, slots=tuple(command_slots))
-    phrase_sets = [
-        ("wake", wake_dir, "wake phrase"),
-        ("end", end_dir, "end phrase"),
-        *(
-            (slot.name, command_dirs[slot.name], f"command phrase for {slot.label}")
-            for slot in command_slots
-        ),
-    ]
+    phrase_sets = guided_phrase_sets(wake_dir, end_dir, command_dir, command_slots=command_slots)
+    recorded_sets: list[tuple[str, int, int]] = []
+    skipped_sets: list[tuple[str, int]] = []
     for kind, target_dir, prompt_label in phrase_sets:
-        print(f"Recording {sample_count} {prompt_label} sample(s).")
-        for index in range(1, sample_count + 1):
+        if record_missing:
+            existing_count = reference_sample_count(target_dir)
+            if existing_count >= sample_count:
+                skipped_sets.append((prompt_label, existing_count))
+                print(
+                    f"Skipping {prompt_label}: {existing_count}/{sample_count} WAV sample(s) already present in {target_dir}."
+                )
+                continue
+            samples_to_record = sample_count - existing_count
+            recorded_sets.append((prompt_label, samples_to_record, existing_count))
+            print(
+                f"Recording {samples_to_record} {prompt_label} sample(s) "
+                f"({existing_count}/{sample_count} already present)."
+            )
+            indexes = _unused_sample_indexes(kind, target_dir, samples_to_record)
+        else:
+            print(f"Recording {sample_count} {prompt_label} sample(s).")
+            indexes = list(range(1, sample_count + 1))
+        for index in indexes:
             written.append(
                 record_one_sample(
                     kind,
@@ -291,6 +331,14 @@ def record_guided_samples(
                     overlay=overlay,
                 )
             )
+    if record_missing:
+        _print_record_missing_summary(
+            phrase_sets,
+            recorded_sets=recorded_sets,
+            skipped_sets=skipped_sets,
+            sample_count=sample_count,
+            samples_written=len(written),
+        )
     _emit(telemetry, "enrollment.guided_completed", samples_written=len(written))
     return written
 
@@ -320,6 +368,7 @@ def main(argv: list[str] | None = None) -> int:
                 telemetry=telemetry,
                 overlay=overlay,
                 command_slots=command_slots,
+                record_missing=args.record_missing,
             )
         else:
             written = import_samples(
@@ -368,6 +417,51 @@ def _capture_with_level_callback(capture_fn, seconds: float, level_callback) -> 
     audio = capture_fn(seconds)
     level_callback(audio)
     return audio
+
+
+def _next_unused_sample_index(kind: str, target_dir: Path) -> int:
+    index = 1
+    while (target_dir / f"{kind}-{index:02d}.wav").exists():
+        index += 1
+    return index
+
+
+def _unused_sample_indexes(kind: str, target_dir: Path, sample_count: int) -> Iterator[int]:
+    for _ in range(sample_count):
+        yield _next_unused_sample_index(kind, target_dir)
+
+
+def _print_record_missing_summary(
+    phrase_sets: list[PhraseSet],
+    *,
+    recorded_sets: list[tuple[str, int, int]],
+    skipped_sets: list[tuple[str, int]],
+    sample_count: int,
+    samples_written: int,
+) -> None:
+    incomplete = []
+    for kind, target_dir, prompt_label in phrase_sets:
+        count = reference_sample_count(target_dir)
+        if count < sample_count:
+            incomplete.append(f"{prompt_label} ({count}/{sample_count})")
+
+    print("Record-missing summary:")
+    if recorded_sets:
+        recorded = ", ".join(
+            f"{prompt_label} +{samples_to_record} (was {existing_count}/{sample_count})"
+            for prompt_label, samples_to_record, existing_count in recorded_sets
+        )
+        print(f"  Recorded {samples_written} sample(s).")
+        print(f"  Recorded phrase set(s): {recorded}.")
+    else:
+        print(f"  Recorded 0 sample(s); all selected phrase sets already have at least {sample_count} WAV samples.")
+    if skipped_sets:
+        skipped = ", ".join(
+            f"{prompt_label} ({existing_count}/{sample_count})" for prompt_label, existing_count in skipped_sets
+        )
+        print(f"  Skipped complete phrase set(s): {skipped}.")
+    if incomplete:
+        print(f"  Still incomplete after recording: {', '.join(incomplete)}.")
 
 
 if __name__ == "__main__":

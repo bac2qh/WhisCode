@@ -17,6 +17,7 @@ from whiscode.enroll import (
     validate_recording_options,
     write_wav,
 )
+from whiscode.handsfree import active_command_slots
 
 
 def make_samples(tmp_path, count=3):
@@ -26,6 +27,12 @@ def make_samples(tmp_path, count=3):
         sample.write_text("audio")
         samples.append(sample)
     return samples
+
+
+def write_existing_wavs(path: Path, prefix: str, indexes: list[int]) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    for index in indexes:
+        (path / f"{prefix}-{index:02d}.wav").write_text(f"existing-{index}")
 
 
 def test_parse_args_accepts_voice_memo_samples():
@@ -67,6 +74,26 @@ def test_parse_args_accepts_record_mode():
     assert args.command_config == Path("/tmp/commands.ini")
     assert args.recording_overlay is False
     assert args.no_telemetry is True
+
+
+def test_parse_args_accepts_record_missing_mode():
+    args = parse_args(["--record", "--record-missing", "--sample-count", "4"])
+
+    assert args.record is True
+    assert args.record_missing is True
+    assert args.sample_count == 4
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--record-missing"],
+        ["wake", "one.m4a", "two.m4a", "three.m4a", "--record-missing"],
+    ],
+)
+def test_parse_args_rejects_record_missing_without_record(argv):
+    with pytest.raises(SystemExit):
+        parse_args(argv)
 
 
 @pytest.mark.parametrize(
@@ -245,6 +272,79 @@ def test_record_guided_samples_accepts_enabled_command_slots(tmp_path):
     assert written[0] == tmp_path / "wake" / "wake-01.wav"
     assert written[3] == tmp_path / "end" / "end-01.wav"
     assert not (tmp_path / "commands").exists()
+
+
+def test_record_guided_samples_full_record_ignores_existing_counts(tmp_path):
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    write_existing_wavs(wake_dir, "wake", [1, 2, 3])
+
+    written = record_guided_samples(
+        wake_dir=wake_dir,
+        end_dir=end_dir,
+        command_dir=tmp_path / "commands",
+        input_fn=lambda prompt: None,
+        capture_fn=lambda seconds: np.array([0.2], dtype=np.float32),
+        preprocess_fn=lambda audio: audio,
+        command_slots=(),
+    )
+
+    assert written == [
+        wake_dir / "wake-01.wav",
+        wake_dir / "wake-02.wav",
+        wake_dir / "wake-03.wav",
+        end_dir / "end-01.wav",
+        end_dir / "end-02.wav",
+        end_dir / "end-03.wav",
+    ]
+    with wave.open(str(wake_dir / "wake-01.wav"), "rb") as f:
+        assert f.getnframes() == 1
+
+
+def test_record_guided_samples_record_missing_tops_up_enabled_sets_without_overwrite(tmp_path, capsys):
+    wake_dir = tmp_path / "wake"
+    end_dir = tmp_path / "end"
+    command_dir = tmp_path / "commands"
+    config_path = tmp_path / "commands.ini"
+    config_path.write_text("[commands]\nenter = false\nscroll-up = true\nscroll-down = true\n")
+    write_existing_wavs(wake_dir, "wake", [1, 2, 3])
+    write_existing_wavs(end_dir, "end", [1, 3])
+    write_existing_wavs(command_dir / "scroll-up", "scroll-up", [1, 2, 3])
+    write_existing_wavs(command_dir / "scroll-down", "scroll-down", [1])
+    slots = active_command_slots(config_path, base_dir=command_dir)
+    prompts = []
+
+    written = record_guided_samples(
+        wake_dir=wake_dir,
+        end_dir=end_dir,
+        command_dir=command_dir,
+        input_fn=lambda prompt: prompts.append(prompt),
+        capture_fn=lambda seconds: np.array([0.2], dtype=np.float32),
+        preprocess_fn=lambda audio: audio,
+        command_slots=slots,
+        record_missing=True,
+    )
+
+    assert written == [
+        end_dir / "end-02.wav",
+        command_dir / "scroll-down" / "scroll-down-02.wav",
+        command_dir / "scroll-down" / "scroll-down-03.wav",
+    ]
+    assert (wake_dir / "wake-01.wav").read_text() == "existing-1"
+    assert (end_dir / "end-01.wav").read_text() == "existing-1"
+    assert (end_dir / "end-03.wav").read_text() == "existing-3"
+    assert (command_dir / "scroll-up" / "scroll-up-01.wav").read_text() == "existing-1"
+    assert not (command_dir / "enter").exists()
+    assert len(prompts) == 3
+    assert any("end phrase" in prompt for prompt in prompts)
+    assert any("command phrase for Scroll Down" in prompt for prompt in prompts)
+    assert all("Scroll Up" not in prompt for prompt in prompts)
+
+    out = capsys.readouterr().out
+    assert "Skipping wake phrase" in out
+    assert "Skipping command phrase for Scroll Up" in out
+    assert "Recorded phrase set(s): end phrase +1" in out
+    assert "command phrase for Scroll Down +2" in out
 
 
 class FakeTelemetry:

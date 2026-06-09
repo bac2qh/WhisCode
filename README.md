@@ -281,12 +281,18 @@ Start hands-free mode:
 uv run whiscode --hands-free
 ```
 
-If samples are missing, WhisCode offers guided enrollment and records three wake samples, three end samples, and three samples for each hands-free command from your default microphone. Each sample is trimmed with local VAD and then padded to the detector window before it is saved, so the reference WAVs focus on the phrase while still matching the runtime comparison window.
+If samples are missing, WhisCode offers guided enrollment and points to a top-up command that records only incomplete reference sets. Each sample is trimmed with local VAD and then padded to the detector window before it is saved, so the reference WAVs focus on the phrase while still matching the runtime comparison window.
 
-You can also run enrollment directly:
+Run a full guided enrollment to record three wake samples, three end samples, and three samples for each enabled hands-free command from your default microphone:
 
 ```bash
 uv run whiscode-enroll --record
+```
+
+Run a top-up enrollment to skip complete reference folders and record only the samples needed to reach three WAVs per enabled phrase set:
+
+```bash
+uv run whiscode-enroll --record --record-missing
 ```
 
 Guided enrollment shows the floating recording overlay for each sample by default. Disable it with `uv run whiscode-enroll --record --no-recording-overlay`.
@@ -326,7 +332,7 @@ scroll-up = true
 scroll-down = true
 ```
 
-If this file does not exist, all command slots stay enabled for backward compatibility. If it exists, only commands set to `true` are enabled; omitted or `false` commands are ignored and do not need reference samples. Enabled commands still need enough recorded samples before they can load. Override the path with `--hands-free-command-config PATH`; guided enrollment and calibration use the same config by default and accept `--command-config PATH`.
+If this file does not exist, all command slots stay enabled for backward compatibility. If it exists, only commands set to `true` are enabled; omitted or `false` commands are ignored and do not need reference samples. Enabled commands still need enough recorded samples before they can load. Override the path with `--hands-free-command-config PATH`; guided enrollment and calibration use the same config by default and accept `--command-config PATH`. For a scroll-only add-on after wake/end references already exist, enable `scroll-up` and `scroll-down`, then run `uv run whiscode-enroll --record --record-missing`; complete wake/end folders and other complete enabled commands are skipped.
 
 After enrollment, inspect the local detector score separation:
 

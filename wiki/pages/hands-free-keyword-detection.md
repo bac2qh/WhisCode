@@ -12,6 +12,14 @@ uv run whiscode-enroll --record
 
 This records three wake samples, three end samples, and three samples for each command slot. The command slots are `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, `arrow-down`, `scroll-up`, and `scroll-down`; the spoken phrase for each slot is arbitrary and comes from the user's recorded samples. Enrollment trims leading and trailing silence with local VAD, pads each result to the detector window, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
 
+To fill only missing references, run:
+
+```bash
+uv run whiscode-enroll --record --record-missing
+```
+
+This mode checks wake, end, and enabled command folders, skips any phrase set with at least three WAV files, and records only the number needed to reach three samples. It uses the next unused numbered filename, so existing samples are not overwritten. For a scroll-only add-on, enable `scroll-up` and `scroll-down` in `commands.ini` and run this command; if wake/end and other enabled commands are already complete, only the scroll command folders are recorded.
+
 Existing audio files can still be imported manually:
 
 ```bash
@@ -35,7 +43,7 @@ Start hands-free mode with:
 uv run whiscode --hands-free
 ```
 
-If any wake, end, or command reference folder has fewer than three WAV files, startup offers to run guided enrollment before loading the wake detectors. Use `--no-enroll-prompt` to fail fast instead.
+If any wake, end, or enabled command reference folder has fewer than three WAV files, startup offers to run guided enrollment before loading the wake detectors and recommends `uv run whiscode-enroll --record --record-missing` for direct repair. Use `--no-enroll-prompt` to fail fast instead.
 
 The wake phrase starts capture, the end phrase stops capture, and the captured audio between those phrases is passed to the selected ASR backend through the shared transcription queue. WhisCode continuously drains microphone audio into a bounded detector queue and runs detector work on a separate worker, so wake/end/command matching does not block the PortAudio read loop. The detector still uses the configured sliding window and slide interval; `--hands-free-audio-queue-seconds` controls how much queued detector audio can build up before oldest chunks are dropped.
 

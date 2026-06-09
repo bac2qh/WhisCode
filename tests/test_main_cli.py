@@ -836,7 +836,7 @@ def test_ensure_hands_free_references_decline_prompt_exits(tmp_path):
     assert ensure_hands_free_references(args, input_fn=lambda prompt: "n") is False
 
 
-def test_ensure_hands_free_references_no_prompt_exits_without_input(tmp_path):
+def test_ensure_hands_free_references_no_prompt_exits_without_input(tmp_path, capsys):
     args = parse_args([
         "--hands-free",
         "--no-enroll-prompt",
@@ -851,6 +851,9 @@ def test_ensure_hands_free_references_no_prompt_exits_without_input(tmp_path):
     ])
 
     assert ensure_hands_free_references(args, input_fn=lambda prompt: (_ for _ in ()).throw(AssertionError("prompted"))) is False
+
+    captured = capsys.readouterr()
+    assert "uv run whiscode-enroll --record --record-missing" in captured.err
 
 
 def test_ensure_hands_free_references_accept_prompt_runs_enrollment(tmp_path):

@@ -59,3 +59,4 @@
 ## 2026-06-09
 - Documented deferred Send Chunk delivery: chunk transcripts print to stdout as they finish, but clipboard copy/paste waits until the final stop/end/timeout flushes the in-memory batch.
 - Documented idle-only `scroll-up` and `scroll-down` hands-free command slots, including guided/manual enrollment, `commands.ini` enablement, scroll direction semantics, and bounded scroll injection telemetry.
+- Documented `whiscode-enroll --record --record-missing` for topping up only incomplete wake, end, and enabled command reference sets, including the scroll-only add-on workflow.
