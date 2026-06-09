@@ -52,6 +52,8 @@ COMMAND_SLOTS = (
     CommandSlot("tab", "Tab", DEFAULT_COMMAND_DIR / "tab"),
     CommandSlot("arrow-up", "Arrow Up", DEFAULT_COMMAND_DIR / "arrow-up"),
     CommandSlot("arrow-down", "Arrow Down", DEFAULT_COMMAND_DIR / "arrow-down"),
+    CommandSlot("scroll-up", "Scroll Up", DEFAULT_COMMAND_DIR / "scroll-up"),
+    CommandSlot("scroll-down", "Scroll Down", DEFAULT_COMMAND_DIR / "scroll-down"),
 )
 
 

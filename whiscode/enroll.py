@@ -35,7 +35,7 @@ def parse_args(argv: list[str] | None = None):
     choices = ("wake", "end", *(slot.name for slot in COMMAND_SLOTS))
     parser.add_argument("kind", nargs="?", choices=choices, help="Reference phrase set to update for file import")
     parser.add_argument("samples", nargs="*", help="Audio samples to import, such as Voice Memo .m4a files")
-    parser.add_argument("--record", action="store_true", help="Record wake, end, and key-command samples directly from the microphone")
+    parser.add_argument("--record", action="store_true", help="Record wake, end, and command samples directly from the microphone")
     parser.add_argument("--sample-count", "--samples", dest="sample_count", type=int, default=MIN_REFERENCE_FILES, help=f"Samples to record per phrase (default: {MIN_REFERENCE_FILES})")
     parser.add_argument("--seconds", type=float, default=DEFAULT_ENROLL_SECONDS, help=f"Seconds to record per sample (default: {DEFAULT_ENROLL_SECONDS})")
     parser.add_argument("--wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake reference folder (default: {DEFAULT_WAKE_DIR})")

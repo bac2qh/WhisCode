@@ -10,7 +10,7 @@ The normal enrollment path records samples directly from the default microphone:
 uv run whiscode-enroll --record
 ```
 
-This records three wake samples, three end samples, and three samples for each key command slot. The command slots are `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, and `arrow-down`; the spoken phrase for each slot is arbitrary and comes from the user's recorded samples. Enrollment trims leading and trailing silence with local VAD, pads each result to the detector window, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
+This records three wake samples, three end samples, and three samples for each command slot. The command slots are `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, `arrow-down`, `scroll-up`, and `scroll-down`; the spoken phrase for each slot is arbitrary and comes from the user's recorded samples. Enrollment trims leading and trailing silence with local VAD, pads each result to the detector window, then writes 16 kHz mono WAV files under `~/.config/whiscode/wake/`.
 
 Existing audio files can still be imported manually:
 
@@ -23,6 +23,8 @@ uv run whiscode-enroll shift-tab shifttab1.m4a shifttab2.m4a shifttab3.m4a
 uv run whiscode-enroll tab tab1.m4a tab2.m4a tab3.m4a
 uv run whiscode-enroll arrow-up arrowup1.m4a arrowup2.m4a arrowup3.m4a
 uv run whiscode-enroll arrow-down arrowdown1.m4a arrowdown2.m4a arrowdown3.m4a
+uv run whiscode-enroll scroll-up scrollup1.m4a scrollup2.m4a scrollup3.m4a
+uv run whiscode-enroll scroll-down scrolldown1.m4a scrolldown2.m4a scrolldown3.m4a
 ```
 
 ## Runtime
@@ -39,7 +41,7 @@ The wake phrase starts capture, the end phrase stops capture, and the captured a
 
 WhisCode waits until a detector window is fully populated and has enough speech-like energy before calling the keyword matcher, so silence and low-level room noise do not trigger wake/end detection. Wake detection uses a stricter default threshold and requires two consecutive matching windows before recording starts. Use `--hands-free-debug` to print detector distances while tuning `--hands-free-threshold`, `--hands-free-end-threshold`, and `--hands-free-wake-confirmations`.
 
-While not actively recording, WhisCode also checks the eight trained command slots. A confirmed `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, or `arrow-down` command taps the corresponding physical key or key combo through `pynput`. Command detection is disabled while recording so dictated text cannot inject keys, but it can run while earlier recordings are queued or transcribing. Tune commands separately with `--hands-free-command-threshold` and `--hands-free-command-confirmations`.
+While not actively recording, WhisCode also checks the ten trained command slots. A confirmed `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, or `arrow-down` command taps the corresponding physical key or key combo through `pynput`. A confirmed `scroll-up` command emits a native macOS pixel scroll wheel action that reveals older terminal output above the current view, and `scroll-down` emits the inverse action toward newer output. Each scroll command moves about half of the main display height. Command detection is disabled while recording so dictated text cannot inject keys or scrolls, but it can run while earlier recordings are queued or transcribing. Tune commands separately with `--hands-free-command-threshold` and `--hands-free-command-confirmations`.
 
 While actively recording, WhisCode reuses the wake phrase as Send Chunk. A confirmed wake phrase during recording trims the spoken wake phrase tail using the inferred active span of the wake references plus `--hands-free-tail-extra-seconds`, queues the chunk into an in-memory delivery batch with a blank line after the transcript, and immediately starts a new recording. Intermediate chunks still print to stdout as they transcribe, but clipboard copy and Cmd+V paste are deferred until the final end phrase, manual stop, or timeout completes the batch.
 
@@ -67,7 +69,7 @@ WhisCode runtime and guided enrollment write local JSONL telemetry by default:
 ~/Library/Logs/WhisCode/events.jsonl
 ```
 
-The telemetry records app lifecycle, selected ASR backend, enrollment progress, reference counts, detector load results, end and wake-as-chunk tail-trim resolution source and counts, Send Chunk request/queue/restart/reject outcomes, deferred delivery buffer/skip/flush outcomes, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/wake-as-chunk/command detections, key-command injection outcomes, recording durations, transcription queue depth, transcription outcomes, backend failure shape diagnostics, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. Routine telemetry does not record raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. CrispASR malformed-response debugging is the exception: when VibeVoice chunk parsing fails or needs recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl`, which can contain transcript or provider output text. Successful transcripts remain visible in stdout for local copying instead of being copied into telemetry.
+The telemetry records app lifecycle, selected ASR backend, enrollment progress, reference counts, detector load results, end and wake-as-chunk tail-trim resolution source and counts, Send Chunk request/queue/restart/reject outcomes, deferred delivery buffer/skip/flush outcomes, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/wake-as-chunk/command detections, key-command and scroll-command injection outcomes, recording durations, transcription queue depth, transcription outcomes, backend failure shape diagnostics, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. Scroll injection telemetry is bounded to command name, older/newer direction, pixel amount, outcome, and error type. Routine telemetry does not record raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. CrispASR malformed-response debugging is the exception: when VibeVoice chunk parsing fails or needs recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl`, which can contain transcript or provider output text. Successful transcripts remain visible in stdout for local copying instead of being copied into telemetry.
 
 `handsfree.audio_overflow` means PortAudio reported that the microphone read loop fell behind. `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` help determine whether detector work is falling behind the live microphone stream. These are not direct macOS swap or memory-overflow signals.
 

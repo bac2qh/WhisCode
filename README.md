@@ -6,7 +6,7 @@ Voice-to-keyboard for code dictation on macOS. Press a hotkey, speak, and your w
 
 Current beta: `v2.0.0-beta.1`.
 
-This v2 beta marks the move from hotkey-first dictation toward hands-free operation. The main v2 changes are local wake/end phrase detection, trained voice key commands, continuous microphone capture with bounded queues, and the floating recording overlay as the default recording indicator. The older macOS start/end notification banners are now opt-in with `--recording-notifications`.
+This v2 beta marks the move from hotkey-first dictation toward hands-free operation. The main v2 changes are local wake/end phrase detection, trained voice commands, continuous microphone capture with bounded queues, and the floating recording overlay as the default recording indicator. The older macOS start/end notification banners are now opt-in with `--recording-notifications`.
 
 ## Requirements
 
@@ -74,7 +74,7 @@ uv run whiscode --hands-free
 | `--hands-free` | off | Use local start/end phrase detection instead of Right Shift as the primary trigger |
 | `--hands-free-threshold FLOAT` | `0.055` | Detection threshold for wake phrase matching |
 | `--hands-free-end-threshold FLOAT` | `0.055` | Detection threshold for end phrase matching |
-| `--hands-free-command-threshold FLOAT` | `0.055` | Detection threshold for hands-free key command matching |
+| `--hands-free-command-threshold FLOAT` | `0.055` | Detection threshold for hands-free command matching |
 | `--hands-free-command-config PATH` | `~/.config/whiscode/commands.ini` | Hands-free command enablement config |
 | `--hands-free-tail-seconds FLOAT` | auto, fallback `1.0` | Audio tail to discard when the end phrase is detected; omitted values are inferred from end phrase references |
 | `--hands-free-tail-extra-seconds FLOAT` | `1.0` | Extra end-detection lag buffer added to the inferred or explicit hands-free tail; set to `0` for the previous base-only trim |
@@ -281,7 +281,7 @@ Start hands-free mode:
 uv run whiscode --hands-free
 ```
 
-If samples are missing, WhisCode offers guided enrollment and records three wake samples, three end samples, and three samples for each hands-free key command from your default microphone. Each sample is trimmed with local VAD and then padded to the detector window before it is saved, so the reference WAVs focus on the phrase while still matching the runtime comparison window.
+If samples are missing, WhisCode offers guided enrollment and records three wake samples, three end samples, and three samples for each hands-free command from your default microphone. Each sample is trimmed with local VAD and then padded to the detector window before it is saved, so the reference WAVs focus on the phrase while still matching the runtime comparison window.
 
 You can also run enrollment directly:
 
@@ -302,13 +302,15 @@ uv run whiscode-enroll shift-tab shifttab1.m4a shifttab2.m4a shifttab3.m4a
 uv run whiscode-enroll tab tab1.m4a tab2.m4a tab3.m4a
 uv run whiscode-enroll arrow-up arrowup1.m4a arrowup2.m4a arrowup3.m4a
 uv run whiscode-enroll arrow-down arrowdown1.m4a arrowdown2.m4a arrowdown3.m4a
+uv run whiscode-enroll scroll-up scrollup1.m4a scrollup2.m4a scrollup3.m4a
+uv run whiscode-enroll scroll-down scrolldown1.m4a scrolldown2.m4a scrolldown3.m4a
 ```
 
-Hands-free mode also supports eight trained key command slots while not actively recording: `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, and `arrow-down`. The spoken phrase is whatever you record for that slot; WhisCode maps the detected slot to the physical Page Up, Page Down, Enter, Shift+Enter, Shift+Tab, Tab, Arrow Up, or Arrow Down key action. Command detection is disabled while recording so dictated speech cannot press keys, but it can run while earlier recordings are queued or transcribing.
+Hands-free mode also supports ten trained command slots while not actively recording: `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, `arrow-down`, `scroll-up`, and `scroll-down`. The spoken phrase is whatever you record for that slot. WhisCode maps the key slots to the physical Page Up, Page Down, Enter, Shift+Enter, Shift+Tab, Tab, Arrow Up, or Arrow Down key action. `scroll-up` emits a native macOS pixel scroll wheel action that reveals older terminal output above the current view, and `scroll-down` emits the inverse action toward newer output. Each scroll command moves about half of the main display height. Command detection is disabled while recording so dictated speech cannot inject keys or scrolls, but it can run while earlier recordings are queued or transcribing.
 
 The wake phrase also acts as Send Chunk while actively recording. When detected during a recording, WhisCode trims the spoken wake phrase tail using the active span inferred from the wake references plus `--hands-free-tail-extra-seconds`, queues the chunk into an in-memory delivery batch with a blank line after it, and immediately starts a new recording. Intermediate chunks are transcribed and printed to stdout as they finish, but they are not copied to the clipboard or pasted into the focused app until the final end phrase, manual stop, or timeout completes the batch.
 
-You can selectively enable key command slots with `~/.config/whiscode/commands.ini`:
+You can selectively enable command slots with `~/.config/whiscode/commands.ini`:
 
 ```ini
 [commands]
@@ -320,6 +322,8 @@ shift-tab = false
 tab = true
 arrow-up = true
 arrow-down = true
+scroll-up = true
+scroll-down = true
 ```
 
 If this file does not exist, all command slots stay enabled for backward compatibility. If it exists, only commands set to `true` are enabled; omitted or `false` commands are ignored and do not need reference samples. Enabled commands still need enough recorded samples before they can load. Override the path with `--hands-free-command-config PATH`; guided enrollment and calibration use the same config by default and accept `--command-config PATH`.
@@ -344,7 +348,7 @@ WhisCode writes local JSONL telemetry by default to:
 ~/Library/Logs/WhisCode/events.jsonl
 ```
 
-Use it to inspect app startup, selected ASR backend, recording durations, queue depth, Send Chunk request/queue/restart outcomes, deferred delivery buffer/flush outcomes, transcription outcomes, backend failures, wake/end/wake-as-chunk/command detections, detector distances, key-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
+Use it to inspect app startup, selected ASR backend, recording durations, queue depth, Send Chunk request/queue/restart outcomes, deferred delivery buffer/flush outcomes, transcription outcomes, backend failures, wake/end/wake-as-chunk/command detections, detector distances, key-command and scroll-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. Scroll injection telemetry includes only bounded command metadata such as command name, older/newer direction, pixel amount, outcome, and error type. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
 
 `handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. WhisCode keeps microphone capture lightweight and uses a bounded detector queue to reduce this. If detector processing still falls behind, `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` show how much queued audio was dropped and how long detection took. These diagnostics do not include raw audio or transcript text.
 

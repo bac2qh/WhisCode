@@ -13,20 +13,25 @@ def test_missing_command_config_defaults_all_slots_enabled(tmp_path):
 
     assert [slot.name for slot in slots] == [slot.name for slot in COMMAND_SLOTS]
     assert slots[0].path == tmp_path / "commands" / "page-up"
+    assert slots[-2].name == "scroll-up"
+    assert slots[-1].name == "scroll-down"
+    assert slots[-1].path == tmp_path / "commands" / "scroll-down"
 
 
 def test_existing_command_config_is_allowlist(tmp_path):
     path = tmp_path / "commands.ini"
-    path.write_text("[commands]\npage-up = true\nenter = yes\nshift-tab = false\n")
+    path.write_text("[commands]\npage-up = true\nenter = yes\nscroll-down = true\nshift-tab = false\n")
 
     enabled = load_command_config(path)
     slots = active_command_slots(path, base_dir=tmp_path / "commands")
 
     assert enabled["page-up"] is True
     assert enabled["enter"] is True
+    assert enabled["scroll-down"] is True
     assert enabled["shift-tab"] is False
     assert enabled["page-down"] is False
-    assert [slot.name for slot in slots] == ["page-up", "enter"]
+    assert enabled["scroll-up"] is False
+    assert [slot.name for slot in slots] == ["page-up", "enter", "scroll-down"]
 
 
 def test_command_config_rejects_unknown_names(tmp_path):

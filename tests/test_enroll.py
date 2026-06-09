@@ -36,9 +36,9 @@ def test_parse_args_accepts_voice_memo_samples():
 
 
 def test_parse_args_accepts_command_samples():
-    args = parse_args(["arrow-down", "one.m4a", "two.m4a", "three.m4a", "--command-dir", "/tmp/commands"])
+    args = parse_args(["scroll-down", "one.m4a", "two.m4a", "three.m4a", "--command-dir", "/tmp/commands"])
 
-    assert args.kind == "arrow-down"
+    assert args.kind == "scroll-down"
     assert args.command_dir == Path("/tmp/commands")
 
 
@@ -147,7 +147,7 @@ def test_import_samples_uses_command_folder(tmp_path):
 
     with patch("subprocess.run", side_effect=fake_run):
         written = import_samples(
-            "arrow-up",
+            "scroll-up",
             samples,
             wake_dir=tmp_path / "wake",
             end_dir=tmp_path / "end",
@@ -155,7 +155,7 @@ def test_import_samples_uses_command_folder(tmp_path):
             preprocess_fn=lambda audio: audio,
         )
 
-    assert written[0] == command_dir / "arrow-up" / "arrow-up-01.wav"
+    assert written[0] == command_dir / "scroll-up" / "scroll-up-01.wav"
 
 
 def test_import_samples_requires_three_samples(tmp_path):
@@ -185,7 +185,7 @@ def test_record_guided_samples_records_wake_and_end_defaults(tmp_path):
         preprocess_fn=lambda audio: audio,
     )
 
-    assert len(written) == 30
+    assert len(written) == 36
     assert written[0] == tmp_path / "wake" / "wake-01.wav"
     assert written[3] == tmp_path / "end" / "end-01.wav"
     assert written[6] == tmp_path / "commands" / "page-up" / "page-up-01.wav"
@@ -196,13 +196,17 @@ def test_record_guided_samples_records_wake_and_end_defaults(tmp_path):
     assert written[21] == tmp_path / "commands" / "tab" / "tab-01.wav"
     assert written[24] == tmp_path / "commands" / "arrow-up" / "arrow-up-01.wav"
     assert written[27] == tmp_path / "commands" / "arrow-down" / "arrow-down-01.wav"
-    assert len(captured_prompts) == 30
+    assert written[30] == tmp_path / "commands" / "scroll-up" / "scroll-up-01.wav"
+    assert written[33] == tmp_path / "commands" / "scroll-down" / "scroll-down-01.wav"
+    assert len(captured_prompts) == 36
     assert any("command phrase for Page Up" in prompt for prompt in captured_prompts)
     assert any("command phrase for Shift+Enter" in prompt for prompt in captured_prompts)
     assert any("command phrase for Shift+Tab" in prompt for prompt in captured_prompts)
     assert any("command phrase for Tab" in prompt for prompt in captured_prompts)
     assert any("command phrase for Arrow Up" in prompt for prompt in captured_prompts)
     assert any("command phrase for Arrow Down" in prompt for prompt in captured_prompts)
+    assert any("command phrase for Scroll Up" in prompt for prompt in captured_prompts)
+    assert any("command phrase for Scroll Down" in prompt for prompt in captured_prompts)
     assert all(path.exists() for path in written)
 
 
@@ -220,8 +224,8 @@ def test_record_guided_samples_honors_count_and_seconds(tmp_path):
         preprocess_fn=lambda audio: audio,
     )
 
-    assert len(written) == 40
-    assert seconds_seen == [1.25] * 40
+    assert len(written) == 48
+    assert seconds_seen == [1.25] * 48
 
 
 def test_record_guided_samples_accepts_enabled_command_slots(tmp_path):
@@ -266,8 +270,8 @@ def test_record_guided_samples_emits_telemetry(tmp_path):
 
     event_names = [event for event, properties in telemetry.events]
     assert event_names[0] == "enrollment.guided_started"
-    assert event_names.count("enrollment.sample_started") == 30
-    assert event_names.count("enrollment.sample_completed") == 30
+    assert event_names.count("enrollment.sample_started") == 36
+    assert event_names.count("enrollment.sample_completed") == 36
     assert event_names[-1] == "enrollment.guided_completed"
 
 
@@ -304,8 +308,8 @@ def test_record_guided_samples_uses_overlay_for_each_sample(tmp_path):
         overlay=overlay,
     )
 
-    assert overlay.calls == ["show", "hide"] * 30
-    assert len(overlay.levels) == 30
+    assert overlay.calls == ["show", "hide"] * 36
+    assert len(overlay.levels) == 36
     np.testing.assert_array_equal(overlay.levels[0], np.array([0.25, -0.25], dtype=np.float32))
 
 

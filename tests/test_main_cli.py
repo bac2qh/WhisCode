@@ -911,7 +911,7 @@ def test_ensure_hands_free_references_emits_missing_telemetry(tmp_path):
 
     event_names = [event for event, properties in telemetry.events]
     assert "handsfree.reference_check_started" in event_names
-    assert ("handsfree.reference_check_completed", {"outcome": "missing", "missing_count": 10}) in telemetry.events
+    assert ("handsfree.reference_check_completed", {"outcome": "missing", "missing_count": 12}) in telemetry.events
     assert ("handsfree.enrollment_prompt_skipped", {"reason": "no_enroll_prompt"}) in telemetry.events
 
 
@@ -945,6 +945,6 @@ def test_ensure_hands_free_references_only_requires_enabled_commands(tmp_path):
             "config_exists": True,
             "enabled_commands": ["enter"],
             "enabled_command_count": 1,
-            "disabled_command_count": 7,
+            "disabled_command_count": 9,
         },
     ) in telemetry.events

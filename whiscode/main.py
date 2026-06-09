@@ -60,7 +60,7 @@ from whiscode.external_transcription import (
 )
 from whiscode.deferred_delivery import DeferredTranscriptBuffer
 from whiscode.hotwords import load_hotwords
-from whiscode.injector import press_key_command, type_text
+from whiscode.injector import is_scroll_command, press_key_command, type_text
 from whiscode.crispasr_asr import (
     CrispAsrBackend,
     CrispAsrServerConfig,
@@ -1485,13 +1485,23 @@ def main():
                         active_ratio=round(event.detection.active_ratio, 6) if event.detection and event.detection.active_ratio is not None else None,
                     )
                     try:
-                        press_key_command(event.command)
+                        injection = press_key_command(event.command, telemetry=telemetry)
                     except Exception as e:
-                        telemetry.emit("keyboard_command.failed", command=event.command, error_type=type(e).__name__)
-                        print(f"handsfree.command.failed command={event.command} error={e}", file=sys.stderr)
+                        if is_scroll_command(event.command):
+                            print(f"handsfree.command.failed command={event.command} error={e}", file=sys.stderr)
+                        else:
+                            telemetry.emit("keyboard_command.failed", command=event.command, error_type=type(e).__name__)
+                            print(f"handsfree.command.failed command={event.command} error={e}", file=sys.stderr)
                     else:
-                        telemetry.emit("keyboard_command.injected", command=event.command, outcome="pressed")
-                        print(f"handsfree.command.detected command={event.command} key={label}")
+                        if injection.action == "scroll":
+                            print(
+                                "handsfree.command.detected "
+                                f"command={event.command} scroll={injection.direction} "
+                                f"pixels={injection.pixel_amount}"
+                            )
+                        else:
+                            telemetry.emit("keyboard_command.injected", command=event.command, outcome="pressed")
+                            print(f"handsfree.command.detected command={event.command} key={label}")
                 return
 
             if event.kind == "wake.detected":

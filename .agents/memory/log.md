@@ -84,3 +84,4 @@
 
 ## 2026-06-09
 - Updated hands-free and telemetry memory after changing Send Chunk delivery to buffer successful chunk text in memory and paste once on final stop/end/timeout.
+- Updated hands-free and telemetry memory after adding idle-only voice scroll command slots and bounded scroll injection telemetry.

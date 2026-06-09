@@ -57,3 +57,4 @@
 ## 2026-06-09
 - Send Chunk delivery now defers clipboard copy and Cmd+V paste until the final non-chunk stop/end/timeout completes the session. Hotkey-only, hands-free voice, and hands-free manual Send Chunk all share the same in-memory delivery batch.
 - Intermediate chunks still transcribe through the existing FIFO queue and print to stdout as copy-friendly transcript blocks, but successful chunk text is appended in memory with the existing blank-line suffix. Empty or failed chunks are skipped; the final job flushes any successful prior chunk text.
+- Added idle-only `scroll-up` and `scroll-down` command slots to the same default-on command pipeline as existing key commands. Guided enrollment, manual import, reference checks, `commands.ini`, and calibration now include both slots; `scroll-up` reveals older terminal output and `scroll-down` moves toward newer output by emitting native macOS pixel scroll wheel events of about half the main display height.
