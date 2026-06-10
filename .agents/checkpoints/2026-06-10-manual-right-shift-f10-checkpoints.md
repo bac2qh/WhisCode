@@ -29,7 +29,7 @@ Status: implementation validated; closeout pending
 
 ## Commits
 
-- Pending.
+- `74bf2b6` - Implement Right Shift and F10 manual controls.
 
 ## Implementation Summary
 
