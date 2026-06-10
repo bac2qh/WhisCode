@@ -1,8 +1,8 @@
 # Manual Right Shift/F10 Recording Controls Checkpoints
 
-Plan: `.agents/plans/2026-06-10-manual-right-shift-f10.md`
+Plan: `.agents/plans/archive/2026-06-10-manual-right-shift-f10.md`
 Branch/worktree: `manual-right-shift-f10` at `.agents/worktrees/manual-right-shift-f10`
-Status: implementation validated; closeout pending
+Status: complete
 
 ## 2026-06-10 Initial Scope
 
@@ -45,3 +45,10 @@ Status: implementation validated; closeout pending
 - Verdict: APPROVE.
 - Findings: none.
 - Validation assertions: VC-001 passed, VC-002 passed, VC-003 passed, VC-004 passed, VC-005 passed, VC-006 passed, VC-007 passed.
+
+## Closeout
+
+- Local `main` fast-forwarded to `65c78a0`; no merge commit was created.
+- Removed task worktree `.agents/worktrees/manual-right-shift-f10`.
+- Deleted local task branch `manual-right-shift-f10`.
+- Archived plan to `.agents/plans/archive/2026-06-10-manual-right-shift-f10.md`.

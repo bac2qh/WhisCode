@@ -1,3 +1,19 @@
+# Closeout Note
+
+Final status: complete
+Related checkpoint: `.agents/checkpoints/2026-06-10-manual-right-shift-f10-checkpoints.md`
+Implementation commits: `74bf2b6` (implementation), `65c78a0` (checkpoint bookkeeping)
+Merge commit: none; local `main` was fast-forwarded to `65c78a0`
+Verification performed:
+- `uv run python -m py_compile whiscode/main.py tests/test_main_cli.py`
+- `uv run --with pytest python -m pytest tests/test_main_cli.py`
+- `uv run --with pytest python -m pytest tests/test_handsfree.py tests/test_transcription_queue.py`
+- `uv run --with pytest python -m pytest` (294 passed)
+- `git diff --check`
+- Validator Workflow with `mission_validator`: APPROVE, no findings, VC-001 through VC-007 passed
+Worktree/branch cleanup: removed `.agents/worktrees/manual-right-shift-f10`; deleted local branch `manual-right-shift-f10`
+Shipped summary: Right Shift is now the primary manual start/Send Chunk key, F10 is the default final end/finalize key, Right Option + Right Shift is no longer a distinct shortcut, hands-free fallback mirrors the same manual controls, and macOS function-key suppression prevents F10 escape text from leaking after WhisCode receives the key.
+
 # Manual Right Shift/F10 Recording Controls
 
 Date: 2026-06-10
