@@ -86,3 +86,7 @@
 - Updated hands-free and telemetry memory after changing Send Chunk delivery to buffer successful chunk text in memory and paste once on final stop/end/timeout.
 - Updated hands-free and telemetry memory after adding idle-only voice scroll command slots and bounded scroll injection telemetry.
 - Updated hands-free memory after adding the `whiscode-enroll --record --record-missing` guided top-up path for wake, end, and enabled command reference sets.
+
+## 2026-06-10
+- Updated hands-free and telemetry memory after changing manual controls to Right Shift start/chunk plus F10 end/finalize and retiring Right Option + Right Shift as a distinct shortcut.
+- Updated current-state wiki for the Right Shift/F10 manual model, hands-free fallback behavior, and bounded ignored-end telemetry.

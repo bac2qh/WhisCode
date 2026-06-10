@@ -59,3 +59,9 @@
 - Intermediate chunks still transcribe through the existing FIFO queue and print to stdout as copy-friendly transcript blocks, but successful chunk text is appended in memory with the existing blank-line suffix. Empty or failed chunks are skipped; the final job flushes any successful prior chunk text.
 - Added idle-only `scroll-up` and `scroll-down` command slots to the same default-on command pipeline as existing key commands. Guided enrollment, manual import, reference checks, `commands.ini`, and calibration now include both slots; `scroll-up` reveals older terminal output and `scroll-down` moves toward newer output by emitting native macOS pixel scroll wheel events of about half the main display height.
 - Added `whiscode-enroll --record --record-missing` as the guided top-up path for incomplete hands-free references. It checks wake, end, and enabled command folders, skips sets with at least the requested sample count, records only the missing count, and chooses unused numbered filenames so existing WAVs are not overwritten.
+
+## 2026-06-10
+- Manual hotkey control now uses Right Shift as the primary action and F10 as the final end action by default. `--hotkey` still defaults to `shift_r`, but Right Shift now starts from idle/transcribing and sends a chunk while recording; `--end-hotkey` defaults to `f10` and finalizes the active batch.
+- Right Option + Right Shift is no longer a distinct Send Chunk shortcut. Send Chunk while recording is the primary key behavior and reuses the existing deferred delivery batch with the blank-line chunk suffix.
+- Hands-free manual fallback mirrors the same model: Right Shift starts or sends a chunk, F10 ends/finalizes, and voice wake/end/wake-as-chunk detection remains unchanged.
+- The configured function-key end hotkey is suppressed through `pynput`'s macOS `darwin_intercept` path so F10 does not leak terminal escape text into focused apps after WhisCode receives the key.

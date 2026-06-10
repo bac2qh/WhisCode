@@ -25,3 +25,7 @@
 - Deferred Send Chunk delivery emits bounded `transcription.delivery_buffered`, `transcription.delivery_skipped`, `transcription.delivery_flushed`, `transcription.delivery_empty`, and `transcription.delivery_abandoned` events. Payloads use local job/batch IDs, queue depth, chunk counts, skipped counts, text character counts, and small outcome/reason enums only.
 - Deferred delivery telemetry intentionally excludes transcript text, typed text, prompts, hotwords, raw audio, provider payloads, secrets, credentials, full paths, and raw user content.
 - Voice scroll command injection emits bounded `scroll_command.injected` and `scroll_command.failed` events with command name, older/newer direction, pixel amount, outcome, and error type on failure. It intentionally excludes transcripts, spoken phrase text, raw audio, prompts, provider payloads, typed text, secrets, credentials, app/window names, and raw user content.
+
+## 2026-06-10
+- Manual F10/end-hotkey presses outside active recording emit bounded `recording.end_ignored` telemetry with mode/source, small reason enum, state, and queue depth only.
+- The Right Shift primary action and F10 end action continue to use existing bounded Send Chunk and deferred delivery events; no raw audio, transcript text, prompts, hotwords, provider payloads, typed text, secrets, credentials, or raw user content are added to telemetry.

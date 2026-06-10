@@ -109,37 +109,109 @@ class State(Enum):
     TRANSCRIBING = "transcribing"
 
 
-HOTKEY_TOGGLE_EVENT = "toggle"
+HOTKEY_PRIMARY_EVENT = "primary"
+HOTKEY_END_EVENT = "end"
 HOTKEY_TIMEOUT_EVENT = "timeout"
-HOTKEY_SEND_CHUNK_EVENT = "send_chunk"
 SEND_CHUNK_TEXT_SUFFIX = "\n\n"
 
 
-class HotkeyChordRouter:
-    def __init__(
-        self,
-        toggle_key,
-        *,
-        send_chunk_modifier=keyboard.Key.alt_r,
-        send_chunk_key=keyboard.Key.shift_r,
-    ):
-        self.toggle_key = toggle_key
-        self.send_chunk_modifier = send_chunk_modifier
-        self.send_chunk_key = send_chunk_key
+class ManualHotkeyAction(Enum):
+    START_RECORDING = "start_recording"
+    SEND_CHUNK = "send_chunk"
+    END_RECORDING = "end_recording"
+    IGNORE_END = "ignore_end"
+    IGNORE_TIMEOUT = "ignore_timeout"
+    IGNORE = "ignore"
+
+
+class HotkeyRouter:
+    def __init__(self, primary_key, end_key):
+        self.primary_key = primary_key
+        self.end_key = end_key
         self._pressed = set()
 
     def press(self, key) -> str | None:
         if key in self._pressed:
             return None
         self._pressed.add(key)
-        if key == self.send_chunk_key and self.send_chunk_modifier in self._pressed:
-            return HOTKEY_SEND_CHUNK_EVENT
-        if key == self.toggle_key:
-            return HOTKEY_TOGGLE_EVENT
+        if key == self.primary_key:
+            return HOTKEY_PRIMARY_EVENT
+        if key == self.end_key:
+            return HOTKEY_END_EVENT
         return None
 
     def release(self, key) -> None:
         self._pressed.discard(key)
+
+
+def manual_hotkey_action(state: State, event: str) -> ManualHotkeyAction:
+    if event == HOTKEY_PRIMARY_EVENT:
+        if state == State.RECORDING:
+            return ManualHotkeyAction.SEND_CHUNK
+        if state in {State.IDLE, State.TRANSCRIBING}:
+            return ManualHotkeyAction.START_RECORDING
+        return ManualHotkeyAction.IGNORE
+    if event == HOTKEY_END_EVENT:
+        if state == State.RECORDING:
+            return ManualHotkeyAction.END_RECORDING
+        return ManualHotkeyAction.IGNORE_END
+    if event == HOTKEY_TIMEOUT_EVENT:
+        if state == State.RECORDING:
+            return ManualHotkeyAction.END_RECORDING
+        return ManualHotkeyAction.IGNORE_TIMEOUT
+    return ManualHotkeyAction.IGNORE
+
+
+def _normalize_hotkey_name(name: str) -> str:
+    return str(name).strip().lower()
+
+
+def _keyboard_key_from_name(name: str):
+    return getattr(keyboard.Key, _normalize_hotkey_name(name), None)
+
+
+def _function_key_vk(key) -> int | None:
+    key_name = getattr(key, "name", "")
+    if not key_name.startswith("f") or not key_name[1:].isdigit():
+        return None
+    value = getattr(key, "value", None)
+    vk = getattr(value, "vk", None)
+    return int(vk) if vk is not None else None
+
+
+def _darwin_intercept_for_suppressed_keys(*keys, keycode_reader=None):
+    suppressed_vks = {
+        vk
+        for key in keys
+        if (vk := _function_key_vk(key)) is not None
+    }
+    if not suppressed_vks:
+        return None
+
+    if keycode_reader is None:
+        try:
+            from Quartz import CGEventGetIntegerValueField, kCGKeyboardEventKeycode
+        except Exception:
+            return None
+
+        def keycode_reader(event):
+            return CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
+
+    def intercept(_event_type, event):
+        try:
+            vk = int(keycode_reader(event))
+        except Exception:
+            return event
+        return None if vk in suppressed_vks else event
+
+    return intercept
+
+
+def _manual_controls_summary(primary_hotkey: str, end_hotkey: str) -> str:
+    return (
+        f"Press {primary_hotkey} to start recording or Send Chunk while recording. "
+        f"Press {end_hotkey} to end/finalize."
+    )
 
 
 def _format_transcript_for_stdout(text: str) -> str:
@@ -286,7 +358,16 @@ def _skip_deferred_transcription_text(
 def parse_args(argv: list[str] | None = None):
     raw_argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description="WhisCode: Voice-to-keyboard for code dictation")
-    parser.add_argument("--hotkey", default="shift_r", help="Toggle key for recording (default: shift_r)")
+    parser.add_argument(
+        "--hotkey",
+        default="shift_r",
+        help="Primary manual key: start recording, or Send Chunk while recording (default: shift_r)",
+    )
+    parser.add_argument(
+        "--end-hotkey",
+        default="f10",
+        help="Manual key to end/finalize the current recording batch (default: f10)",
+    )
     parser.add_argument("--asr-backend", choices=("mlx-whisper", "mlx-vibevoice", "llama-cpp", "crispasr"), default="mlx-whisper", help="ASR backend to use (default: mlx-whisper; use mlx-vibevoice for VibeVoice; crispasr is legacy)")
     parser.add_argument("--model", default="mlx-community/whisper-large-v3-mlx", help="Whisper model to use")
     parser.add_argument("--language", default="auto", help="Language code, e.g. en, zh, ja, de (default: auto). Use 'auto' to detect from audio.")
@@ -294,7 +375,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--hotwords-file", default=None, help="Path to hotwords config file (default: ~/.config/whiscode/hotwords.txt)")
     parser.add_argument("--refine", action="store_true", help="Polish transcription with a local Ollama LLM (prose mode)")
     parser.add_argument("--refine-model", default="qwen3.5:4b", help="Ollama model for refinement (default: qwen3.5:4b)")
-    parser.add_argument("--hands-free", action="store_true", help="Use local keyword detection instead of Right Shift as the primary trigger")
+    parser.add_argument("--hands-free", action="store_true", help="Use local keyword detection instead of manual hotkeys as the primary trigger")
     parser.add_argument("--hands-free-wake-dir", type=Path, default=DEFAULT_WAKE_DIR, help=f"Wake phrase reference WAV folder (default: {DEFAULT_WAKE_DIR})")
     parser.add_argument("--hands-free-end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End phrase reference WAV folder (default: {DEFAULT_END_DIR})")
     parser.add_argument("--hands-free-command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command phrase reference root folder (default: {DEFAULT_COMMAND_DIR})")
@@ -366,6 +447,14 @@ def parse_args(argv: list[str] | None = None):
         parser.error("--hands-free-tail-seconds must be non-negative")
     if args.hands_free_tail_extra_seconds < 0:
         parser.error("--hands-free-tail-extra-seconds must be non-negative")
+    args.hotkey = _normalize_hotkey_name(args.hotkey)
+    args.end_hotkey = _normalize_hotkey_name(args.end_hotkey)
+    if _keyboard_key_from_name(args.hotkey) is None:
+        parser.error(f"Unknown hotkey '{args.hotkey}'. Use keys like shift_r, f10, ctrl, alt, etc.")
+    if _keyboard_key_from_name(args.end_hotkey) is None:
+        parser.error(f"Unknown end hotkey '{args.end_hotkey}'. Use keys like f10, shift_r, ctrl, alt, etc.")
+    if args.hotkey == args.end_hotkey:
+        parser.error("--hotkey and --end-hotkey must be different")
     args.external_extensions = parse_external_extensions(os.environ.get("WHISCODE_EXTERNAL_EXTENSIONS"))
     if args.external_poll_seconds <= 0:
         parser.error("--external-poll-seconds must be greater than 0")
@@ -626,10 +715,19 @@ def main():
         print(f"Error: {e}.", file=sys.stderr)
         sys.exit(1)
 
-    hotkey = getattr(keyboard.Key, args.hotkey, None)
+    hotkey = _keyboard_key_from_name(args.hotkey)
     if hotkey is None:
         telemetry.emit("app.failed", reason="unknown_hotkey")
         print(f"Error: Unknown hotkey '{args.hotkey}'. Use keys like shift_r, f10, ctrl, alt, etc.")
+        sys.exit(1)
+    end_hotkey = _keyboard_key_from_name(args.end_hotkey)
+    if end_hotkey is None:
+        telemetry.emit("app.failed", reason="unknown_end_hotkey")
+        print(f"Error: Unknown end hotkey '{args.end_hotkey}'. Use keys like f10, shift_r, ctrl, alt, etc.")
+        sys.exit(1)
+    if hotkey == end_hotkey:
+        telemetry.emit("app.failed", reason="manual_hotkey_conflict")
+        print("Error: --hotkey and --end-hotkey must be different.", file=sys.stderr)
         sys.exit(1)
 
     active_slots = ()
@@ -682,7 +780,7 @@ def main():
                 progress_callback=progress_callback,
             )
 
-        print(f"Model loaded. Press {args.hotkey} to start/stop recording.")
+        print(f"Model loaded. {_manual_controls_summary(args.hotkey, args.end_hotkey)}")
     elif args.asr_backend == "mlx-vibevoice":
         config = MlxVibeVoiceConfig(
             model=args.mlx_vibevoice_model,
@@ -718,7 +816,7 @@ def main():
                 progress_callback=progress_callback,
             )
 
-        print(f"MLX VibeVoice ready ({asr_backend.model_label}). Press {args.hotkey} to start/stop recording.")
+        print(f"MLX VibeVoice ready ({asr_backend.model_label}). {_manual_controls_summary(args.hotkey, args.end_hotkey)}")
     elif args.asr_backend == "llama-cpp":
         config = LlamaCppServerConfig(
             server_bin=args.llama_server_bin.expanduser(),
@@ -746,7 +844,7 @@ def main():
                 progress_callback=progress_callback,
             )
 
-        print(f"llama.cpp ASR ready at {args.llama_host}:{args.llama_port}. Press {args.hotkey} to start/stop recording.")
+        print(f"llama.cpp ASR ready at {args.llama_host}:{args.llama_port}. {_manual_controls_summary(args.hotkey, args.end_hotkey)}")
     elif args.asr_backend == "crispasr":
         print("Warning: --asr-backend crispasr is legacy; prefer --asr-backend mlx-vibevoice for local VibeVoice ASR.")
         config = CrispAsrServerConfig(
@@ -777,7 +875,7 @@ def main():
                 progress_callback=progress_callback,
             )
 
-        print(f"CrispASR ready at {args.crispasr_host}:{args.crispasr_port}. Press {args.hotkey} to start/stop recording.")
+        print(f"CrispASR ready at {args.crispasr_host}:{args.crispasr_port}. {_manual_controls_summary(args.hotkey, args.end_hotkey)}")
     else:
         print(f"Error: Unknown ASR backend '{args.asr_backend}'.", file=sys.stderr)
         sys.exit(1)
@@ -832,7 +930,7 @@ def main():
     DEBOUNCE_SECONDS = 0.3
     LOOP_WINDOW_SECONDS = 30.0
     LOOP_EVENT_COUNT = 3
-    hotkey_router = HotkeyChordRouter(hotkey)
+    hotkey_router = HotkeyRouter(hotkey, end_hotkey)
 
     def transition_to(new_state, source, **properties):
         nonlocal state
@@ -995,6 +1093,16 @@ def main():
             new_job_id=new_job_id,
             queue_depth=transcription_jobs.queue_depth_for_telemetry(),
             delivery_batch_id=active_delivery_batch_id,
+        )
+
+    def emit_manual_end_ignored(mode: str, source: str, reason: str = "not_recording") -> None:
+        telemetry.emit(
+            "recording.end_ignored",
+            mode=mode,
+            source=source,
+            reason=reason,
+            state=state.value,
+            queue_depth=transcription_jobs.queue_depth_for_telemetry(),
         )
 
     def record_handsfree_cycle(reason: str, duration_seconds: float) -> None:
@@ -1262,17 +1370,17 @@ def main():
                 continue
 
             with state_lock:
-                if event == HOTKEY_TIMEOUT_EVENT and state != State.RECORDING:
+                action = manual_hotkey_action(state, event)
+
+                if action == ManualHotkeyAction.IGNORE_TIMEOUT:
                     telemetry.emit("recording.timeout_ignored", reason=state.value)
                     continue
 
-                if state in {State.IDLE, State.TRANSCRIBING}:
-                    if event == HOTKEY_TIMEOUT_EVENT:
-                        continue
-                    if event == HOTKEY_SEND_CHUNK_EVENT:
-                        emit_send_chunk_requested("hotkey", "hotkey")
-                        emit_send_chunk_rejected("hotkey", "hotkey", "not_recording")
-                        continue
+                if action == ManualHotkeyAction.IGNORE_END:
+                    emit_manual_end_ignored("hotkey", "hotkey")
+                    continue
+
+                if action == ManualHotkeyAction.START_RECORDING:
                     reservation = reserve_recording("hotkey")
                     if reservation is None:
                         continue
@@ -1281,12 +1389,12 @@ def main():
                     show_recording_status(reservation.job_id)
                     print("Recording...")
 
-                elif state == State.RECORDING:
+                elif action in {ManualHotkeyAction.SEND_CHUNK, ManualHotkeyAction.END_RECORDING}:
                     job_id = transcription_jobs.reserved_job_id()
                     if job_id is None:
                         telemetry.emit("recording.stop_ignored", reason="missing_reservation")
                         continue
-                    if event == HOTKEY_SEND_CHUNK_EVENT:
+                    if action == ManualHotkeyAction.SEND_CHUNK:
                         emit_send_chunk_requested("hotkey", "hotkey", job_id=job_id)
                         delivery_batch_id = ensure_delivery_batch()
                         transition_to(State.TRANSCRIBING, "send_chunk_hotkey")
@@ -1325,7 +1433,10 @@ def main():
                         print("Recording...")
                         continue
 
-                    transition_to(State.TRANSCRIBING, "recording_timeout" if event == HOTKEY_TIMEOUT_EVENT else "hotkey")
+                    transition_to(
+                        State.TRANSCRIBING,
+                        "recording_timeout" if event == HOTKEY_TIMEOUT_EVENT else "manual_end_hotkey",
+                    )
                     audio = recorder.stop()
                     audio_seconds = len(audio) / SAMPLE_RATE
                     notify_recording_stopped()
@@ -1349,10 +1460,10 @@ def main():
             try:
                 event = hotkey_queue.get(timeout=0.05)
                 handled = True
-                if event == HOTKEY_SEND_CHUNK_EVENT:
-                    handle_handsfree_send_chunk()
-                elif event == HOTKEY_TOGGLE_EVENT:
-                    handle_handsfree_hotkey()
+                if event == HOTKEY_PRIMARY_EVENT:
+                    handle_handsfree_primary()
+                elif event == HOTKEY_END_EVENT:
+                    handle_handsfree_end()
             except queue.Empty:
                 pass
 
@@ -1412,10 +1523,11 @@ def main():
         emit_send_chunk_queued(mode, source, job)
         return job
 
-    def handle_handsfree_hotkey():
+    def handle_handsfree_primary():
         nonlocal state
         with state_lock:
-            if state in {State.IDLE, State.TRANSCRIBING}:
+            action = manual_hotkey_action(state, HOTKEY_PRIMARY_EVENT)
+            if action == ManualHotkeyAction.START_RECORDING:
                 reservation = reserve_recording("manual_handsfree_hotkey")
                 if reservation is None:
                     return
@@ -1424,13 +1536,23 @@ def main():
                 show_recording_status(reservation.job_id)
                 print("Recording... (manual)")
 
-            elif state == State.RECORDING:
+            elif action == ManualHotkeyAction.SEND_CHUNK:
+                handle_handsfree_send_chunk_locked()
+
+    def handle_handsfree_end():
+        nonlocal state
+        with state_lock:
+            action = manual_hotkey_action(state, HOTKEY_END_EVENT)
+            if action == ManualHotkeyAction.IGNORE_END:
+                emit_manual_end_ignored("handsfree_hotkey", "manual_handsfree_end_hotkey")
+                return
+            if action == ManualHotkeyAction.END_RECORDING:
                 job_id = transcription_jobs.reserved_job_id()
                 if job_id is None:
                     telemetry.emit("recording.stop_ignored", reason="missing_reservation")
                     return
                 event = handsfree_session.manual_stop()
-                transition_to(State.TRANSCRIBING, "manual_handsfree_hotkey", audio_seconds=round(event.duration_seconds, 3))
+                transition_to(State.TRANSCRIBING, "manual_handsfree_end_hotkey", audio_seconds=round(event.duration_seconds, 3))
                 notify_recording_stopped()
                 delivery_batch_id = active_delivery_batch_id
                 is_delivery_final = delivery_batch_id is not None
@@ -1445,30 +1567,29 @@ def main():
                 if is_delivery_final:
                     clear_delivery_batch(delivery_batch_id)
 
-    def handle_handsfree_send_chunk():
+    def handle_handsfree_send_chunk_locked():
         nonlocal state
-        with state_lock:
-            if state != State.RECORDING:
-                emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey")
-                emit_send_chunk_rejected("handsfree_hotkey", "manual_handsfree_hotkey", "not_recording")
-                return
-            job_id = transcription_jobs.reserved_job_id()
-            if job_id is None:
-                emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey")
-                telemetry.emit("recording.stop_ignored", reason="missing_reservation")
-                emit_send_chunk_rejected("handsfree_hotkey", "manual_handsfree_hotkey", "missing_reservation")
-                return
-            emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey", job_id=job_id)
-            event = handsfree_session.manual_stop()
-            job = handle_completed_send_chunk_audio(
-                mode="handsfree_hotkey",
-                source="manual_handsfree_hotkey",
-                job_id=job_id,
-                audio=event.audio,
-                audio_seconds=event.duration_seconds,
-            )
-            if job is not None:
-                restart_handsfree_recording("handsfree_hotkey", "manual_handsfree_hotkey", job.job_id)
+        if state != State.RECORDING:
+            emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey")
+            emit_send_chunk_rejected("handsfree_hotkey", "manual_handsfree_hotkey", "not_recording")
+            return
+        job_id = transcription_jobs.reserved_job_id()
+        if job_id is None:
+            emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey")
+            telemetry.emit("recording.stop_ignored", reason="missing_reservation")
+            emit_send_chunk_rejected("handsfree_hotkey", "manual_handsfree_hotkey", "missing_reservation")
+            return
+        emit_send_chunk_requested("handsfree_hotkey", "manual_handsfree_hotkey", job_id=job_id)
+        event = handsfree_session.manual_stop()
+        job = handle_completed_send_chunk_audio(
+            mode="handsfree_hotkey",
+            source="manual_handsfree_hotkey",
+            job_id=job_id,
+            audio=event.audio,
+            audio_seconds=event.duration_seconds,
+        )
+        if job is not None:
+            restart_handsfree_recording("handsfree_hotkey", "manual_handsfree_hotkey", job.job_id)
 
     def handle_handsfree_event(event):
         nonlocal state
@@ -1691,12 +1812,20 @@ def main():
             audio_queue_seconds=args.hands_free_audio_queue_seconds,
         )
         handsfree_loop.start()
-        print("Hands-free mode enabled. Right Shift remains available as a fallback.")
+        print(
+            "Hands-free mode enabled. "
+            f"{args.hotkey} is the manual start/Send Chunk fallback; "
+            f"{args.end_hotkey} is the manual end/finalize fallback."
+        )
         threading.Thread(target=handsfree_worker, daemon=True).start()
     else:
         threading.Thread(target=hotkey_worker, daemon=True).start()
 
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    listener_kwargs = {}
+    darwin_intercept = _darwin_intercept_for_suppressed_keys(end_hotkey)
+    if darwin_intercept is not None:
+        listener_kwargs["darwin_intercept"] = darwin_intercept
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release, **listener_kwargs)
     listener.start()
 
     try:
