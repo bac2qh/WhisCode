@@ -63,7 +63,7 @@ Validation contract:
 - VC-005 important: passed. Current-state docs no longer claim F10 or manual Send Chunk chord support.
 
 Immediate next step:
-- Commit the task branch, record the implementation commit hash, then close out by merging back to local `main` under the repo mutex if available.
+- Commit checkpoint bookkeeping, then close out by merging back to local `main` under the repo mutex if available.
 
 Implementation commits:
-- Pending.
+- `c94dae7` Restore Right Shift recording toggle.
