@@ -26,6 +26,7 @@ Worktree: `.agents/worktrees/hotwords-runbook`
 - Edited `~/.config/whiscode/hotwords.txt`:
   - removed `long-autonomous-run skill`
   - added standalone `runbook`
+- Committed initial task bookkeeping: `63b8e0d` (`Record runbook hotword update`).
 
 ## Verification
 
@@ -35,4 +36,4 @@ Worktree: `.agents/worktrees/hotwords-runbook`
 
 ## Next Step
 
-- Commit task bookkeeping, then close out the task branch into local `main`.
+- Commit checkpoint commit-hash update, then close out the task branch into local `main`.
