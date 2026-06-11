@@ -1,7 +1,16 @@
+> Closeout: 2026-06-11
+> Status: complete
+> Related checkpoint: `.agents/checkpoints/2026-06-11-hotwords-runbook-checkpoints.md`
+> Implementation commits: `63b8e0d`, `2d34a8e`
+> Merge: fast-forward into local `main` at `2d34a8e`; no merge commit
+> Verification: live hotwords targeted search returned only `9:runbook`; task worktree was otherwise clean
+> Worktree/branch cleanup: removed `.agents/worktrees/hotwords-runbook`; deleted `task/hotwords-runbook`
+> Shipped summary: removed the retired `long-autonomous-run skill` live hotword and added standalone `runbook`
+
 # Hotwords Runbook Update
 
 Date: 2026-06-11
-Status: active
+Status: complete
 Checkpoint: `.agents/checkpoints/2026-06-11-hotwords-runbook-checkpoints.md`
 
 ## Summary

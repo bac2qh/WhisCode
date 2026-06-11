@@ -37,3 +37,9 @@ Worktree: `.agents/worktrees/hotwords-runbook`
 ## Next Step
 
 - Commit checkpoint commit-hash update, then close out the task branch into local `main`.
+
+## Closeout
+- Fast-forward merged into local `main` at `2d34a8e`; no merge commit was created.
+- Archived plan to `.agents/plans/archive/2026-06-11-hotwords-runbook.md`.
+- Removed task worktree `.agents/worktrees/hotwords-runbook` and deleted branch `task/hotwords-runbook`.
+- Final verification remains VC-001 passed, VC-002 passed, VC-003 passed.
