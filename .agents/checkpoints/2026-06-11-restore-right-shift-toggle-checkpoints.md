@@ -95,4 +95,4 @@ Implementation commits:
 - `21fdbc9` Record Right Shift toggle validation.
 
 Closeout commit:
-- Pending.
+- `9656105` Archive Right Shift toggle plan.
