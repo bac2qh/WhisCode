@@ -1,9 +1,18 @@
 # Restore Right Shift Toggle Controls
 
+Closeout note, 2026-06-11:
+- Final status: complete.
+- Related checkpoint: `.agents/checkpoints/2026-06-11-restore-right-shift-toggle-checkpoints.md`.
+- Implementation commits: `c94dae7` Restore Right Shift recording toggle; `21fdbc9` Record Right Shift toggle validation.
+- Merge result: fast-forwarded local `main` to `21fdbc9`; no merge commit.
+- Verification performed: focused `uv run --with pytest python -m pytest tests/test_main_cli.py` passed with 52 tests; full `uv run --with pytest python -m pytest` passed with 290 tests; `git diff --check` passed; stale-reference searches confirmed current-state docs no longer advertise F10 or manual Send Chunk chord support; independent validator `019eb4e4-f0b3-7763-8bd2-3ede670dccc8` approved all validation contract assertions.
+- Worktree/branch cleanup: removed `.agents/worktrees/restore-right-shift-toggle`; deleted local branch `restore-right-shift-toggle`.
+- Shipped summary: restored Right Shift as the single manual start/stop toggle, removed `--end-hotkey`/F10 routing and suppression, ignored Right Option + Right Shift, preserved hands-free wake-as-chunk delivery, and updated tests/docs/wiki/memory.
+
 Date: 2026-06-11
 Branch: `restore-right-shift-toggle`
 Worktree: `.agents/worktrees/restore-right-shift-toggle`
-Status: active
+Status: archived
 
 ## Objective
 

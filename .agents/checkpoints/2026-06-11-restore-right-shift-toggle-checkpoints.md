@@ -1,6 +1,6 @@
 # Restore Right Shift Toggle Controls Checkpoints
 
-Plan: `.agents/plans/2026-06-11-restore-right-shift-toggle.md`
+Plan: `.agents/plans/archive/2026-06-11-restore-right-shift-toggle.md`
 Branch: `restore-right-shift-toggle`
 Worktree: `.agents/worktrees/restore-right-shift-toggle`
 
@@ -67,3 +67,32 @@ Immediate next step:
 
 Implementation commits:
 - `c94dae7` Restore Right Shift recording toggle.
+
+## 2026-06-11 Closeout Checkpoint
+
+Status: complete and archived on local `main`
+
+Done:
+- Fast-forward merged `restore-right-shift-toggle` into local `main` at `21fdbc9`.
+- Removed task worktree `.agents/worktrees/restore-right-shift-toggle`.
+- Deleted local branch `restore-right-shift-toggle`.
+- Added the closeout note to the plan and moved it to `.agents/plans/archive/2026-06-11-restore-right-shift-toggle.md`.
+
+Decisions:
+- No merge commit was created because `main` fast-forwarded cleanly.
+- No archive index update was needed; this project's visible plan archive is file-based and no separate index file was present.
+
+Verification:
+- Closeout bookkeeping occurred while the repo main-branch mutex was held.
+- Post-merge verification from the task branch remains the validation record:
+  - `uv run --with pytest python -m pytest tests/test_main_cli.py`: 52 passed.
+  - `uv run --with pytest python -m pytest`: 290 passed.
+  - `git diff --check`: passed.
+  - Independent validator: `APPROVE`.
+
+Implementation commits:
+- `c94dae7` Restore Right Shift recording toggle.
+- `21fdbc9` Record Right Shift toggle validation.
+
+Closeout commit:
+- Pending.
