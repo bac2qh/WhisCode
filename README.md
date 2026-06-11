@@ -40,7 +40,7 @@ This is not a change to the CLI defaults. `uv` runs WhisCode in the project-mana
 
 Say your wake phrase to start recording. While recording, say the wake phrase again to Send Chunk: WhisCode queues the current chunk into an in-memory delivery batch, transcribes and prints it as soon as it finishes, and immediately starts the next recording. Use Send Chunk for long messages because smaller chunks transcribe sooner, the queue keeps moving, and the pause gives you a moment to breathe, recollect details, and organize the next thought.
 
-Say your end phrase to finish the message. **Right Shift** remains available as the manual start/Send Chunk fallback, and **F10** remains available as the manual end/finalize fallback. WhisCode copies and pastes the full Send Chunk batch at your cursor once the final recording finishes transcribing.
+Say your end phrase to finish the message. **Right Shift** remains available as the manual start/stop fallback. WhisCode copies and pastes the full Send Chunk batch at your cursor once the final recording finishes transcribing.
 
 ### Hotkey flow
 
@@ -48,9 +48,9 @@ Say your end phrase to finish the message. **Right Shift** remains available as 
 uv run whiscode
 ```
 
-Press **Right Shift** to start recording, then press **F10** to end and transcribe. The transcribed text is typed at your cursor position. If a prior recording is still transcribing, WhisCode queues the new recording and keeps transcriptions typed in order.
+Press **Right Shift** to start recording, then press **Right Shift** again to stop and transcribe. The transcribed text is typed at your cursor position. If a prior recording is still transcribing, WhisCode queues the new recording and keeps transcriptions typed in order.
 
-Press **Right Shift** while recording to Send Chunk: WhisCode stops the current recording, queues it into an in-memory delivery batch with a blank line after the transcript, and immediately starts the next recording. The full batch is copied and pasted once you press **F10** to end/finalize the final recording. The older **Right Option** + **Right Shift** chord is no longer a separate shortcut.
+Manual hotkeys do not Send Chunk. The older **Right Option** + **Right Shift** chord is ignored.
 
 For the v2 hands-free flow, start with:
 
@@ -62,8 +62,7 @@ uv run whiscode --hands-free
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--hotkey HOTKEY` | `shift_r` | Primary manual key: start recording, or Send Chunk while recording |
-| `--end-hotkey HOTKEY` | `f10` | Manual key to end/finalize the current recording batch |
+| `--hotkey HOTKEY` | `shift_r` | Manual recording toggle key: start recording, then stop/finalize while recording |
 | `--asr-backend BACKEND` | `mlx-whisper` | ASR backend: `mlx-whisper`, optional `mlx-vibevoice`, optional `llama-cpp`, or legacy `crispasr` |
 | `--language LANG` | `auto` | Language code (e.g. `en`, `zh`, `ja`) or `auto` to detect from audio |
 | `--prompt TEXT` | — | Additional context to improve transcription accuracy |
@@ -315,7 +314,7 @@ uv run whiscode-enroll scroll-down scrolldown1.m4a scrolldown2.m4a scrolldown3.m
 
 Hands-free mode also supports ten trained command slots while not actively recording: `page-up`, `page-down`, `enter`, `shift-enter`, `shift-tab`, `tab`, `arrow-up`, `arrow-down`, `scroll-up`, and `scroll-down`. The spoken phrase is whatever you record for that slot. WhisCode maps the key slots to the physical Page Up, Page Down, Enter, Shift+Enter, Shift+Tab, Tab, Arrow Up, or Arrow Down key action. `scroll-up` emits a native macOS pixel scroll wheel action that reveals older terminal output above the current view, and `scroll-down` emits the inverse action toward newer output. Each scroll command moves about half of the main display height. Command detection is disabled while recording so dictated speech cannot inject keys or scrolls, but it can run while earlier recordings are queued or transcribing.
 
-The wake phrase also acts as Send Chunk while actively recording. When detected during a recording, WhisCode trims the spoken wake phrase tail using the active span inferred from the wake references plus `--hands-free-tail-extra-seconds`, queues the chunk into an in-memory delivery batch with a blank line after it, and immediately starts a new recording. Intermediate chunks are transcribed and printed to stdout as they finish, but they are not copied to the clipboard or pasted into the focused app until the final end phrase, F10/manual end, or timeout completes the batch.
+The wake phrase also acts as Send Chunk while actively recording. When detected during a recording, WhisCode trims the spoken wake phrase tail using the active span inferred from the wake references plus `--hands-free-tail-extra-seconds`, queues the chunk into an in-memory delivery batch with a blank line after it, and immediately starts a new recording. Intermediate chunks are transcribed and printed to stdout as they finish, but they are not copied to the clipboard or pasted into the focused app until the final end phrase, manual Right Shift stop, or timeout completes the batch.
 
 You can selectively enable command slots with `~/.config/whiscode/commands.ini`:
 
@@ -343,9 +342,9 @@ uv run whiscode-calibrate
 
 The report compares wake samples against wake samples, end samples against end samples, command samples against their own command sets, cross-command samples, wake samples against end samples, and recent telemetry trigger distances. Use it to choose threshold changes after observing live runs rather than guessing from one false positive.
 
-Right Shift remains available as the manual start/Send Chunk fallback while hands-free mode is running, and F10 ends/finalizes the current batch.
+Right Shift remains available as the manual start/stop fallback while hands-free mode is running.
 
-When the end phrase stops a recording, WhisCode discards the inferred or explicit end-word tail plus an extra detection-lag buffer before queueing audio for transcription. The extra buffer defaults to `1.0` second through `--hands-free-tail-extra-seconds`; set it to `0` to restore the previous base-only end-tail trim. F10/manual ends and timeout stops still keep the pending tail.
+When the end phrase stops a recording, WhisCode discards the inferred or explicit end-word tail plus an extra detection-lag buffer before queueing audio for transcription. The extra buffer defaults to `1.0` second through `--hands-free-tail-extra-seconds`; set it to `0` to restore the previous base-only end-tail trim. Manual Right Shift stops and timeout stops still keep the pending tail.
 
 WhisCode ignores partial detector windows and quiet windows before calling the keyword matcher. This prevents silence and microphone background noise from triggering wake/end phrases. Wake detection also requires two consecutive matching windows by default, which prevents a single noisy match from starting a recording. If your wake phrase is very quiet, lower `--hands-free-min-rms` or `--hands-free-min-active-ratio`, raise `--hands-free-threshold` slightly, or set `--hands-free-wake-confirmations 1`; if your end phrase is not detected, raise `--hands-free-end-threshold` slightly.
 
@@ -355,7 +354,7 @@ WhisCode writes local JSONL telemetry by default to:
 ~/Library/Logs/WhisCode/events.jsonl
 ```
 
-Use it to inspect app startup, selected ASR backend, recording durations, queue depth, Send Chunk request/queue/restart outcomes, deferred delivery buffer/flush outcomes, transcription outcomes, backend failures, wake/end/wake-as-chunk/command detections, detector distances, key-command and scroll-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. Scroll injection telemetry includes only bounded command metadata such as command name, older/newer direction, pixel amount, outcome, and error type. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
+Use it to inspect app startup, selected ASR backend, recording durations, queue depth, hands-free Send Chunk request/queue/restart outcomes, deferred delivery buffer/flush outcomes, transcription outcomes, backend failures, wake/end/wake-as-chunk/command detections, detector distances, key-command and scroll-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. Scroll injection telemetry includes only bounded command metadata such as command name, older/newer direction, pixel amount, outcome, and error type. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
 
 `handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. WhisCode keeps microphone capture lightweight and uses a bounded detector queue to reduce this. If detector processing still falls behind, `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` show how much queued audio was dropped and how long detection took. These diagnostics do not include raw audio or transcript text.
 
@@ -378,8 +377,8 @@ uv run whiscode --refine --refine-model llama3.2:3b
 ## Examples
 
 ```bash
-# Use different manual hotkeys
-uv run whiscode --hotkey f9 --end-hotkey f10
+# Use a different manual toggle key
+uv run whiscode --hotkey f9
 
 # Transcribe in Chinese
 uv run whiscode --language zh

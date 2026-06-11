@@ -90,3 +90,7 @@
 ## 2026-06-10
 - Updated hands-free and telemetry memory after changing manual controls to Right Shift start/chunk plus F10 end/finalize and retiring Right Option + Right Shift as a distinct shortcut.
 - Updated current-state wiki for the Right Shift/F10 manual model, hands-free fallback behavior, and bounded ignored-end telemetry.
+
+## 2026-06-11
+- Updated hands-free and telemetry memory after restoring the single-key manual toggle: Right Shift starts/stops, `--end-hotkey`/F10 are no longer current controls, and Right Option + Right Shift is ignored.
+- Updated current-state wiki and README to keep Send Chunk documented as hands-free wake-phrase behavior only.

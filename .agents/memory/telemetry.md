@@ -27,5 +27,9 @@
 - Voice scroll command injection emits bounded `scroll_command.injected` and `scroll_command.failed` events with command name, older/newer direction, pixel amount, outcome, and error type on failure. It intentionally excludes transcripts, spoken phrase text, raw audio, prompts, provider payloads, typed text, secrets, credentials, app/window names, and raw user content.
 
 ## 2026-06-10
-- Manual F10/end-hotkey presses outside active recording emit bounded `recording.end_ignored` telemetry with mode/source, small reason enum, state, and queue depth only.
-- The Right Shift primary action and F10 end action continue to use existing bounded Send Chunk and deferred delivery events; no raw audio, transcript text, prompts, hotwords, provider payloads, typed text, secrets, credentials, or raw user content are added to telemetry.
+- Superseded on 2026-06-11: manual F10/end-hotkey presses outside active recording briefly emitted bounded `recording.end_ignored` telemetry with mode/source, small reason enum, state, and queue depth only.
+- Superseded on 2026-06-11: the Right Shift primary action and F10 end action briefly used existing bounded Send Chunk and deferred delivery events.
+
+## 2026-06-11
+- Manual hotkey control is again a single toggle. It uses existing recording and transcription queue telemetry; no manual end-hotkey, ignored-end, or manual Send Chunk telemetry path remains current.
+- Hands-free wake-as-chunk Send Chunk telemetry remains bounded and unchanged, and deferred delivery telemetry still excludes raw audio, transcript text, prompts, hotwords, provider payloads, typed text, secrets, credentials, full paths, and raw user content.

@@ -64,3 +64,7 @@
 ## 2026-06-10
 - Documented the manual Right Shift/F10 control model: Right Shift starts or sends a chunk, F10 ends/finalizes, and Right Option + Right Shift is no longer a distinct shortcut.
 - Documented bounded ignored-end telemetry and the matching hands-free fallback behavior.
+
+## 2026-06-11
+- Restored the current-state docs to the single-key manual toggle model: Right Shift starts, Right Shift stops/finalizes, `--end-hotkey`/F10 are no longer documented controls, and Right Option + Right Shift is ignored.
+- Clarified that Send Chunk remains hands-free wake-phrase behavior only, with deferred delivery still flushing on end phrase, manual Right Shift stop, or timeout.

@@ -7,14 +7,12 @@ from pynput.keyboard import Key
 from whiscode.deferred_delivery import DeferredTranscriptBuffer
 from whiscode.handsfree import HandsFreeTailResolution, command_reference_dirs
 from whiscode.main import (
-    HOTKEY_END_EVENT,
-    HOTKEY_PRIMARY_EVENT,
+    HOTKEY_TOGGLE_EVENT,
     SEND_CHUNK_TEXT_SUFFIX,
     HotkeyRouter,
     ManualHotkeyAction,
     State,
     _apply_transcription_text_suffix,
-    _darwin_intercept_for_suppressed_keys,
     _default_whisper_processor_source,
     _deliver_processed_transcription_text,
     _emit_hands_free_chunk_tail_resolution,
@@ -30,7 +28,7 @@ from whiscode.main import (
     validate_external_intake_args,
 )
 from whiscode.telemetry import telemetry_from_args
-from whiscode.transcription_queue import TranscriptionJob, TranscriptionJobQueue
+from whiscode.transcription_queue import TranscriptionJob
 
 
 WhisperModel = type("Model", (), {"__module__": "mlx_audio.stt.models.whisper.whisper"})
@@ -251,77 +249,41 @@ def test_marked_final_job_flushes_restart_unavailable_chunk():
     assert typed == ["first\n\n"]
 
 
-def test_hotkey_router_ignores_right_option_as_distinct_chord():
-    router = HotkeyRouter(Key.shift_r, Key.f10)
+def test_hotkey_router_ignores_right_option_right_shift_combo():
+    router = HotkeyRouter(Key.shift_r)
 
     assert router.press(Key.alt_r) is None
-    assert router.press(Key.shift_r) == HOTKEY_PRIMARY_EVENT
+    assert router.press(Key.shift_r) is None
     assert router.press(Key.shift_r) is None
     router.release(Key.shift_r)
     router.release(Key.alt_r)
+    assert router.press(Key.shift_r) == HOTKEY_TOGGLE_EVENT
 
 
-def test_hotkey_router_routes_primary_and_end_keys_with_held_key_debounce():
-    router = HotkeyRouter(Key.shift_r, Key.f10)
+def test_hotkey_router_routes_toggle_key_with_held_key_debounce():
+    router = HotkeyRouter(Key.shift_r)
 
-    assert router.press(Key.shift_r) == HOTKEY_PRIMARY_EVENT
+    assert router.press(Key.shift_r) == HOTKEY_TOGGLE_EVENT
     assert router.press(Key.shift_r) is None
     router.release(Key.shift_r)
-    assert router.press(Key.shift_r) == HOTKEY_PRIMARY_EVENT
+    assert router.press(Key.shift_r) == HOTKEY_TOGGLE_EVENT
     router.release(Key.shift_r)
-    assert router.press(Key.f10) == HOTKEY_END_EVENT
     assert router.press(Key.f10) is None
     router.release(Key.f10)
 
 
-def test_manual_hotkey_action_maps_primary_to_start_or_chunk():
-    assert manual_hotkey_action(State.IDLE, HOTKEY_PRIMARY_EVENT) == ManualHotkeyAction.START_RECORDING
-    assert manual_hotkey_action(State.TRANSCRIBING, HOTKEY_PRIMARY_EVENT) == ManualHotkeyAction.START_RECORDING
-    assert manual_hotkey_action(State.RECORDING, HOTKEY_PRIMARY_EVENT) == ManualHotkeyAction.SEND_CHUNK
+def test_manual_hotkey_action_maps_toggle_to_start_or_stop():
+    assert manual_hotkey_action(State.IDLE, HOTKEY_TOGGLE_EVENT) == ManualHotkeyAction.START_RECORDING
+    assert manual_hotkey_action(State.TRANSCRIBING, HOTKEY_TOGGLE_EVENT) == ManualHotkeyAction.START_RECORDING
+    assert manual_hotkey_action(State.RECORDING, HOTKEY_TOGGLE_EVENT) == ManualHotkeyAction.STOP_RECORDING
 
 
-def test_manual_hotkey_action_maps_end_to_finalize_only_while_recording():
-    assert manual_hotkey_action(State.RECORDING, HOTKEY_END_EVENT) == ManualHotkeyAction.END_RECORDING
-    assert manual_hotkey_action(State.IDLE, HOTKEY_END_EVENT) == ManualHotkeyAction.IGNORE_END
-    assert manual_hotkey_action(State.TRANSCRIBING, HOTKEY_END_EVENT) == ManualHotkeyAction.IGNORE_END
+def test_handsfree_manual_fallback_uses_toggle_for_start_and_finalize():
+    assert manual_hotkey_action(State.IDLE, HOTKEY_TOGGLE_EVENT) == ManualHotkeyAction.START_RECORDING
+    assert manual_hotkey_action(State.RECORDING, HOTKEY_TOGGLE_EVENT) == ManualHotkeyAction.STOP_RECORDING
 
 
-def test_handsfree_manual_fallback_uses_primary_for_start_or_chunk_and_end_for_finalize():
-    assert manual_hotkey_action(State.IDLE, HOTKEY_PRIMARY_EVENT) == ManualHotkeyAction.START_RECORDING
-    assert manual_hotkey_action(State.RECORDING, HOTKEY_PRIMARY_EVENT) == ManualHotkeyAction.SEND_CHUNK
-    assert manual_hotkey_action(State.RECORDING, HOTKEY_END_EVENT) == ManualHotkeyAction.END_RECORDING
-
-
-def test_primary_send_chunk_sequence_defers_and_restarts_reservation():
-    jobs = TranscriptionJobQueue(capacity=5)
-    reservation = jobs.try_reserve_recording(source="hotkey")
-
-    assert reservation is not None
-    assert manual_hotkey_action(State.RECORDING, HOTKEY_PRIMARY_EVENT) == ManualHotkeyAction.SEND_CHUNK
-    chunk_job = jobs.finish_recording(
-        audio=np.array([0.1, 0.2], dtype=np.float32),
-        audio_seconds=0.2,
-        job_id=reservation.job_id,
-        text_suffix=SEND_CHUNK_TEXT_SUFFIX,
-        delivery_batch_id="delivery-1",
-        defer_text=True,
-    )
-    restart = jobs.try_reserve_recording(
-        source="hotkey",
-        delivery_batch_id="delivery-1",
-        defer_text=True,
-    )
-
-    assert chunk_job is not None
-    assert chunk_job.text_suffix == SEND_CHUNK_TEXT_SUFFIX
-    assert chunk_job.delivery_batch_id == "delivery-1"
-    assert chunk_job.defer_text is True
-    assert restart is not None
-    assert restart.delivery_batch_id == "delivery-1"
-    assert restart.defer_text is True
-
-
-def test_end_hotkey_final_job_flushes_deferred_send_chunk_batch():
+def test_final_job_flushes_deferred_send_chunk_batch():
     typed = []
     telemetry = FakeTelemetry()
     deferred_delivery = DeferredTranscriptBuffer()
@@ -353,18 +315,9 @@ def test_end_hotkey_final_job_flushes_deferred_send_chunk_batch():
         type_text_fn=typed.append,
     )
 
-    assert manual_hotkey_action(State.RECORDING, HOTKEY_END_EVENT) == ManualHotkeyAction.END_RECORDING
+    assert manual_hotkey_action(State.RECORDING, HOTKEY_TOGGLE_EVENT) == ManualHotkeyAction.STOP_RECORDING
     assert outcome == "flushed"
     assert typed == ["first\n\nsecond"]
-
-
-def test_darwin_intercept_suppresses_function_end_key_only():
-    intercept = _darwin_intercept_for_suppressed_keys(Key.f10, keycode_reader=lambda event: event)
-
-    assert intercept is not None
-    assert intercept("down", Key.f10.value.vk) is None
-    assert intercept("down", Key.f9.value.vk) == Key.f9.value.vk
-    assert _darwin_intercept_for_suppressed_keys(Key.shift_r, keycode_reader=lambda event: event) is None
 
 
 def test_parse_args_defaults_to_hotkey_mode():
@@ -372,7 +325,6 @@ def test_parse_args_defaults_to_hotkey_mode():
 
     assert args.hands_free is False
     assert args.hotkey == "shift_r"
-    assert args.end_hotkey == "f10"
     assert args.asr_backend == "mlx-whisper"
     assert args.hands_free_threshold == 0.055
     assert args.hands_free_end_threshold == 0.055
@@ -403,17 +355,15 @@ def test_parse_args_defaults_to_hotkey_mode():
 
 
 def test_parse_args_manual_hotkey_options():
-    args = parse_args(["--hotkey", "f9", "--end-hotkey", "f10"])
+    args = parse_args(["--hotkey", "f9"])
 
     assert args.hotkey == "f9"
-    assert args.end_hotkey == "f10"
 
 
 @pytest.mark.parametrize(
     "argv",
     [
         ["--hotkey", "not-a-key"],
-        ["--end-hotkey", "not-a-key"],
     ],
 )
 def test_parse_args_rejects_unknown_manual_hotkeys(argv):
@@ -421,9 +371,9 @@ def test_parse_args_rejects_unknown_manual_hotkeys(argv):
         parse_args(argv)
 
 
-def test_parse_args_rejects_manual_hotkey_conflict():
+def test_parse_args_rejects_removed_end_hotkey():
     with pytest.raises(SystemExit):
-        parse_args(["--hotkey", "f10", "--end-hotkey", "f10"])
+        parse_args(["--end-hotkey", "f10"])
 
 
 def test_runtime_telemetry_is_enabled_by_default_for_hotkey_mode():
@@ -454,7 +404,7 @@ def test_help_marks_crispasr_as_legacy(capsys):
     assert "crispasr is legacy" in output
 
 
-def test_help_describes_manual_primary_and_end_hotkeys(capsys):
+def test_help_describes_manual_toggle_hotkey(capsys):
     try:
         parse_args(["--help"])
     except SystemExit as e:
@@ -462,9 +412,9 @@ def test_help_describes_manual_primary_and_end_hotkeys(capsys):
 
     output = capsys.readouterr().out
     assert "--hotkey" in output
-    assert "--end-hotkey" in output
-    assert "Send Chunk" in output
-    assert "end/finalize" in output
+    assert "--end-hotkey" not in output
+    assert "Send Chunk" not in output
+    assert "stop/finalize" in output
 
 
 def test_help_describes_hands_free_tail_auto_inference(capsys):

@@ -61,7 +61,13 @@
 - Added `whiscode-enroll --record --record-missing` as the guided top-up path for incomplete hands-free references. It checks wake, end, and enabled command folders, skips sets with at least the requested sample count, records only the missing count, and chooses unused numbered filenames so existing WAVs are not overwritten.
 
 ## 2026-06-10
-- Manual hotkey control now uses Right Shift as the primary action and F10 as the final end action by default. `--hotkey` still defaults to `shift_r`, but Right Shift now starts from idle/transcribing and sends a chunk while recording; `--end-hotkey` defaults to `f10` and finalizes the active batch.
-- Right Option + Right Shift is no longer a distinct Send Chunk shortcut. Send Chunk while recording is the primary key behavior and reuses the existing deferred delivery batch with the blank-line chunk suffix.
-- Hands-free manual fallback mirrors the same model: Right Shift starts or sends a chunk, F10 ends/finalizes, and voice wake/end/wake-as-chunk detection remains unchanged.
-- The configured function-key end hotkey is suppressed through `pynput`'s macOS `darwin_intercept` path so F10 does not leak terminal escape text into focused apps after WhisCode receives the key.
+- Superseded on 2026-06-11: manual hotkey control briefly used Right Shift as a primary action and F10 as a final end action by default, with Right Shift sending a chunk while recording and `--end-hotkey` defaulting to `f10`.
+- Superseded on 2026-06-11: Right Option + Right Shift had already stopped being a distinct shortcut during the brief Right Shift/F10 model.
+- Superseded on 2026-06-11: hands-free manual fallback briefly mirrored the Right Shift/F10 model, while voice wake/end/wake-as-chunk detection remained unchanged.
+- Superseded on 2026-06-11: the configured function-key end hotkey was briefly suppressed through `pynput`'s macOS `darwin_intercept` path.
+
+## 2026-06-11
+- Manual hotkey control is restored to the single-key toggle model. `--hotkey` defaults to `shift_r`; Right Shift starts from idle/transcribing and Right Shift stops/finalizes while recording.
+- `--end-hotkey` is removed. F10 has no default manual end/finalize role and no special macOS suppression.
+- Right Option + Right Shift is ignored entirely. Manual hotkeys do not request Send Chunk or restart recording.
+- Hands-free wake-as-chunk detection remains unchanged. Deferred Send Chunk delivery still flushes on the final end phrase, manual Right Shift stop, or timeout.
