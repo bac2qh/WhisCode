@@ -112,6 +112,9 @@ class State(Enum):
 HOTKEY_TOGGLE_EVENT = "toggle"
 HOTKEY_TIMEOUT_EVENT = "timeout"
 SEND_CHUNK_TEXT_SUFFIX = "\n\n"
+EXTERNAL_START_DEFERRED_EVENT = "external.start_deferred"
+EXTERNAL_START_BLOCK_LOCAL_DELIVERY_BATCH = "local_delivery_batch"
+EXTERNAL_START_BLOCK_LOCAL_WORK = "local_work"
 
 
 class ManualHotkeyAction(Enum):
@@ -152,6 +155,38 @@ def manual_hotkey_action(state: State, event: str) -> ManualHotkeyAction:
             return ManualHotkeyAction.STOP_RECORDING
         return ManualHotkeyAction.IGNORE_TIMEOUT
     return ManualHotkeyAction.IGNORE
+
+
+def _external_start_block_reason(
+    transcription_jobs: TranscriptionJobQueue,
+    *,
+    active_delivery_batch_id: str | None,
+) -> str | None:
+    if active_delivery_batch_id is not None:
+        return EXTERNAL_START_BLOCK_LOCAL_DELIVERY_BATCH
+    if not transcription_jobs.is_idle():
+        return EXTERNAL_START_BLOCK_LOCAL_WORK
+    return None
+
+
+def _emit_external_start_deferred_if_changed(
+    telemetry,
+    *,
+    reason: str | None,
+    previous_reason: str | None,
+    external_queue_depth: int,
+    local_queue_depth: int,
+) -> str | None:
+    if reason is None:
+        return None
+    if reason != previous_reason:
+        telemetry.emit(
+            EXTERNAL_START_DEFERRED_EVENT,
+            reason=reason,
+            external_queue_depth=external_queue_depth,
+            local_queue_depth=local_queue_depth,
+        )
+    return reason
 
 
 def _normalize_hotkey_name(name: str) -> str:
@@ -1268,18 +1303,45 @@ def main():
     def external_worker():
         if external_queue is None:
             return
+        last_deferred_reason: str | None = None
         while not shutdown_event.is_set():
-            if not transcription_jobs.is_idle():
+            block_reason = _external_start_block_reason(
+                transcription_jobs,
+                active_delivery_batch_id=active_delivery_batch_id,
+            )
+            if block_reason is not None:
+                external_queue_depth = external_queue.pending_depth()
+                if external_queue_depth > 0:
+                    last_deferred_reason = _emit_external_start_deferred_if_changed(
+                        telemetry,
+                        reason=block_reason,
+                        previous_reason=last_deferred_reason,
+                        external_queue_depth=external_queue_depth,
+                        local_queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+                    )
                 shutdown_event.wait(0.2)
                 continue
+            last_deferred_reason = None
             job = external_queue.get(timeout=0.2)
             if job is None:
                 continue
             try:
-                if not transcription_jobs.is_idle():
+                block_reason = _external_start_block_reason(
+                    transcription_jobs,
+                    active_delivery_batch_id=active_delivery_batch_id,
+                )
+                if block_reason is not None:
                     external_queue.requeue(job)
+                    last_deferred_reason = _emit_external_start_deferred_if_changed(
+                        telemetry,
+                        reason=block_reason,
+                        previous_reason=last_deferred_reason,
+                        external_queue_depth=external_queue.pending_depth(),
+                        local_queue_depth=transcription_jobs.queue_depth_for_telemetry(),
+                    )
                     shutdown_event.wait(0.2)
                     continue
+                last_deferred_reason = None
                 process_external_file(job)
             finally:
                 external_queue.complete()

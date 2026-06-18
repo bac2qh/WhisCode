@@ -16,3 +16,7 @@
 ## 2026-05-27 Repo-Local 1Password Env Pointer File
 - The repo standardizes SMB launch configuration on a local ignored `.env.1password.whiscode-smb` file, copied from tracked `.env.1password.whiscode-smb.example`.
 - The env file is a 1Password pointer file for `op run --env-file`: credential values should be `op://...` references, not plaintext secrets, and should not be placed in `~/.zshrc`.
+
+## 2026-06-18 External Start Gate
+- External NAS transcription jobs now wait while a local Send Chunk delivery batch is open, even if the local transcription queue is otherwise idle. The external queue remains separate and still starts work only after local reserved, queued, active, and open-batch work clears.
+- The worker rechecks the gate after popping an external job and requeues the job if local work or an open delivery batch appears before external transcription starts.

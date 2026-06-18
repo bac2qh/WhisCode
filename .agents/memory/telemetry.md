@@ -33,3 +33,6 @@
 ## 2026-06-11
 - Manual hotkey control is again a single toggle. It uses existing recording and transcription queue telemetry; no manual end-hotkey, ignored-end, or manual Send Chunk telemetry path remains current.
 - Hands-free wake-as-chunk Send Chunk telemetry remains bounded and unchanged, and deferred delivery telemetry still excludes raw audio, transcript text, prompts, hotwords, provider payloads, typed text, secrets, credentials, full paths, and raw user content.
+
+## 2026-06-18
+- External start deferral now emits bounded `external.start_deferred` only when pending external work is blocked and the block reason changes. Payload fields are limited to `reason`, `external_queue_depth`, and `local_queue_depth`; it excludes transcript text, raw audio, prompts, provider payloads, credentials, and file paths.

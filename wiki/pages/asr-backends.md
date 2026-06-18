@@ -49,7 +49,7 @@ External audio is decoded through MLX-Audio audio I/O, normalized to mono 16 kHz
 
 Outbox files are named `source-stem-<short-id>.txt` and `source-stem-<short-id>.json`. SMB sidecars are written to temporary remote files and published with SMB replace/rename. The JSON contains status, source basename, source size/mtime, duration, backend, model label, file id, transcript on success, or bounded error type/message on failure. Transcript text is intentionally present in outbox files because that is the external delivery channel; routine telemetry still excludes transcript text, credentials, and full file paths or URLs.
 
-Manual dictation has priority over external files. External jobs start only while no local recording is reserved, queued, or actively transcribing. If a manual recording arrives while an external VibeVoice job is already using the primary in-process engine, WhisCode starts one rescue VibeVoice engine for manual work. When the external job completes, WhisCode retires the old external engine and promotes the rescue engine as primary. This caps the process at two in-process VibeVoice engines.
+Manual dictation has priority over external files. External jobs start only while no local Send Chunk delivery batch is open and no local recording is reserved, queued, or actively transcribing. If a manual recording arrives while an external VibeVoice job is already using the primary in-process engine, WhisCode starts one rescue VibeVoice engine for manual work. When the external job completes, WhisCode retires the old external engine and promotes the rescue engine as primary. This caps the process at two in-process VibeVoice engines.
 
 ## Optional llama.cpp Backend
 

@@ -7,6 +7,9 @@ from pynput.keyboard import Key
 from whiscode.deferred_delivery import DeferredTranscriptBuffer
 from whiscode.handsfree import HandsFreeTailResolution, command_reference_dirs
 from whiscode.main import (
+    EXTERNAL_START_BLOCK_LOCAL_DELIVERY_BATCH,
+    EXTERNAL_START_BLOCK_LOCAL_WORK,
+    EXTERNAL_START_DEFERRED_EVENT,
     HOTKEY_TOGGLE_EVENT,
     SEND_CHUNK_TEXT_SUFFIX,
     HotkeyRouter,
@@ -15,6 +18,8 @@ from whiscode.main import (
     _apply_transcription_text_suffix,
     _default_whisper_processor_source,
     _deliver_processed_transcription_text,
+    _emit_external_start_deferred_if_changed,
+    _external_start_block_reason,
     _emit_hands_free_chunk_tail_resolution,
     _emit_hands_free_tail_resolution,
     _format_transcript_for_stdout,
@@ -28,7 +33,7 @@ from whiscode.main import (
     validate_external_intake_args,
 )
 from whiscode.telemetry import telemetry_from_args
-from whiscode.transcription_queue import TranscriptionJob
+from whiscode.transcription_queue import TranscriptionJob, TranscriptionJobQueue
 
 
 WhisperModel = type("Model", (), {"__module__": "mlx_audio.stt.models.whisper.whisper"})
@@ -318,6 +323,108 @@ def test_final_job_flushes_deferred_send_chunk_batch():
     assert manual_hotkey_action(State.RECORDING, HOTKEY_TOGGLE_EVENT) == ManualHotkeyAction.STOP_RECORDING
     assert outcome == "flushed"
     assert typed == ["first\n\nsecond"]
+
+
+def test_external_start_gate_blocks_open_delivery_batch_with_idle_local_queue():
+    transcription_jobs = TranscriptionJobQueue()
+
+    assert (
+        _external_start_block_reason(
+            transcription_jobs,
+            active_delivery_batch_id="delivery-1",
+        )
+        == EXTERNAL_START_BLOCK_LOCAL_DELIVERY_BATCH
+    )
+
+
+def test_external_start_gate_blocks_reserved_queued_or_active_local_work():
+    reserved_jobs = TranscriptionJobQueue()
+    assert reserved_jobs.try_reserve_recording(source="hotkey") is not None
+
+    queued_jobs = TranscriptionJobQueue()
+    reservation = queued_jobs.try_reserve_recording(source="hotkey")
+    assert reservation is not None
+    assert queued_jobs.finish_recording(
+        audio=np.array([0.1], dtype=np.float32),
+        audio_seconds=0.5,
+        job_id=reservation.job_id,
+    ) is not None
+
+    active_jobs = TranscriptionJobQueue()
+    reservation = active_jobs.try_reserve_recording(source="hotkey")
+    assert reservation is not None
+    active_job = active_jobs.finish_recording(
+        audio=np.array([0.1], dtype=np.float32),
+        audio_seconds=0.5,
+        job_id=reservation.job_id,
+    )
+    assert active_job is not None
+    assert active_jobs.get(timeout=0.01) == active_job
+
+    for transcription_jobs in (reserved_jobs, queued_jobs, active_jobs):
+        assert (
+            _external_start_block_reason(
+                transcription_jobs,
+                active_delivery_batch_id=None,
+            )
+            == EXTERNAL_START_BLOCK_LOCAL_WORK
+        )
+
+    active_jobs.complete_active(active_job.job_id)
+
+
+def test_external_start_gate_allows_idle_without_delivery_batch():
+    transcription_jobs = TranscriptionJobQueue()
+
+    assert _external_start_block_reason(transcription_jobs, active_delivery_batch_id=None) is None
+
+
+def test_external_start_deferred_telemetry_is_bounded_and_emitted_on_reason_change():
+    telemetry = FakeTelemetry()
+    previous_reason = None
+
+    previous_reason = _emit_external_start_deferred_if_changed(
+        telemetry,
+        reason=EXTERNAL_START_BLOCK_LOCAL_DELIVERY_BATCH,
+        previous_reason=previous_reason,
+        external_queue_depth=2,
+        local_queue_depth=0,
+    )
+    previous_reason = _emit_external_start_deferred_if_changed(
+        telemetry,
+        reason=EXTERNAL_START_BLOCK_LOCAL_DELIVERY_BATCH,
+        previous_reason=previous_reason,
+        external_queue_depth=3,
+        local_queue_depth=1,
+    )
+    previous_reason = _emit_external_start_deferred_if_changed(
+        telemetry,
+        reason=EXTERNAL_START_BLOCK_LOCAL_WORK,
+        previous_reason=previous_reason,
+        external_queue_depth=3,
+        local_queue_depth=1,
+    )
+
+    assert previous_reason == EXTERNAL_START_BLOCK_LOCAL_WORK
+    assert telemetry.events == [
+        (
+            EXTERNAL_START_DEFERRED_EVENT,
+            {
+                "reason": EXTERNAL_START_BLOCK_LOCAL_DELIVERY_BATCH,
+                "external_queue_depth": 2,
+                "local_queue_depth": 0,
+            },
+        ),
+        (
+            EXTERNAL_START_DEFERRED_EVENT,
+            {
+                "reason": EXTERNAL_START_BLOCK_LOCAL_WORK,
+                "external_queue_depth": 3,
+                "local_queue_depth": 1,
+            },
+        ),
+    ]
+    assert set(telemetry.events[0][1]) == {"reason", "external_queue_depth", "local_queue_depth"}
 
 
 def test_parse_args_defaults_to_hotkey_mode():
