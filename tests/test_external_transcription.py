@@ -20,6 +20,7 @@ from whiscode.external_transcription import (
     build_external_storage,
     default_external_outbox,
     default_smb_outbox,
+    discover_ccab_short_transcription_targets,
     external_file_id,
     load_external_audio,
     normalize_audio,
@@ -145,6 +146,87 @@ def test_watcher_skips_file_when_matching_result_exists(tmp_path):
 
     assert watcher.scan_once(now=1.0) == []
     assert external_queue.pending_depth() == 0
+
+
+def test_discover_ccab_short_transcription_targets_builds_per_user_short_lanes(tmp_path):
+    root = tmp_path / "ccab-root"
+    (root / "alice" / "workspace").mkdir(parents=True)
+    (root / "bob" / "workspace").mkdir(parents=True)
+    (root / ".hidden" / "workspace").mkdir(parents=True)
+    (root / "not-a-workspace").mkdir()
+
+    targets = discover_ccab_short_transcription_targets(
+        root,
+        extensions=(".ogg", ".opus"),
+        poll_seconds=0.5,
+        stable_seconds=1.0,
+    )
+
+    assert [target.target_id for target in targets] == ["ccab-short-1", "ccab-short-2"]
+    storages = [target.config.storage for target in targets]
+    assert [storage.inbox for storage in storages] == [
+        root / "alice" / "workspace" / "transcription" / "short" / "inbox",
+        root / "bob" / "workspace" / "transcription" / "short" / "inbox",
+    ]
+    assert [storage.outbox for storage in storages] == [
+        root / "alice" / "workspace" / "transcription" / "short" / "outbox",
+        root / "bob" / "workspace" / "transcription" / "short" / "outbox",
+    ]
+    assert all(target.config.extensions == (".ogg", ".opus") for target in targets)
+    assert all(target.config.poll_seconds == 0.5 for target in targets)
+    assert all(target.config.stable_seconds == 1.0 for target in targets)
+
+
+def test_ccab_short_targets_queue_and_process_serially_with_one_warm_engine(tmp_path):
+    root = tmp_path / "ccab-root"
+    alice_inbox = root / "alice" / "workspace" / "transcription" / "short" / "inbox"
+    bob_inbox = root / "bob" / "workspace" / "transcription" / "short" / "inbox"
+    alice_inbox.mkdir(parents=True)
+    bob_inbox.mkdir(parents=True)
+    (alice_inbox / "alice-note.ogg").write_text("audio")
+    (bob_inbox / "bob-note.opus").write_text("audio")
+
+    targets = discover_ccab_short_transcription_targets(
+        root,
+        extensions=(".ogg", ".opus"),
+        stable_seconds=0.0,
+    )
+    queue = ExternalFileQueue()
+    for target in targets:
+        watcher = ExternalAudioWatcher(target.config, queue, target_id=target.target_id)
+        watcher.scan_once(now=10.0)
+
+    configs_by_target = {target.target_id: target.config for target in targets}
+    call_order = []
+
+    def transcribe_once(audio):
+        call_order.append(float(audio[0]))
+        return f"transcript {len(call_order)}"
+
+    processed_jobs = []
+    while True:
+        job = queue.get(timeout=0.01)
+        if job is None:
+            break
+        result = process_external_transcription_job(
+            configs_by_target[job.target_id],
+            job,
+            transcribe_audio=transcribe_once,
+            backend="mlx-whisper",
+            model_label="mlx-community/whisper-large-v3-turbo-asr-fp16",
+            audio_loader=lambda location: (np.array([len(call_order) + 1], dtype=np.float32), 0.1),
+        )
+        processed_jobs.append((job, result))
+        queue.complete()
+
+    assert [job.basename for job, _ in processed_jobs] == ["alice-note.ogg", "bob-note.opus"]
+    assert call_order == [1.0, 2.0]
+    for job, result in processed_jobs:
+        assert result.status == "success"
+        assert Path(result.json_location).parent == configs_by_target[job.target_id].storage.outbox
+        payload = json.loads(Path(result.json_location).read_text())
+        assert payload["source_basename"] == job.basename
+        assert payload["backend"] == "mlx-whisper"
 
 
 def test_normalize_audio_converts_stereo_and_resamples():

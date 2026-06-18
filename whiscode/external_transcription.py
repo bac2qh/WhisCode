@@ -18,6 +18,7 @@ from whiscode.recorder import SAMPLE_RATE, _resample
 DEFAULT_EXTERNAL_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg", ".opus", ".m4a", ".aac")
 DEFAULT_EXTERNAL_POLL_SECONDS = 2.0
 DEFAULT_EXTERNAL_STABLE_SECONDS = 5.0
+DEFAULT_EXTERNAL_TARGET_ID = "default"
 _MAX_ERROR_MESSAGE_CHARS = 500
 
 
@@ -90,6 +91,12 @@ class ExternalTranscriptionConfig:
 
 
 @dataclass(frozen=True)
+class ExternalTranscriptionTarget:
+    target_id: str
+    config: ExternalTranscriptionConfig
+
+
+@dataclass(frozen=True)
 class ExternalFileJob:
     location: str
     basename: str
@@ -98,6 +105,7 @@ class ExternalFileJob:
     mtime_ns: int
     file_id: str
     queued_at: float
+    target_id: str = DEFAULT_EXTERNAL_TARGET_ID
 
 
 @dataclass(frozen=True)
@@ -436,10 +444,12 @@ class ExternalAudioWatcher:
         config: ExternalTranscriptionConfig,
         external_queue: ExternalFileQueue,
         *,
+        target_id: str = DEFAULT_EXTERNAL_TARGET_ID,
         telemetry=None,
     ):
         self.config = config
         self.external_queue = external_queue
+        self.target_id = target_id
         self.telemetry = telemetry
         self._observed: dict[str, _ObservedFile] = {}
         self._queued_keys: set[tuple[str, int, int]] = set()
@@ -495,6 +505,7 @@ class ExternalAudioWatcher:
                 mtime_ns=entry.mtime_ns,
                 file_id=file_id,
                 queued_at=time.time(),
+                target_id=self.target_id,
             )
             self.external_queue.put(job)
             self._queued_keys.add(key)
@@ -574,6 +585,47 @@ def build_external_storage(
     inbox_path = Path(inbox_value).expanduser()
     outbox_path = Path(str(outbox)).expanduser() if outbox is not None else default_external_outbox(inbox_path)
     return LocalExternalStorage(inbox=inbox_path, outbox=outbox_path)
+
+
+def discover_ccab_short_transcription_targets(
+    root: str | Path,
+    *,
+    extensions: tuple[str, ...] = DEFAULT_EXTERNAL_EXTENSIONS,
+    poll_seconds: float = DEFAULT_EXTERNAL_POLL_SECONDS,
+    stable_seconds: float = DEFAULT_EXTERNAL_STABLE_SECONDS,
+) -> list[ExternalTranscriptionTarget]:
+    root_path = Path(str(root)).expanduser()
+    if not root_path.exists():
+        raise ExternalConfigError(f"CCAB external root does not exist: {root_path}")
+    if not root_path.is_dir():
+        raise ExternalConfigError(f"CCAB external root is not a directory: {root_path}")
+
+    targets: list[ExternalTranscriptionTarget] = []
+    for user_root in sorted((path for path in root_path.iterdir() if path.is_dir()), key=lambda path: path.name):
+        if user_root.name.startswith("."):
+            continue
+        workspace = user_root / "workspace"
+        if not workspace.is_dir():
+            continue
+        short_root = workspace / "transcription" / "short"
+        targets.append(
+            ExternalTranscriptionTarget(
+                target_id=f"ccab-short-{len(targets) + 1}",
+                config=ExternalTranscriptionConfig(
+                    storage=LocalExternalStorage(
+                        inbox=short_root / "inbox",
+                        outbox=short_root / "outbox",
+                    ),
+                    extensions=extensions,
+                    poll_seconds=poll_seconds,
+                    stable_seconds=stable_seconds,
+                ),
+            )
+        )
+
+    if not targets:
+        raise ExternalConfigError(f"CCAB external root contains no user workspace directories: {root_path}")
+    return targets
 
 
 def is_smb_url(value: str) -> bool:

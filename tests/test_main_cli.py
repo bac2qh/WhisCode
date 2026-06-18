@@ -456,6 +456,8 @@ def test_parse_args_defaults_to_hotkey_mode():
     assert args.mlx_vibevoice_prefill_step_size == 2048
     assert args.external_audio_inbox is None
     assert args.external_transcript_outbox is None
+    assert args.external_ccab_root is None
+    assert args.external_only is False
     assert args.external_poll_seconds == 2.0
     assert args.external_stable_seconds == 5.0
     assert ".ogg" in args.external_extensions
@@ -632,19 +634,25 @@ def test_parse_args_mlx_vibevoice_options():
 def test_parse_args_external_options():
     args = parse_args([
         "--asr-backend",
-        "mlx-vibevoice",
+        "mlx-whisper",
+        "--external-only",
         "--external-audio-inbox",
         "/tmp/inbox",
         "--external-transcript-outbox",
         "/tmp/outbox",
+        "--external-ccab-root",
+        "/tmp/ccab-root",
         "--external-poll-seconds",
         "0.5",
         "--external-stable-seconds",
         "1.25",
     ])
 
+    assert args.asr_backend == "mlx-whisper"
+    assert args.external_only is True
     assert args.external_audio_inbox == "/tmp/inbox"
     assert args.external_transcript_outbox == "/tmp/outbox"
+    assert args.external_ccab_root == "/tmp/ccab-root"
     assert args.external_poll_seconds == 0.5
     assert args.external_stable_seconds == 1.25
 
@@ -676,15 +684,53 @@ def test_parse_args_preserves_smb_urls():
     assert args.external_transcript_outbox is None
 
 
-def test_external_intake_requires_mlx_vibevoice_backend():
-    args = parse_args(["--external-audio-inbox", "/tmp/inbox"])
+def test_external_intake_accepts_mlx_whisper_backend():
+    args = parse_args([
+        "--asr-backend",
+        "mlx-whisper",
+        "--external-audio-inbox",
+        "/tmp/inbox",
+    ])
+
+    validate_external_intake_args(args)
+
+
+def test_external_intake_accepts_mlx_vibevoice_backend():
+    args = parse_args([
+        "--asr-backend",
+        "mlx-vibevoice",
+        "--external-audio-inbox",
+        "/tmp/inbox",
+    ])
+
+    validate_external_intake_args(args)
+
+
+def test_external_intake_rejects_unsupported_backend():
+    args = parse_args([
+        "--asr-backend",
+        "llama-cpp",
+        "--external-audio-inbox",
+        "/tmp/inbox",
+    ])
 
     try:
         validate_external_intake_args(args)
     except ValueError as e:
-        assert "mlx-vibevoice" in str(e)
+        assert "mlx-whisper or mlx-vibevoice" in str(e)
     else:
         raise AssertionError("expected external backend validation to fail")
+
+
+def test_external_only_requires_external_config():
+    args = parse_args(["--external-only"])
+
+    try:
+        validate_external_intake_args(args)
+    except ValueError as e:
+        assert "--external-only requires" in str(e)
+    else:
+        raise AssertionError("expected external-only validation to fail")
 
 
 def test_parse_args_hands_free_options():

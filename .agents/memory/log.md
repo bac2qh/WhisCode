@@ -97,3 +97,4 @@
 
 ## 2026-06-18
 - Updated external transcription queue and telemetry memory after adding the external-start gate for open local Send Chunk delivery batches and bounded `external.start_deferred` diagnostics.
+- Updated external transcription queue memory after adding `mlx-whisper` external intake, `--external-only`, and CCAB short-lane root discovery for one warm process across multiple user inboxes.

@@ -20,3 +20,9 @@
 ## 2026-06-18 External Start Gate
 - External NAS transcription jobs now wait while a local Send Chunk delivery batch is open, even if the local transcription queue is otherwise idle. The external queue remains separate and still starts work only after local reserved, queued, active, and open-batch work clears.
 - The worker rechecks the gate after popping an external job and requeues the job if local work or an open delivery batch appears before external transcription starts.
+
+## 2026-06-18 CCAB Warm Short Lane
+- External intake now supports `mlx-whisper` as well as `mlx-vibevoice`. `mlx-whisper` external jobs reuse the model loaded at WhisCode startup and are processed serially through one warmed backend.
+- `--external-only` runs external watchers without hotkeys, microphone recording, overlays, or keyboard injection; it requires `--external-audio-inbox` or `--external-ccab-root`.
+- `--external-ccab-root ROOT` discovers CCAB short lanes at `<root>/*/workspace/transcription/short/{inbox,outbox}` and starts one watcher per user lane feeding a shared external queue. Result JSON stays in the same user's short outbox.
+- Routine telemetry remains bounded to file IDs, storage scheme, extension, size, backend/model label, durations, status, and queue depth. It must not include transcript text, raw audio, credentials, full paths, prompts, or media bytes.
