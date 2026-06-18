@@ -1,7 +1,16 @@
 # External Transcription Batch Gate
 
+Closeout note, 2026-06-18:
+- Final status: complete, validated, merged to local main, and archived.
+- Related checkpoint: `.agents/checkpoints/2026-06-18-external-batch-gate-checkpoints.md`.
+- Implementation commit: `ddf54ec` Gate external transcription during local delivery batches.
+- Merge result: fast-forwarded local `main` from `cdd307b` to `ddf54ec`; no merge commit.
+- Verification performed: `git diff --check` passed; `uv run --with pytest pytest tests/test_main_cli.py tests/test_transcription_queue.py tests/test_external_transcription.py tests/test_asr_engine_manager.py -q` passed with 77 tests in the main thread; `mission_validator` reran the focused suite successfully and returned `APPROVE` with all validation contract assertions passed.
+- Worktree/branch cleanup: removed `.agents/worktrees/external-batch-gate`; deleted local branch `codex/external-batch-gate`.
+- Shipped summary: external NAS transcription jobs now wait while a local Send Chunk delivery batch is open, still wait for reserved/queued/active local transcription work, requeue if local work appears after dequeue, and emit bounded `external.start_deferred` diagnostics without content or paths.
+
 Date: 2026-06-18
-Status: Active
+Status: archived
 Related checkpoint: `.agents/checkpoints/2026-06-18-external-batch-gate-checkpoints.md`
 
 ## Objective

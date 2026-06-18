@@ -1,10 +1,10 @@
 # External Transcription Batch Gate Checkpoints
 
 Date: 2026-06-18
-Plan: `.agents/plans/2026-06-18-external-batch-gate.md`
+Plan: `.agents/plans/archive/2026-06-18-external-batch-gate.md`
 Branch: `codex/external-batch-gate`
 Worktree: `.agents/worktrees/external-batch-gate`
-Status: In progress
+Status: complete, merged, archived
 
 ## Validation Contract
 - `VC-001` critical, behavior, scrutiny: external jobs do not start while `active_delivery_batch_id` is set. Evidence: focused unit test plus code review of `external_worker()`.
@@ -20,7 +20,7 @@ Status: In progress
 - Main worktree has unrelated local changes (`.gitignore` and two untracked April 26 plan/checkpoint files); task implementation will avoid modifying those.
 
 ## Immediate Next Step
-- Ready for user review. No commit, push, merge, or worktree cleanup was performed because the implementation plan states no push or commit is required unless requested during implementation closeout.
+- None. Closeout completed locally on `main`.
 
 ## Verification
 - `uv run pytest tests/test_main_cli.py tests/test_transcription_queue.py tests/test_external_transcription.py tests/test_asr_engine_manager.py -q` did not run tests because this project does not declare `pytest`; `uv` fell through to a global Homebrew Python and collection failed with missing `pynput`/`whiscode` imports.
@@ -35,7 +35,7 @@ Status: In progress
   - `VC-005`: passed.
 
 ## Commits
-- None yet.
+- `ddf54ec` Gate external transcription during local delivery batches.
 
 ## 2026-06-18 Implementation
 - Added explicit external start gate helpers in `whiscode/main.py`:
@@ -46,3 +46,9 @@ Status: In progress
 - Kept external transcription processing unchanged once started: jobs still call `process_external_file()`, use `asr_backend.transcribe_external()`, and bypass local deferred delivery, typing, postprocess, refinement, and stats.
 - Added focused tests in `tests/test_main_cli.py` for open delivery batch blocking, reserved/queued/active local work blocking, idle allowance, and bounded reason-change telemetry.
 - Updated current-state wiki and project memory for the new external batch gate and telemetry diagnostic.
+
+## 2026-06-18 Closeout
+- Local `main` fast-forwarded to implementation commit `ddf54ec`.
+- Active plan moved to `.agents/plans/archive/2026-06-18-external-batch-gate.md` with closeout note.
+- Removed task worktree `.agents/worktrees/external-batch-gate` and deleted local branch `codex/external-batch-gate`.
+- No push was performed.
