@@ -12,6 +12,8 @@ Status: implemented; pending commit/closeout
 - Created WhisCode task worktree from local `main` at `cdd307b`.
 - Matching CCAB state lives in `/Users/xinding/openclaw/ccab/.agents/worktrees/warm-whiscode-short-lane`.
 - Plan and checkpoint saved before source edits.
+- WhisCode implementation committed as `c6c61e3` (`feat: add CCAB warm short-lane intake`).
+- Matching CCAB implementation committed as `df28959` (`feat: adopt warm WhisCode short transcription`).
 
 ## Validation Status
 
@@ -29,4 +31,4 @@ Status: implemented; pending commit/closeout
 
 ## Immediate Next Step
 
-Commit the WhisCode task branch and coordinate closeout with the matching CCAB branch.
+Coordinate closeout with the matching CCAB branch after the operator preserves or clears dirty changes in the original CCAB main worktree.
