@@ -94,3 +94,6 @@
 ## 2026-06-11
 - Updated hands-free and telemetry memory after restoring the single-key manual toggle: Right Shift starts/stops, `--end-hotkey`/F10 are no longer current controls, and Right Option + Right Shift is ignored.
 - Updated current-state wiki and README to keep Send Chunk documented as hands-free wake-phrase behavior only.
+
+## 2026-06-18
+- Updated external transcription queue memory after adding `mlx-whisper` external intake, `--external-only`, and CCAB short-lane root discovery for one warm process across multiple user inboxes.

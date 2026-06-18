@@ -16,3 +16,9 @@
 ## 2026-05-27 Repo-Local 1Password Env Pointer File
 - The repo standardizes SMB launch configuration on a local ignored `.env.1password.whiscode-smb` file, copied from tracked `.env.1password.whiscode-smb.example`.
 - The env file is a 1Password pointer file for `op run --env-file`: credential values should be `op://...` references, not plaintext secrets, and should not be placed in `~/.zshrc`.
+
+## 2026-06-18 CCAB Warm Short Lane
+- External intake now supports `mlx-whisper` as well as `mlx-vibevoice`. `mlx-whisper` external jobs reuse the model loaded at WhisCode startup and are processed serially through one warmed backend.
+- `--external-only` runs external watchers without hotkeys, microphone recording, overlays, or keyboard injection; it requires `--external-audio-inbox` or `--external-ccab-root`.
+- `--external-ccab-root ROOT` discovers CCAB short lanes at `<root>/*/workspace/transcription/short/{inbox,outbox}` and starts one watcher per user lane feeding a shared external queue. Result JSON stays in the same user's short outbox.
+- Routine telemetry remains bounded to file IDs, storage scheme, extension, size, backend/model label, durations, status, and queue depth. It must not include transcript text, raw audio, credentials, full paths, prompts, or media bytes.

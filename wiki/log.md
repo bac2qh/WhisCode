@@ -68,3 +68,6 @@
 ## 2026-06-11
 - Restored the current-state docs to the single-key manual toggle model: Right Shift starts, Right Shift stops/finalizes, `--end-hotkey`/F10 are no longer documented controls, and Right Option + Right Shift is ignored.
 - Clarified that Send Chunk remains hands-free wake-phrase behavior only, with deferred delivery still flushing on end phrase, manual Right Shift stop, or timeout.
+
+## 2026-06-18
+- Documented external-only `mlx-whisper` intake and CCAB short-lane root discovery for one warm WhisCode process watching multiple CCAB short inboxes.

@@ -39,17 +39,30 @@ Telemetry for this backend is limited to bounded operational status such as mode
 
 ## External NAS Transcription Queue
 
-WhisCode can watch a top-level external audio inbox when running `--asr-backend mlx-vibevoice`. Set `WHISCODE_EXTERNAL_AUDIO_INBOX` or pass `--external-audio-inbox PATH_OR_URL` to enable it. The value can be a local filesystem path or a native SMB URL such as `smb://192.168.4.21/NAS_1/whiscode/inbox`; SMB does not require mounting the share locally. `WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX` or `--external-transcript-outbox PATH_OR_URL` controls result delivery; when omitted, the outbox defaults to a sibling `outbox` folder next to the inbox.
+WhisCode can watch external audio inboxes when running `--asr-backend mlx-whisper` or `--asr-backend mlx-vibevoice`. Set `WHISCODE_EXTERNAL_AUDIO_INBOX` or pass `--external-audio-inbox PATH_OR_URL` to enable a single inbox. The value can be a local filesystem path or a native SMB URL such as `smb://192.168.4.21/NAS_1/whiscode/inbox`; SMB does not require mounting the share locally. `WHISCODE_EXTERNAL_TRANSCRIPT_OUTBOX` or `--external-transcript-outbox PATH_OR_URL` controls result delivery for the single-inbox form; when omitted, the outbox defaults to a sibling `outbox` folder next to the inbox.
+
+Use `--external-only` when WhisCode should run under tmux or manual process management without hotkeys, microphone recording, overlays, or keyboard injection. For CCAB short transcription, pass `--external-ccab-root ROOT` to discover every `<root>/*/workspace/transcription/short/{inbox,outbox}` lane and process those lanes serially through the warmed backend:
+
+```bash
+uv run whiscode \
+  --external-only \
+  --asr-backend mlx-whisper \
+  --model mlx-community/whisper-large-v3-turbo-asr-fp16 \
+  --external-ccab-root /Users/xinding/openclaw \
+  --external-poll-seconds 2 \
+  --external-stable-seconds 1 \
+  --no-recording-overlay
+```
 
 For SMB, provide credentials through environment variables, usually under `op run --env-file .env.1password.whiscode-smb -- ...`: `WHISCODE_EXTERNAL_SMB_USERNAME`, `WHISCODE_EXTERNAL_SMB_PASSWORD`, and optional `WHISCODE_EXTERNAL_SMB_DOMAIN`. The real `.env.1password.whiscode-smb` file is repo-local and ignored by Git; it should contain 1Password `op://...` reference pointers copied from `.env.1password.whiscode-smb.example`, not plaintext credentials or `~/.zshrc` exports. Credentials embedded in `smb://` URLs are rejected. When a domain is set, WhisCode authenticates as `DOMAIN\username`.
 
 The watcher ignores hidden files, unsupported extensions, and files whose source metadata already has a matching result sidecar. It waits until file size and mtime remain unchanged for `WHISCODE_EXTERNAL_STABLE_SECONDS` / `--external-stable-seconds` before queueing. It scans on `WHISCODE_EXTERNAL_POLL_SECONDS` / `--external-poll-seconds`. Supported extensions default to `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, and `.aac`; override with comma-separated `WHISCODE_EXTERNAL_EXTENSIONS`.
 
-External audio is decoded through MLX-Audio audio I/O, normalized to mono 16 kHz float32, then sent to MLX VibeVoice without WhisCode hotwords, prompt, replacements, postprocessing, optional refinement, typing, or manual dictation stats. SMB files are streamed into a temporary local file with the original suffix before decoding. OGG/Opus and M4A support depends on MLX-Audio's ffmpeg-capable decode path being available on the host.
+External audio is decoded through MLX-Audio audio I/O, normalized to mono 16 kHz float32, then sent to the selected warmed backend without WhisCode hotwords, prompt, replacements, postprocessing, optional refinement, typing, or manual dictation stats. SMB files are streamed into a temporary local file with the original suffix before decoding. OGG/Opus and M4A support depends on MLX-Audio's ffmpeg-capable decode path being available on the host.
 
 Outbox files are named `source-stem-<short-id>.txt` and `source-stem-<short-id>.json`. SMB sidecars are written to temporary remote files and published with SMB replace/rename. The JSON contains status, source basename, source size/mtime, duration, backend, model label, file id, transcript on success, or bounded error type/message on failure. Transcript text is intentionally present in outbox files because that is the external delivery channel; routine telemetry still excludes transcript text, credentials, and full file paths or URLs.
 
-Manual dictation has priority over external files. External jobs start only while no local recording is reserved, queued, or actively transcribing. If a manual recording arrives while an external VibeVoice job is already using the primary in-process engine, WhisCode starts one rescue VibeVoice engine for manual work. When the external job completes, WhisCode retires the old external engine and promotes the rescue engine as primary. This caps the process at two in-process VibeVoice engines.
+Manual dictation has priority over external files. External jobs start only while no local recording is reserved, queued, or actively transcribing. If a manual recording arrives while an external VibeVoice job is already using the primary in-process engine, WhisCode starts one rescue VibeVoice engine for manual work. When the external job completes, WhisCode retires the old external engine and promotes the rescue engine as primary. This caps the process at two in-process VibeVoice engines. `mlx-whisper` external jobs use the one warmed Whisper model serially.
 
 ## Optional llama.cpp Backend
 

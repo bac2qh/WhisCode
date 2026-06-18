@@ -91,8 +91,10 @@ uv run whiscode --hands-free
 | `--recording-overlay` | on | Show floating recording and transcription overlay |
 | `--no-recording-overlay` | off | Disable floating recording and transcription overlay |
 | `--recording-notifications` | off | Keep macOS start/end notification banners in addition to overlay |
-| `--external-audio-inbox PATH` | — | Watch a top-level folder for external audio files to transcribe with `mlx-vibevoice` |
+| `--external-only` | off | Run external transcription watchers without hotkeys, recording, or keyboard injection |
+| `--external-audio-inbox PATH` | — | Watch a top-level folder or SMB URL for external audio files |
 | `--external-transcript-outbox PATH` | sibling `outbox` | Folder for external `.txt` and `.json` transcript results |
+| `--external-ccab-root PATH` | — | Discover CCAB short inboxes under `PATH/*/workspace/transcription/short` |
 | `--external-poll-seconds FLOAT` | `2.0` | External inbox scan cadence |
 | `--external-stable-seconds FLOAT` | `5.0` | Quiet period before an external file is considered ready |
 
@@ -146,11 +148,36 @@ uv run whiscode-benchmark-asr --audio sample.wav --asr-backend mlx-vibevoice
 
 ### External NAS Transcription Queue
 
-WhisCode can also watch a shared inbox folder for audio files written by external agents or NAS workflows. This path is intentionally VibeVoice-only. The inbox can be a local filesystem path or a native SMB URL; SMB does not require mounting the share locally.
+WhisCode can also watch shared inbox folders for audio files written by external agents or NAS workflows. External intake supports `mlx-whisper` and `mlx-vibevoice`. The single-inbox form can be a local filesystem path or a native SMB URL; SMB does not require mounting the share locally.
 
 ```bash
 uv run whiscode --asr-backend mlx-vibevoice \
   --external-audio-inbox smb://192.168.4.21/NAS_1/whiscode/inbox
+```
+
+Use `--external-only` when WhisCode is being managed by tmux or another process supervisor and should not install hotkeys, open the microphone, show overlays, or inject text:
+
+```bash
+uv run whiscode \
+  --external-only \
+  --asr-backend mlx-whisper \
+  --model mlx-community/whisper-large-v3-turbo-asr-fp16 \
+  --external-audio-inbox /path/to/inbox \
+  --external-transcript-outbox /path/to/outbox \
+  --no-recording-overlay
+```
+
+For CCAB short transcription, one external-only WhisCode process can discover all user short lanes under a root whose children contain `workspace/transcription/short/{inbox,outbox}`:
+
+```bash
+uv run whiscode \
+  --external-only \
+  --asr-backend mlx-whisper \
+  --model mlx-community/whisper-large-v3-turbo-asr-fp16 \
+  --external-ccab-root /Users/xinding/openclaw \
+  --external-poll-seconds 2 \
+  --external-stable-seconds 1 \
+  --no-recording-overlay
 ```
 
 When `--external-transcript-outbox` is omitted, WhisCode writes results to a sibling `outbox` folder next to the inbox. For the SMB example above, the default outbox is `smb://192.168.4.21/NAS_1/whiscode/outbox`. Keep these settings in a repo-local `.env.1password.whiscode-smb` file copied from `.env.1password.whiscode-smb.example`, not in `~/.zshrc`:
