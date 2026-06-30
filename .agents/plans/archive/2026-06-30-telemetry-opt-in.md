@@ -1,5 +1,20 @@
 # Make Telemetry Opt-In
 
+Closeout note, 2026-06-30:
+- Final status: complete.
+- Related checkpoint: `.agents/checkpoints/2026-06-30-telemetry-opt-in-checkpoints.md`.
+- Implementation commit: `ea63aeb` Make local telemetry opt-in.
+- Merge result: fast-forwarded local `main` to `ea63aeb`; no merge commit.
+- Verification performed: targeted `uv run --with pytest python -m pytest tests/test_telemetry.py tests/test_main_cli.py tests/test_enroll.py tests/test_calibrate.py` passed with 103 tests; full `uv run --with pytest python -m pytest` passed with 303 tests; `git diff --check` passed; `uv run whiscode --help` and `uv run whiscode-enroll --help` passed; independent validator `019f16af-b379-71c2-a656-abd4cd704839` approved all validation contract assertions.
+- Worktree/branch cleanup: pending final cleanup after archive commit.
+- Shipped summary: made WhisCode runtime and guided-enrollment telemetry opt-in only through `--telemetry` or `--telemetry-path`, kept `--no-telemetry` as the overriding disable flag, and updated tests, README, wiki, and durable telemetry memory.
+
+Date: 2026-06-30
+Branch: `telemetry-opt-in`
+Worktree: `.agents/worktrees/telemetry-opt-in`
+Status: archived
+
+
 ## Objective
 
 Change WhisCode so it performs no app-owned telemetry writes by default across runtime and enrollment commands. Keep local JSONL diagnostics available only when explicitly requested, and do not automatically touch the existing local telemetry log.
