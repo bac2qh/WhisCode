@@ -33,11 +33,13 @@
 
 ## 2026-06-30 Closeout Checkpoint
 
-Status: complete and archived on local `main`; worktree/branch cleanup pending final cleanup command.
+Status: complete and archived on local `main`.
 
 Done:
 - Fast-forward merged `telemetry-opt-in` into local `main` at `ea63aeb`.
 - Added the closeout note to the plan and moved it to `.agents/plans/archive/2026-06-30-telemetry-opt-in.md`.
+- Removed task worktree `.agents/worktrees/telemetry-opt-in`.
+- Deleted local branch `telemetry-opt-in`.
 
 Decisions:
 - No merge commit was created because `main` fast-forwarded cleanly.
@@ -57,4 +59,4 @@ Implementation commit:
 - `ea63aeb` Make local telemetry opt-in.
 
 Closeout commit:
-- Pending.
+- `caa1b42` Archive telemetry opt-in plan.

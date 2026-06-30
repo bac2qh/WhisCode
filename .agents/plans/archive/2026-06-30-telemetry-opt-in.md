@@ -6,7 +6,7 @@ Closeout note, 2026-06-30:
 - Implementation commit: `ea63aeb` Make local telemetry opt-in.
 - Merge result: fast-forwarded local `main` to `ea63aeb`; no merge commit.
 - Verification performed: targeted `uv run --with pytest python -m pytest tests/test_telemetry.py tests/test_main_cli.py tests/test_enroll.py tests/test_calibrate.py` passed with 103 tests; full `uv run --with pytest python -m pytest` passed with 303 tests; `git diff --check` passed; `uv run whiscode --help` and `uv run whiscode-enroll --help` passed; independent validator `019f16af-b379-71c2-a656-abd4cd704839` approved all validation contract assertions.
-- Worktree/branch cleanup: pending final cleanup after archive commit.
+- Worktree/branch cleanup: removed `.agents/worktrees/telemetry-opt-in`; deleted local branch `telemetry-opt-in`.
 - Shipped summary: made WhisCode runtime and guided-enrollment telemetry opt-in only through `--telemetry` or `--telemetry-path`, kept `--no-telemetry` as the overriding disable flag, and updated tests, README, wiki, and durable telemetry memory.
 
 Date: 2026-06-30
