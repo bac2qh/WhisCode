@@ -61,24 +61,24 @@ When the end phrase stops a recording, WhisCode discards the buffered tail that 
 
 Recordings auto-finalize after `--max-recording-seconds`, which defaults to `600.0` seconds and also applies to manual hotkey recording. Set it to `0` to disable the cap. The legacy `--hands-free-max-seconds` flag remains available as a hands-free-only override. Finished recordings enter a FIFO transcription queue with up to five waiting jobs, so wake/end recordings can continue while earlier audio transcribes.
 
-Inspect reference and telemetry distance distributions with:
+Inspect reference distances and any opted-in telemetry distance distributions with:
 
 ```bash
 uv run whiscode-calibrate
 ```
 
-Use the report to decide threshold changes after re-enrollment and live observation.
+Use the report to decide threshold changes after re-enrollment and live observation. Recent runtime trigger distances appear only if WhisCode was previously run with telemetry enabled.
 
 ## Telemetry
 
-WhisCode runtime and guided enrollment write local JSONL telemetry by default:
+WhisCode runtime and guided enrollment do not write app-owned telemetry by default. Enable local JSONL diagnostics explicitly with `--telemetry`:
 
 ```bash
-~/Library/Logs/WhisCode/events.jsonl
+uv run whiscode --telemetry
 ```
 
-The telemetry records app lifecycle, selected ASR backend, enrollment progress, reference counts, detector load results, end and wake-as-chunk tail-trim resolution source and counts, hands-free Send Chunk request/queue/restart/reject outcomes, deferred delivery buffer/skip/flush outcomes, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/wake-as-chunk/command detections, key-command and scroll-command injection outcomes, recording durations, transcription queue depth, transcription outcomes, backend failure shape diagnostics, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. Scroll injection telemetry is bounded to command name, older/newer direction, pixel amount, outcome, and error type. Routine telemetry does not record raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. CrispASR malformed-response debugging is the exception: when VibeVoice chunk parsing fails or needs recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl`, which can contain transcript or provider output text. Successful transcripts remain visible in stdout for local copying instead of being copied into telemetry.
+This writes to `~/Library/Logs/WhisCode/events.jsonl`. Use `--telemetry-path PATH` to enable telemetry at another JSONL file. `--no-telemetry` overrides both opt-in forms.
+
+When enabled, telemetry records app lifecycle, selected ASR backend, enrollment progress, reference counts, detector load results, end and wake-as-chunk tail-trim resolution source and counts, hands-free Send Chunk request/queue/restart/reject outcomes, deferred delivery buffer/skip/flush outcomes, audio loop status, detector gate summaries, throttled detector distance summaries, wake/end/wake-as-chunk/command detections, key-command and scroll-command injection outcomes, recording durations, transcription queue depth, transcription outcomes, backend failure shape diagnostics, audio queue backlog/drop summaries, detector processing summaries, and suspected rapid trigger loops. Scroll injection telemetry is bounded to command name, older/newer direction, pixel amount, outcome, and error type. Routine telemetry does not record raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. CrispASR malformed-response debugging is enabled only with telemetry: when VibeVoice chunk parsing fails or needs recovery, WhisCode writes the original provider response body to local-only `crispasr-raw-responses.jsonl`, which can contain transcript or provider output text. Successful transcripts remain visible in stdout for local copying instead of being copied into telemetry.
 
 `handsfree.audio_overflow` means PortAudio reported that the microphone read loop fell behind. `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` help determine whether detector work is falling behind the live microphone stream. These are not direct macOS swap or memory-overflow signals.
-
-Use `--telemetry-path PATH` to write to another JSONL file, or `--no-telemetry` to disable local telemetry.

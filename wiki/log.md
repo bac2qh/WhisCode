@@ -72,3 +72,6 @@
 ## 2026-06-18
 - Documented that external NAS transcription jobs wait for any open local Send Chunk delivery batch in addition to reserved, queued, or active local transcription work.
 - Documented external-only `mlx-whisper` intake and CCAB short-lane root discovery for one warm WhisCode process watching multiple CCAB short inboxes.
+
+## 2026-06-30
+- Documented that runtime and guided-enrollment local JSONL telemetry are opt-in only through `--telemetry` or `--telemetry-path`, with `--no-telemetry` overriding both.

@@ -46,8 +46,9 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--end-dir", type=Path, default=DEFAULT_END_DIR, help=f"End reference folder (default: {DEFAULT_END_DIR})")
     parser.add_argument("--command-dir", type=Path, default=DEFAULT_COMMAND_DIR, help=f"Command reference root folder (default: {DEFAULT_COMMAND_DIR})")
     parser.add_argument("--command-config", type=Path, default=DEFAULT_COMMAND_CONFIG_PATH, help=f"Command enablement config for guided recording (default: {DEFAULT_COMMAND_CONFIG_PATH})")
-    parser.add_argument("--telemetry-path", type=Path, default=None, help="Local JSONL telemetry path (default: ~/Library/Logs/WhisCode/events.jsonl)")
-    parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry for guided recording")
+    parser.add_argument("--telemetry", action="store_true", help="Enable local JSONL telemetry at ~/Library/Logs/WhisCode/events.jsonl")
+    parser.add_argument("--telemetry-path", type=Path, default=None, help="Enable local JSONL telemetry and write to PATH")
+    parser.add_argument("--no-telemetry", action="store_true", help="Disable local telemetry, overriding --telemetry and --telemetry-path")
     parser.set_defaults(recording_overlay=True)
     parser.add_argument("--recording-overlay", dest="recording_overlay", action="store_true", help="Show the floating recording stopwatch/waveform overlay during guided recording (default)")
     parser.add_argument("--no-recording-overlay", dest="recording_overlay", action="store_false", help="Disable the floating recording overlay during guided recording")
@@ -345,7 +346,7 @@ def record_guided_samples(
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    telemetry = telemetry_from_args(args, default_enabled=args.record or args.telemetry_path is not None)
+    telemetry = telemetry_from_args(args)
     telemetry.emit("enrollment.cli_started", mode="record" if args.record else "import")
     overlay = RecordingOverlayClient(enabled=args.recording_overlay, telemetry=telemetry) if args.record else None
     try:

@@ -45,9 +45,13 @@ class Telemetry:
                 self._warned = True
 
 
-def telemetry_from_args(args, *, default_enabled: bool) -> Telemetry:
+def telemetry_from_args(args, *, default_enabled: bool = False) -> Telemetry:
     path = getattr(args, "telemetry_path", None)
-    enabled = default_enabled and not getattr(args, "no_telemetry", False)
+    enabled = (
+        bool(default_enabled)
+        or bool(getattr(args, "telemetry", False))
+        or path is not None
+    ) and not getattr(args, "no_telemetry", False)
     return Telemetry(enabled=enabled, path=path)
 
 

@@ -485,16 +485,62 @@ def test_parse_args_rejects_removed_end_hotkey():
         parse_args(["--end-hotkey", "f10"])
 
 
-def test_runtime_telemetry_is_enabled_by_default_for_hotkey_mode():
+def test_runtime_telemetry_is_disabled_by_default_for_hotkey_mode():
     args = parse_args([])
 
     telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
 
+    assert telemetry.enabled is False
+
+
+def test_runtime_default_telemetry_emit_does_not_create_default_file(tmp_path, monkeypatch):
+    telemetry_path = tmp_path / "events.jsonl"
+    monkeypatch.setattr("whiscode.telemetry.DEFAULT_TELEMETRY_PATH", telemetry_path)
+    args = parse_args([])
+
+    telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
+    telemetry.emit("app.started")
+
+    assert telemetry.enabled is False
+    assert not telemetry_path.exists()
+
+
+def test_runtime_telemetry_can_be_enabled_with_default_path():
+    args = parse_args(["--telemetry"])
+
+    telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
+
     assert telemetry.enabled is True
+    assert telemetry.path.name == "events.jsonl"
+
+
+def test_runtime_telemetry_path_enables_custom_path():
+    args = parse_args(["--telemetry-path", "/tmp/whiscode-events.jsonl"])
+
+    telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
+
+    assert telemetry.enabled is True
+    assert telemetry.path == Path("/tmp/whiscode-events.jsonl")
 
 
 def test_runtime_telemetry_can_be_disabled():
     args = parse_args(["--no-telemetry"])
+
+    telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
+
+    assert telemetry.enabled is False
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--telemetry", "--no-telemetry"],
+        ["--telemetry-path", "/tmp/whiscode-events.jsonl", "--no-telemetry"],
+        ["--telemetry", "--telemetry-path", "/tmp/whiscode-events.jsonl", "--no-telemetry"],
+    ],
+)
+def test_runtime_no_telemetry_overrides_opt_in_flags(argv):
+    args = parse_args(argv)
 
     telemetry = telemetry_from_args(args, default_enabled=runtime_telemetry_enabled_by_default(args))
 
@@ -780,6 +826,7 @@ def test_parse_args_hands_free_options():
         "4",
         "--enroll-seconds",
         "1.25",
+        "--telemetry",
         "--telemetry-path",
         "/tmp/whiscode-events.jsonl",
         "--no-telemetry",
@@ -811,6 +858,7 @@ def test_parse_args_hands_free_options():
     assert args.no_enroll_prompt is True
     assert args.enroll_samples == 4
     assert args.enroll_seconds == 1.25
+    assert args.telemetry is True
     assert args.telemetry_path == Path("/tmp/whiscode-events.jsonl")
     assert args.no_telemetry is True
     assert args.recording_overlay is False

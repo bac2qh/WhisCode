@@ -18,6 +18,7 @@ from whiscode.enroll import (
     write_wav,
 )
 from whiscode.handsfree import active_command_slots
+from whiscode.telemetry import telemetry_from_args
 
 
 def make_samples(tmp_path, count=3):
@@ -56,6 +57,7 @@ def test_parse_args_accepts_record_mode():
         "4",
         "--seconds",
         "1.5",
+        "--telemetry",
         "--telemetry-path",
         "/tmp/events.jsonl",
         "--command-dir",
@@ -69,11 +71,66 @@ def test_parse_args_accepts_record_mode():
     assert args.record is True
     assert args.sample_count == 4
     assert args.seconds == 1.5
+    assert args.telemetry is True
     assert args.telemetry_path == Path("/tmp/events.jsonl")
     assert args.command_dir == Path("/tmp/commands")
     assert args.command_config == Path("/tmp/commands.ini")
     assert args.recording_overlay is False
     assert args.no_telemetry is True
+
+
+def test_enrollment_telemetry_is_disabled_by_default_for_record_mode():
+    args = parse_args(["--record"])
+
+    telemetry = telemetry_from_args(args)
+
+    assert telemetry.enabled is False
+
+
+def test_enrollment_default_telemetry_emit_does_not_create_default_file(tmp_path, monkeypatch):
+    telemetry_path = tmp_path / "events.jsonl"
+    monkeypatch.setattr("whiscode.telemetry.DEFAULT_TELEMETRY_PATH", telemetry_path)
+    args = parse_args(["--record"])
+
+    telemetry = telemetry_from_args(args)
+    telemetry.emit("enrollment.cli_started")
+
+    assert telemetry.enabled is False
+    assert not telemetry_path.exists()
+
+
+def test_enrollment_telemetry_can_be_enabled_with_default_path():
+    args = parse_args(["--record", "--telemetry"])
+
+    telemetry = telemetry_from_args(args)
+
+    assert telemetry.enabled is True
+    assert telemetry.path.name == "events.jsonl"
+
+
+def test_enrollment_telemetry_path_enables_custom_path():
+    args = parse_args(["--record", "--telemetry-path", "/tmp/events.jsonl"])
+
+    telemetry = telemetry_from_args(args)
+
+    assert telemetry.enabled is True
+    assert telemetry.path == Path("/tmp/events.jsonl")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--record", "--telemetry", "--no-telemetry"],
+        ["--record", "--telemetry-path", "/tmp/events.jsonl", "--no-telemetry"],
+        ["--record", "--telemetry", "--telemetry-path", "/tmp/events.jsonl", "--no-telemetry"],
+    ],
+)
+def test_enrollment_no_telemetry_overrides_opt_in_flags(argv):
+    args = parse_args(argv)
+
+    telemetry = telemetry_from_args(args)
+
+    assert telemetry.enabled is False
 
 
 def test_parse_args_accepts_record_missing_mode():

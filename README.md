@@ -86,8 +86,9 @@ uv run whiscode --hands-free
 | `--hands-free-command-confirmations INT` | `2` | Consecutive command matches required before pressing a key |
 | `--hands-free-debug` | off | Print detector distances for threshold tuning |
 | `--no-enroll-prompt` | off | Exit instead of offering guided enrollment when samples are missing |
-| `--telemetry-path PATH` | `~/Library/Logs/WhisCode/events.jsonl` | Local JSONL telemetry path |
-| `--no-telemetry` | off | Disable local telemetry |
+| `--telemetry` | off | Enable local JSONL telemetry at `~/Library/Logs/WhisCode/events.jsonl` |
+| `--telemetry-path PATH` | — | Enable local JSONL telemetry and write to `PATH` |
+| `--no-telemetry` | off | Force-disable local telemetry, overriding `--telemetry` and `--telemetry-path` |
 | `--recording-overlay` | on | Show floating recording and transcription overlay |
 | `--no-recording-overlay` | off | Disable floating recording and transcription overlay |
 | `--recording-notifications` | off | Keep macOS start/end notification banners in addition to overlay |
@@ -367,7 +368,7 @@ After enrollment, inspect the local detector score separation:
 uv run whiscode-calibrate
 ```
 
-The report compares wake samples against wake samples, end samples against end samples, command samples against their own command sets, cross-command samples, wake samples against end samples, and recent telemetry trigger distances. Use it to choose threshold changes after observing live runs rather than guessing from one false positive.
+The report compares wake samples against wake samples, end samples against end samples, command samples against their own command sets, cross-command samples, wake samples against end samples, and recent telemetry trigger distances if runtime telemetry was explicitly enabled. Use it to choose threshold changes after observing live runs rather than guessing from one false positive.
 
 Right Shift remains available as the manual start/stop fallback while hands-free mode is running.
 
@@ -375,13 +376,15 @@ When the end phrase stops a recording, WhisCode discards the inferred or explici
 
 WhisCode ignores partial detector windows and quiet windows before calling the keyword matcher. This prevents silence and microphone background noise from triggering wake/end phrases. Wake detection also requires two consecutive matching windows by default, which prevents a single noisy match from starting a recording. If your wake phrase is very quiet, lower `--hands-free-min-rms` or `--hands-free-min-active-ratio`, raise `--hands-free-threshold` slightly, or set `--hands-free-wake-confirmations 1`; if your end phrase is not detected, raise `--hands-free-end-threshold` slightly.
 
-WhisCode writes local JSONL telemetry by default to:
+WhisCode does not write app-owned telemetry by default. For local diagnostics, enable JSONL telemetry explicitly:
 
 ```bash
-~/Library/Logs/WhisCode/events.jsonl
+uv run whiscode --telemetry
 ```
 
-Use it to inspect app startup, selected ASR backend, recording durations, queue depth, hands-free Send Chunk request/queue/restart outcomes, deferred delivery buffer/flush outcomes, transcription outcomes, backend failures, wake/end/wake-as-chunk/command detections, detector distances, key-command and scroll-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes hands-free distances alongside reference-sample distances. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. Scroll injection telemetry includes only bounded command metadata such as command name, older/newer direction, pixel amount, outcome, and error type. If CrispASR/VibeVoice returns malformed chunk output, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text. Disable telemetry and raw debug logging with `--no-telemetry`, or write both files under another directory with `--telemetry-path`.
+This writes to `~/Library/Logs/WhisCode/events.jsonl`. Use `--telemetry-path PATH` to enable telemetry and write under another path. `--no-telemetry` overrides both opt-in flags.
+
+Use opted-in telemetry to inspect app startup, selected ASR backend, recording durations, queue depth, hands-free Send Chunk request/queue/restart outcomes, deferred delivery buffer/flush outcomes, transcription outcomes, backend failures, wake/end/wake-as-chunk/command detections, detector distances, key-command and scroll-command injection outcomes, and suspected rapid trigger loops. `uv run whiscode-calibrate` summarizes recent hands-free distances only when runtime telemetry was previously enabled. Routine telemetry stays on your machine and does not include raw audio, transcripts, prompts, hotword contents, provider payloads, or typed text. Scroll injection telemetry includes only bounded command metadata such as command name, older/newer direction, pixel amount, outcome, and error type. If CrispASR/VibeVoice returns malformed chunk output while telemetry is enabled, WhisCode also writes the original provider response body to `~/Library/Logs/WhisCode/crispasr-raw-responses.jsonl`, or a sibling file next to a custom `--telemetry-path`, for local debugging. That raw debug file can contain transcript or provider output text.
 
 `handsfree.audio_overflow` means PortAudio reported an input overflow because the audio read loop could not keep up with the microphone stream. WhisCode keeps microphone capture lightweight and uses a bounded detector queue to reduce this. If detector processing still falls behind, `handsfree.audio_queue_dropped`, `handsfree.audio_queue_summary`, and `handsfree.detector_processing_summary` show how much queued audio was dropped and how long detection took. These diagnostics do not include raw audio or transcript text.
 
